@@ -1,0 +1,29 @@
+{
+  "name": "mungsil",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n WEB,API -c cyan,blue \"npm run dev -w @mungsil/web\" \"npm run start:dev -w @mungsil/api\"",
+    "dev:web": "npm run dev -w @mungsil/web",
+    "dev:api": "npm run start:dev -w @mungsil/api",
+    "build": "npm run build -w @mungsil/contracts && npm run build -w @mungsil/api && npm run build -w @mungsil/web",
+    "test": "npm run test -w @mungsil/api && npm run test -w @mungsil/web",
+    "lint": "npm run lint -w @mungsil/web && npm run lint -w @mungsil/api",
+    "db:generate": "npm run prisma:generate -w @mungsil/api",
+    "db:migrate": "npm run prisma:migrate -w @mungsil/api",
+    "db:seed": "npm run prisma:seed -w @mungsil/api",
+    "compose:up": "docker compose -f infra/docker-compose.yml up -d --build",
+    "compose:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}

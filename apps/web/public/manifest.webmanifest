@@ -1,0 +1,10 @@
+{
+  "name": "뭉실 — 오늘의 작은 실천",
+  "short_name": "뭉실",
+  "description": "TODO를 완료하고 좋은 습관을 함께 실천하는 루틴 SNS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6fbff",
+  "theme_color": "#67b8ed",
+  "lang": "ko"
+}
