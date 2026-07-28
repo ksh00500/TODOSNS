@@ -7,7 +7,7 @@ COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci
 
 FROM deps AS prod-deps
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev && node -e "require.resolve('nodemailer', { paths: ['/app/apps/api'] })"
 
 FROM deps AS build
 COPY . .
@@ -17,6 +17,7 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
