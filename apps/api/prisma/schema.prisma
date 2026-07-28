@@ -76,20 +76,34 @@ enum RewardStatus {
   PAID
 }
 
+enum VerificationTokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+enum MediaStatus {
+  UPLOADING
+  READY
+  FAILED
+}
+
 model User {
   id                    String   @id @default(cuid())
   email                 String   @unique
   passwordHash          String?
-  refreshTokenHash      String?
   googleId              String?  @unique
   nickname              String
   handle                String   @unique
   bio                    String?  @db.VarChar(160)
   interests              String[] @default([])
   avatarUrl              String?
+  avatarMediaId          String?  @unique
+  avatarMedia            Media?   @relation("AvatarMedia", fields: [avatarMediaId], references: [id], onDelete: SetNull)
   birthDate              DateTime
   role                   Role     @default(USER)
   emailVerifiedAt       DateTime?
+  timezone              String   @default("Asia/Seoul")
+  onboardingCompletedAt DateTime?
   availablePoints       Int      @default(0)
   lifetimePower         Int      @default(0)
   recentVitality        Int      @default(0)
@@ -98,6 +112,7 @@ model User {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   todos                 Todo[]
+  todoSeries            TodoSeries[]
   todoLists             TodoList[]
   posts                 Post[]
   comments              Comment[]
@@ -117,7 +132,67 @@ model User {
   reportsFiled          Report[] @relation("Reporter")
   reportsResolved       Report[] @relation("Resolver")
   notifications         Notification[]
-  media                 Media[]
+  media                 Media[] @relation("OwnedMedia")
+  sessions              Session[]
+  verificationTokens    VerificationToken[]
+  idempotencyKeys       IdempotencyKey[]
+}
+
+model Session {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId      String
+  tokenHash     String
+  userAgent     String?  @db.VarChar(300)
+  ipHash        String?
+  expiresAt     DateTime
+  lastUsedAt    DateTime @default(now())
+  revokedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+model VerificationToken {
+  id        String                @id @default(cuid())
+  userId    String
+  user      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      VerificationTokenType
+  tokenHash String                @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime              @default(now())
+  @@index([userId, type, expiresAt])
+}
+
+model InviteCode {
+  id         String   @id @default(cuid())
+  codeHash   String   @unique
+  label      String?  @db.VarChar(100)
+  maxUses    Int      @default(1)
+  uses       Int      @default(0)
+  expiresAt  DateTime?
+  disabledAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([expiresAt, disabledAt])
+}
+
+model IdempotencyKey {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String   @db.VarChar(100)
+  route       String   @db.VarChar(300)
+  response    Json?
+  completedAt DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  @@unique([userId, key, route])
+  @@index([expiresAt])
 }
 
 model Todo {
@@ -135,6 +210,9 @@ model Todo {
   sourceTodoId String?
   sourceTodo   Todo?      @relation("TodoCopies", fields: [sourceTodoId], references: [id], onDelete: SetNull)
   copies       Todo[]     @relation("TodoCopies")
+  seriesId     String?
+  series       TodoSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  occurrenceKey String?   @unique
   postLinks    PostTodo[]
   listItems    TodoListItem[]
   createdAt    DateTime   @default(now())
@@ -142,6 +220,28 @@ model Todo {
   deletedAt    DateTime?
   @@index([userId, dueDate])
   @@index([sourceTodoId])
+  @@index([seriesId, dueDate])
+}
+
+model TodoSeries {
+  id                   String     @id @default(cuid())
+  userId               String
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title                String     @db.VarChar(120)
+  notes                String?    @db.VarChar(500)
+  category             String     @default("생활")
+  visibility           Visibility @default(PRIVATE)
+  repeatRule           String
+  timezone             String     @default("Asia/Seoul")
+  startAt              DateTime
+  endsAt               DateTime?
+  generatedThrough     DateTime?
+  active               Boolean    @default(true)
+  occurrences          Todo[]
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  @@index([userId, active])
+  @@index([generatedThrough])
 }
 
 model TodoList {
@@ -339,6 +439,7 @@ model PointLedger {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   @@index([userId, createdAt])
+  @@unique([userId, reason, referenceId])
 }
 
 model Report {
@@ -372,6 +473,8 @@ model Notification {
   title String
   body String
   referenceId String?
+  targetType String?
+  targetId String?
   readAt DateTime?
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -387,7 +490,13 @@ model Media {
   size Int
   postId String?
   checkInId String?
-  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner User @relation("OwnedMedia", fields: [ownerId], references: [id], onDelete: Cascade)
+  avatarFor User? @relation("AvatarMedia")
+  status MediaStatus @default(UPLOADING)
+  originalName String? @db.VarChar(120)
+  width Int?
+  height Int?
+  completedAt DateTime?
   post Post? @relation(fields: [postId], references: [id], onDelete: Cascade)
   checkIn ChallengeCheckIn? @relation(fields: [checkInId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

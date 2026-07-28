@@ -12,7 +12,7 @@ test("디자인 시스템에 제품 핵심 토큰과 모바일 프레임이 있�
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   for (const token of ["--ink", "--paper", "--primary", "--blue", "--pink", "--lilac", "--mint", "--yellow"]) assert.match(css, new RegExp(token));
   assert.match(css, /\.mobile-app\s*\{/);
-  assert.match(css, /width:438px/);
+  assert.match(css, /width:430px/);
 });
 
 test("로컬 체험 모드는 운영 인증을 우회하지 않는다", async () => {

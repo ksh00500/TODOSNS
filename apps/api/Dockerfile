@@ -6,6 +6,9 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci
 
+FROM deps AS prod-deps
+RUN npm prune --omit=dev
+
 FROM deps AS build
 COPY . .
 RUN npm run db:generate && npm run build -w @mungsil/api
@@ -13,7 +16,8 @@ RUN npm run db:generate && npm run build -w @mungsil/api
 FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/node_modules ./node_modules
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json

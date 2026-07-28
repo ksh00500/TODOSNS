@@ -29,7 +29,9 @@
     "compose:up": "docker compose -f infra/docker-compose.yml up -d --build",
     "compose:down": "docker compose -f infra/docker-compose.yml down",
     "compose:dev:up": "docker compose -f infra/docker-compose.dev.yml up -d",
-    "compose:dev:down": "docker compose -f infra/docker-compose.dev.yml down"
+    "compose:dev:down": "docker compose -f infra/docker-compose.dev.yml down",
+    "compose:staging:up": "docker compose -f infra/docker-compose.staging.yml up -d --build",
+    "compose:staging:down": "docker compose -f infra/docker-compose.staging.yml down"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

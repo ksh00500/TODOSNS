@@ -1,0 +1,16 @@
+:8080 {
+  encode zstd gzip
+
+  @media path /{$MINIO_BUCKET}/*
+  reverse_proxy @media minio:9000
+
+  @backend path /api/* /chat/* /socket.io/*
+  reverse_proxy @backend api:4000
+  reverse_proxy web:3000
+
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(self)"
+  }
+}

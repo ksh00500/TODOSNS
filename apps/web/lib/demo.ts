@@ -1,14 +1,15 @@
 import type { Challenge, Comment, FeedPage, FeedPost, SessionUser, TodoDto, TodoListDto } from "./types";
 
 export const DEMO_MODE_KEY = "mungsil_demo_mode";
-const DEMO_DATA_KEY = "mungsil_demo_data_v2";
+const DEMO_DATA_KEY = "mungsil_demo_data_v3";
 export const demoAvailable = process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_DEMO === "true";
 
-type DemoNotification = { id: string; type: "CHEER" | "COMMENT" | "COPY" | "FOLLOW" | "MESSAGE" | "CHALLENGE" | "RANK" | "SYSTEM"; title: string; body: string; referenceId?: string | null; readAt?: string | null; createdAt: string };
+type DemoNotification = { id: string; type: "CHEER" | "COMMENT" | "COPY" | "FOLLOW" | "MESSAGE" | "CHALLENGE" | "RANK" | "SYSTEM"; title: string; body: string; referenceId?: string | null; targetType?: string | null; targetId?: string | null; href?: string | null; readAt?: string | null; createdAt: string };
 type DemoState = {
   day: string;
   user: SessionUser;
   todos: TodoDto[];
+  deletedTodos: TodoDto[];
   lists: TodoListDto[];
   feed: FeedPost[];
   comments: Record<string, Comment[]>;
@@ -78,16 +79,16 @@ function initialState(): DemoState {
     "demo-post-read": [],
   };
   const challenges: Challenge[] = [
-    { id: "demo-challenge-official", title: "매일 7천 보, 가벼운 한 달", description: "하루 7천 보를 채우며 생활 속 움직임을 되찾아요.", kind: "OFFICIAL", verificationMode: "OPTIONAL_PHOTO", startsAt: at(-8, 0), endsAt: at(22, 23, 59), rewardLabel: "완주 리워드", joined: true, _count: { participants: 1842, checkIns: 12840 } },
+    { id: "demo-challenge-official", title: "매일 7천 보, 가벼운 한 달", description: "하루 7천 보를 채우며 생활 속 움직임을 되찾아요.", kind: "OFFICIAL", verificationMode: "OPTIONAL_PHOTO", startsAt: at(-8, 0), endsAt: at(22, 23, 59), rewardLabel: "완주 리워드", joined: true, todayCheckedIn: false, myCheckInCount: 7, successRate: 88, checkIns: [{ id: "demo-checkin-1", checkInDate: at(-1, 0), note: "점심시간에 공원을 크게 한 바퀴 걸었어요.", mediaUrl: "/demo/stretch.jpg" }], _count: { participants: 1842, checkIns: 12840 } },
     { id: "demo-challenge-book", title: "잠들기 전 10쪽", description: "화면을 내려놓고 책으로 하루를 마무리해요.", kind: "COMMUNITY", verificationMode: "CHECK", startsAt: at(-3, 0), endsAt: at(18, 23, 59), rewardLabel: "밤독서가 칭호", joined: false, _count: { participants: 326, checkIns: 1840 } },
-    { id: "demo-challenge-water", title: "물 한 잔으로 시작하기", description: "아침 첫 커피 전에 물 한 잔을 마시는 작은 약속이에요.", kind: "COMMUNITY", verificationMode: "CHECK", startsAt: at(-12, 0), endsAt: at(12, 23, 59), joined: true, _count: { participants: 94, checkIns: 672 } },
+    { id: "demo-challenge-water", title: "물 한 잔으로 시작하기", description: "아침 첫 커피 전에 물 한 잔을 마시는 작은 약속이에요.", kind: "COMMUNITY", verificationMode: "CHECK", startsAt: at(-12, 0), endsAt: at(12, 23, 59), joined: true, todayCheckedIn: true, myCheckInCount: 11, successRate: 85, checkIns: [{ id: "demo-checkin-water", checkInDate: at(0, 0), note: "눈 뜨자마자 시원하게 한 잔!", mediaUrl: null }], _count: { participants: 94, checkIns: 672 } },
   ];
   const notifications: DemoNotification[] = [
-    { id: "demo-notice-1", type: "CHEER", title: "새로운 응원을 받았어요", body: "하나님이 ‘출근 전 20분 산책’을 응원했어요.", referenceId: "demo-post-walk", createdAt: at(0, 14, 2) },
+    { id: "demo-notice-1", type: "CHEER", title: "새로운 응원을 받았어요", body: "하나님이 ‘출근 전 20분 산책’을 응원했어요.", referenceId: "demo-post-walk", targetType: "POST", targetId: "demo-post-walk", href: "/posts/demo-post-walk", createdAt: at(0, 14, 2) },
     { id: "demo-notice-2", type: "COPY", title: "내 루틴이 새로운 하루로", body: "3명이 ‘화면 없이 잠드는 밤’을 가져갔어요.", createdAt: at(-1, 18), readAt: at(-1, 20) },
     { id: "demo-notice-3", type: "RANK", title: "조각구름이 되었어요", body: "작은 실천이 모여 새로운 뭉실 등급에 도착했어요.", createdAt: at(-3, 12), readAt: at(-3, 13) },
   ];
-  return { day: dayKey(), user, todos, lists: [morningList, nightList], feed, comments, challenges, notifications, following: [] };
+  return { day: dayKey(), user, todos, deletedTodos: [], lists: [morningList, nightList], feed, comments, challenges, notifications, following: [] };
 }
 
 export function isDemoMode() {
@@ -108,7 +109,9 @@ export function initializeDemoData(reset = false) {
 
 function readState() {
   initializeDemoData();
-  return JSON.parse(window.localStorage.getItem(DEMO_DATA_KEY) ?? "null") as DemoState;
+  const state = JSON.parse(window.localStorage.getItem(DEMO_DATA_KEY) ?? "null") as DemoState;
+  state.deletedTodos ??= [];
+  return state;
 }
 
 function writeState(state: DemoState) {
@@ -132,13 +135,14 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
 
   if (pathname === "/auth/me") return clone(state.user) as T;
   if (pathname === "/auth/logout" || pathname === "/auth/delete-account") return {} as T;
-  if (pathname === "/me" && method === "GET") return clone({ ...state.user, rank: "조각구름", _count: { followers: 48, following: 31, posts: 12 } }) as T;
+  if (pathname === "/me" && method === "GET") return clone({ ...state.user, rank: "조각구름", _count: { followers: 48, following: 31, posts: state.feed.filter((post) => post.author.id === state.user.id).length }, stats: { completedCount: state.todos.filter((todo) => todo.completedAt).length, receivedCheers: 18, copiedCount: 9 } }) as T;
   if (pathname === "/me" && method === "PATCH") {
     state.user = { ...state.user, ...body } as SessionUser;
     writeState(state);
     return clone(state.user) as T;
   }
-  if (pathname === "/me/notifications" && method === "GET") return clone(state.notifications) as T;
+  if (pathname === "/me/notifications" && method === "GET") return clone({ items: state.notifications, nextCursor: null, unreadCount: state.notifications.filter((item) => !item.readAt).length }) as T;
+  if (pathname === "/me/notifications/unread-count" && method === "GET") return clone({ count: state.notifications.filter((item) => !item.readAt).length }) as T;
   if (pathname === "/me/notifications/read" && method === "POST") {
     state.notifications = state.notifications.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() }));
     writeState(state);
@@ -160,7 +164,17 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     state.todos[index] = { ...state.todos[index], ...body } as TodoDto; writeState(state); return clone(state.todos[index]) as T;
   }
   if (todoMatch && method === "DELETE") {
+    const removed = state.todos.find((item) => item.id === todoMatch[1]);
+    if (removed) state.deletedTodos.push(removed);
     state.todos = state.todos.filter((item) => item.id !== todoMatch[1]); writeState(state); return {} as T;
+  }
+  const restoreMatch = pathname.match(/^\/todos\/([^/]+)\/restore$/);
+  if (restoreMatch && method === "POST") {
+    const restored = state.deletedTodos.find((item) => item.id === restoreMatch[1]);
+    if (restored) state.todos.push(restored);
+    state.deletedTodos = state.deletedTodos.filter((item) => item.id !== restoreMatch[1]);
+    writeState(state);
+    return clone(restored ?? {}) as T;
   }
   const completeMatch = pathname.match(/^\/todos\/([^/]+)\/complete$/);
   if (completeMatch && method === "POST") {
@@ -168,9 +182,24 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     if (!todo) throw new Error("TODO를 찾지 못했어요.");
     todo.completedAt = todo.completedAt ?? new Date().toISOString();
     if (body.share && !state.feed.some((post) => post.todos.some((item) => item.id === todo.id))) {
-      state.feed.unshift({ id: uid("demo-post"), author: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, avatarUrl: state.user.avatarUrl, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower }, caption: body.caption ? String(body.caption) : null, mediaUrl: body.mediaKey ? String(body.mediaKey) : null, todos: [todo], cheerCount: 0, commentCount: 0, copyCount: 0, createdAt: new Date().toISOString(), cheered: false });
+      state.feed.unshift({ id: uid("demo-post"), author: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, avatarUrl: state.user.avatarUrl, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower }, caption: body.caption ? String(body.caption) : null, mediaUrl: body.mediaId ? String(body.mediaId) : null, todos: [todo], cheerCount: 0, commentCount: 0, copyCount: 0, createdAt: new Date().toISOString(), cheered: false });
     }
     writeState(state); return clone(todo) as T;
+  }
+  const uncompleteMatch = pathname.match(/^\/todos\/([^/]+)\/uncomplete$/);
+  if (uncompleteMatch && method === "POST") {
+    const todo = state.todos.find((item) => item.id === uncompleteMatch[1]);
+    if (!todo) throw new Error("TODO를 찾지 못했어요.");
+    todo.completedAt = null;
+    writeState(state);
+    return clone(todo) as T;
+  }
+  const seriesMatch = pathname.match(/^\/todos\/([^/]+)\/series$/);
+  if (seriesMatch && method === "DELETE") {
+    const source = state.todos.find((item) => item.id === seriesMatch[1]);
+    if (source?.seriesId) state.todos = state.todos.filter((item) => item.seriesId !== source.seriesId || item.completedAt);
+    writeState(state);
+    return {} as T;
   }
   const todoCloneMatch = pathname.match(/^\/todos\/([^/]+)\/clone$/);
   if (todoCloneMatch && method === "POST") {
@@ -205,7 +234,7 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
   if (pathname === "/feed/posts" && method === "POST") {
     const list = state.lists.find((item) => item.id === body.todoListId);
     if (!list) throw new Error("공유할 루틴을 찾지 못했어요.");
-    const post: FeedPost = { id: uid("demo-post"), author: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower }, caption: body.caption ? String(body.caption) : null, mediaUrl: body.mediaKey ? String(body.mediaKey) : null, todoList: list, todos: list.items.map((item) => item.todo), cheerCount: 0, commentCount: 0, copyCount: 0, createdAt: new Date().toISOString(), cheered: false };
+    const post: FeedPost = { id: uid("demo-post"), author: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower }, caption: body.caption ? String(body.caption) : null, mediaUrl: body.mediaId ? String(body.mediaId) : null, todoList: list, todos: list.items.map((item) => item.todo), cheerCount: 0, commentCount: 0, copyCount: 0, createdAt: new Date().toISOString(), cheered: false };
     state.feed.unshift(post); state.comments[post.id] = []; writeState(state); return clone(post) as T;
   }
   const cheerMatch = pathname.match(/^\/feed\/posts\/([^/]+)\/cheer$/);
@@ -221,21 +250,63 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     const post = state.feed.find((entry) => entry.id === commentsMatch[1]); if (post) post.commentCount += 1;
     writeState(state); return clone(item) as T;
   }
+  const commentDeleteMatch = pathname.match(/^\/feed\/comments\/([^/]+)$/);
+  if (commentDeleteMatch && method === "DELETE") {
+    for (const [postId, comments] of Object.entries(state.comments)) {
+      const next = comments.filter((item) => item.id !== commentDeleteMatch[1]);
+      if (next.length !== comments.length) {
+        state.comments[postId] = next;
+        const post = state.feed.find((item) => item.id === postId);
+        if (post) post.commentCount = Math.max(0, post.commentCount - 1);
+      }
+    }
+    writeState(state);
+    return {} as T;
+  }
   const postMatch = pathname.match(/^\/(?:feed|public)\/posts\/([^/]+)$/);
   if (postMatch && method === "GET") {
     const post = state.feed.find((item) => item.id === postMatch[1]); if (!post) throw new Error("게시물을 찾지 못했어요."); return clone(post) as T;
   }
+  if (postMatch && method === "DELETE") {
+    state.feed = state.feed.filter((item) => item.id !== postMatch[1]);
+    delete state.comments[postMatch[1]];
+    writeState(state);
+    return {} as T;
+  }
 
   if ((pathname === "/challenges" || pathname === "/public/challenges") && method === "GET") return clone(state.challenges) as T;
+  if (pathname === "/challenges" && method === "POST") {
+    if (state.user.availablePoints < 500) throw new Error("커뮤니티 챌린지 생성에는 500 포인트가 필요해요.");
+    const challenge: Challenge = { id: uid("demo-challenge"), title: String(body.title), description: String(body.description), kind: "COMMUNITY", verificationMode: body.verificationMode as Challenge["verificationMode"], startsAt: String(body.startsAt), endsAt: String(body.endsAt), rewardLabel: body.rewardLabel ? String(body.rewardLabel) : null, joined: false, todayCheckedIn: false, myCheckInCount: 0, successRate: 0, checkIns: [], _count: { participants: 0, checkIns: 0 } };
+    state.user.availablePoints -= 500;
+    state.challenges.unshift(challenge);
+    writeState(state);
+    return clone(challenge) as T;
+  }
+  const challengeDetailMatch = pathname.match(/^\/(?:challenges|public\/challenges)\/([^/]+)$/);
+  if (challengeDetailMatch && method === "GET") {
+    const challenge = state.challenges.find((item) => item.id === challengeDetailMatch[1]);
+    if (!challenge) throw new Error("챌린지를 찾지 못했어요.");
+    return clone(challenge) as T;
+  }
   const joinMatch = pathname.match(/^\/challenges\/([^/]+)\/join$/);
   if (joinMatch && method === "POST") {
     const challenge = state.challenges.find((item) => item.id === joinMatch[1]); if (!challenge) throw new Error("챌린지를 찾지 못했어요.");
     if (!challenge.joined) { challenge.joined = true; challenge._count.participants += 1; } writeState(state); return clone(challenge) as T;
   }
+  if (joinMatch && method === "DELETE") {
+    const challenge = state.challenges.find((item) => item.id === joinMatch[1]); if (!challenge) throw new Error("챌린지를 찾지 못했어요.");
+    if (challenge.joined) challenge._count.participants = Math.max(0, challenge._count.participants - 1);
+    challenge.joined = false; challenge.todayCheckedIn = false; challenge.myCheckInCount = 0; challenge.successRate = 0; challenge.checkIns = [];
+    writeState(state); return clone({ joined: false }) as T;
+  }
   const checkInMatch = pathname.match(/^\/challenges\/([^/]+)\/check-in$/);
   if (checkInMatch && method === "POST") {
     const challenge = state.challenges.find((item) => item.id === checkInMatch[1]); if (!challenge) throw new Error("챌린지를 찾지 못했어요.");
-    challenge._count.checkIns += 1; writeState(state); return clone({ checkedIn: true }) as T;
+    if (challenge.todayCheckedIn) throw new Error("오늘은 이미 인증했어요.");
+    challenge.joined = true; challenge.todayCheckedIn = true; challenge.myCheckInCount = (challenge.myCheckInCount ?? 0) + 1; challenge.successRate = Math.min(100, (challenge.successRate ?? 0) + 8); challenge._count.checkIns += 1;
+    challenge.checkIns = [{ id: uid("demo-checkin"), checkInDate: new Date().toISOString(), note: body.note ? String(body.note) : null, mediaUrl: body.mediaId ? String(body.mediaId) : null }, ...(challenge.checkIns ?? [])];
+    writeState(state); return clone({ checkedIn: true }) as T;
   }
 
   const profileMatch = pathname.match(/^\/public\/users\/([^/]+)$/);
@@ -245,10 +316,28 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     const person = author ?? { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, avatarUrl: state.user.avatarUrl, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower };
     return clone({ ...person, rank: person.cloudRank, recentVitality: 72, bio: "작은 실천을 내 속도로 이어가고 있어요.", _count: { followers: author ? 132 : 48, following: author ? 86 : 31, posts: author ? 24 : 12 } }) as T;
   }
+  const profilePostsMatch = pathname.match(/^\/public\/users\/([^/]+)\/posts$/);
+  if (profilePostsMatch && method === "GET") {
+    return clone({ items: state.feed.filter((post) => post.author.handle === profilePostsMatch[1]), nextCursor: null }) as T;
+  }
+  if (pathname === "/public/search" && method === "GET") {
+    const query = (url.searchParams.get("query") ?? "").toLocaleLowerCase("ko");
+    const users = Array.from(new Map(state.feed.map((post) => [post.author.id, post.author])).values()).filter((user) => `${user.nickname} ${user.handle}`.toLocaleLowerCase("ko").includes(query));
+    const posts = state.feed.filter((post) => `${post.caption ?? ""} ${post.todos.map((todo) => todo.title).join(" ")} ${post.todoList?.title ?? ""}`.toLocaleLowerCase("ko").includes(query));
+    return clone({ users, posts }) as T;
+  }
   if (pathname === "/social/follow" && method === "POST") {
     const userId = String(body.userId); const following = !state.following.includes(userId);
     state.following = following ? [...state.following, userId] : state.following.filter((id) => id !== userId); writeState(state); return clone({ following }) as T;
   }
+  const followStateMatch = pathname.match(/^\/social\/follow-state\/([^/]+)$/);
+  if (followStateMatch && method === "GET") return clone({ following: state.following.includes(followStateMatch[1]), blocked: false, followerCount: 132, followingCount: 86 }) as T;
+  const connectionMatch = pathname.match(/^\/social\/(followers|following)\/([^/]+)$/);
+  if (connectionMatch && method === "GET") {
+    const items = Array.from(new Map(state.feed.map((post) => [post.author.id, post.author])).values());
+    return clone({ items, nextCursor: null }) as T;
+  }
+  if ((pathname === "/social/block" || pathname === "/social/report") && method === "POST") return {} as T;
 
   throw new Error(`체험 모드에서 준비되지 않은 요청이에요: ${method} ${pathname}`);
 }

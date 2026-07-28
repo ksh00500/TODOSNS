@@ -1,10 +1,19 @@
 import { Transform, Type } from "class-transformer";
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
-import { ChallengeKind, ReportStatus, ReportTarget, VerificationMode, Visibility } from "@prisma/client";
+import { ChallengeKind, ReportStatus, ReportTarget, RewardStatus, VerificationMode, Visibility } from "@prisma/client";
+
+export enum RecurrenceEditScope {
+  THIS = "THIS",
+  FUTURE = "FUTURE",
+}
 
 export class PageDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = 20;
   @IsOptional() @IsString() cursor?: string;
+}
+
+export class SearchDto extends PageDto {
+  @IsString() @Length(2, 60) query!: string;
 }
 
 export class CreateTodoDto {
@@ -12,7 +21,7 @@ export class CreateTodoDto {
   @IsOptional() @IsString() @Length(0, 500) notes?: string;
   @IsOptional() @IsString() @Length(1, 30) category = "생활";
   @IsDateString() dueDate!: string;
-  @IsOptional() @IsString() repeatRule?: string;
+  @IsOptional() @IsString() repeatRule?: string | null;
   @IsOptional() @IsEnum(Visibility) visibility: Visibility = Visibility.PRIVATE;
 }
 
@@ -21,14 +30,15 @@ export class UpdateTodoDto {
   @IsOptional() @IsString() @Length(0, 500) notes?: string;
   @IsOptional() @IsString() @Length(1, 30) category?: string;
   @IsOptional() @IsDateString() dueDate?: string;
-  @IsOptional() @IsString() repeatRule?: string;
+  @IsOptional() @IsString() repeatRule?: string | null;
   @IsOptional() @IsEnum(Visibility) visibility?: Visibility;
+  @IsOptional() @IsEnum(RecurrenceEditScope) recurrenceScope: RecurrenceEditScope = RecurrenceEditScope.THIS;
 }
 
 export class CompleteTodoDto {
   @IsOptional() @IsBoolean() share = false;
   @IsOptional() @IsString() @Length(0, 180) caption?: string;
-  @IsOptional() @IsString() mediaKey?: string;
+  @IsOptional() @IsString() mediaId?: string;
   @IsOptional() @IsEnum(Visibility) visibility: Visibility = Visibility.PUBLIC;
 }
 
@@ -40,7 +50,7 @@ export class CreatePostDto {
   @IsOptional() @IsString() todoId?: string;
   @IsOptional() @IsString() todoListId?: string;
   @IsOptional() @IsString() @Length(0, 180) caption?: string;
-  @IsOptional() @IsString() mediaKey?: string;
+  @IsOptional() @IsString() mediaId?: string;
   @IsOptional() @IsEnum(Visibility) visibility: Visibility = Visibility.PUBLIC;
 }
 
@@ -78,7 +88,7 @@ export class CreateChallengeDto {
 
 export class CheckInDto {
   @IsOptional() @IsString() @Length(0, 180) note?: string;
-  @IsOptional() @IsString() mediaKey?: string;
+  @IsOptional() @IsString() mediaId?: string;
 }
 
 export class UserTargetDto { @IsString() userId!: string; }
@@ -96,14 +106,25 @@ export class ResolveReportDto {
   @IsString() @Length(3, 500) resolution!: string;
 }
 
+export class UpdateChallengeRewardDto {
+  @IsEnum(RewardStatus) status!: RewardStatus;
+}
+
 export class PresignDto {
   @IsString() @Length(1, 120) filename!: string;
   @IsString() mimeType!: string;
   @IsInt() @Min(1) @Max(10_000_000) size!: number;
 }
 
+export class CompleteMediaDto {
+  @IsString() mediaId!: string;
+}
+
 export class UpdateProfileDto {
   @IsOptional() @IsString() @Length(2, 20) nickname?: string;
   @IsOptional() @IsString() @Length(0, 160) bio?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) interests?: string[];
+  @IsOptional() @IsString() avatarMediaId?: string;
+  @IsOptional() @IsString() @Length(1, 80) timezone?: string;
+  @IsOptional() @IsBoolean() onboardingCompleted?: boolean;
 }

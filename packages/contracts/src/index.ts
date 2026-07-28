@@ -28,6 +28,8 @@ export interface TodoDto {
   repeatRule?: string | null;
   category: string;
   sourceTodoId?: string | null;
+  seriesId?: string | null;
+  occurrenceKey?: string | null;
 }
 
 export interface TodoListDto {
@@ -46,6 +48,8 @@ export interface FeedPostDto {
   author: UserSummary;
   caption?: string | null;
   mediaUrl?: string | null;
+  mediaId?: string | null;
+  thumbnailUrl?: string | null;
   todos: TodoDto[];
   todoList?: TodoListDto | null;
   cheerCount: number;
@@ -53,6 +57,35 @@ export interface FeedPostDto {
   copyCount: number;
   createdAt: string;
   cheered: boolean;
+}
+
+export interface MediaDto {
+  id: string;
+  status: "UPLOADING" | "READY" | "FAILED";
+  mimeType: string;
+  size: number;
+  width?: number | null;
+  height?: number | null;
+  url: string;
+  thumbnailUrl?: string | null;
+}
+
+export interface NotificationDto {
+  id: string;
+  type: "CHEER" | "COMMENT" | "COPY" | "FOLLOW" | "MESSAGE" | "CHALLENGE" | "RANK" | "SYSTEM";
+  title: string;
+  body: string;
+  targetType?: string | null;
+  targetId?: string | null;
+  href?: string | null;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPageDto {
+  items: NotificationDto[];
+  nextCursor: string | null;
+  unreadCount: number;
 }
 
 export interface ChallengeDto {
@@ -63,12 +96,45 @@ export interface ChallengeDto {
   verificationMode: VerificationMode;
   startsAt: string;
   endsAt: string;
-  participantCount: number;
+  _count: { participants: number; checkIns: number };
   joined: boolean;
+  todayCheckedIn?: boolean;
+  myCheckInCount?: number;
+  successRate?: number;
   rewardLabel?: string | null;
+  participants?: Array<{ userId?: string; joinedAt?: string; rewardStatus?: string }>;
+  checkIns?: Array<{ id: string; checkInDate: string; note?: string | null; mediaUrl?: string | null }>;
+}
+
+export interface FeedPageDto {
+  items: FeedPostDto[];
+  nextCursor: string | null;
+}
+
+export interface CommentDto {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: UserSummary;
+}
+
+export interface SessionUserDto {
+  id: string;
+  email: string;
+  nickname: string;
+  handle: string;
+  role: string;
+  availablePoints: number;
+  lifetimePower: number;
+  recentVitality: number;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  interests?: string[];
+  timezone?: string;
+  onboardingCompletedAt?: string | null;
+  emailVerifiedAt?: string | null;
 }
 
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
 }

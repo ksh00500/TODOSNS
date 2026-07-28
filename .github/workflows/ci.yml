@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: mungsil_test
+          POSTGRES_USER: mungsil
+          POSTGRES_PASSWORD: mungsil
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mungsil"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://mungsil:mungsil@localhost:5432/mungsil_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-at-least-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
+      WEB_ORIGIN: http://localhost:3000
+      MINIO_ENDPOINT: http://localhost:9000
+      MINIO_ACCESS_KEY: mungsil
+      MINIO_SECRET_KEY: mungsil-local-password
+      MINIO_BUCKET: mungsil-media
+      INVITE_REQUIRED: "false"
+      RUN_DATABASE_E2E: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run prisma:deploy -w @mungsil/api
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+      - run: npm audit --omit=dev

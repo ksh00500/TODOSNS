@@ -40,6 +40,25 @@ services:
     volumes:
       - minio_dev_data:/data
 
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["until mc alias set local http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY; do sleep 2; done; mc mb --ignore-existing local/$$MINIO_BUCKET"]
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-mungsil}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-mungsil-local-password}
+      MINIO_BUCKET: ${MINIO_BUCKET:-mungsil-media}
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
 volumes:
   postgres_dev_data:
   redis_dev_data:
