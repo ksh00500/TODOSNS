@@ -13,9 +13,11 @@
 
 1. `.env.example`을 `.env`로 복사하고 값을 채웁니다.
 2. `npm install`
-3. `docker compose -f infra/docker-compose.dev.yml up -d`
+3. `npm run compose:dev:up`
 4. `npm run db:generate && npm run db:migrate && npm run db:seed`
 5. `npm run dev`
+
+로컬 인프라를 종료할 때는 `npm run compose:dev:down`을 실행합니다.
 
 웹은 `http://localhost:3000`, API 문서는 `http://localhost:4000/api/docs`에서 확인할 수 있습니다.
 

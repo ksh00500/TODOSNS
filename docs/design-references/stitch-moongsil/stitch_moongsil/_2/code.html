@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Explore Feed - Moongsil</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed": "#e8ddff",
+                        "surface-container-low": "#f5f3f3",
+                        "on-primary-fixed-variant": "#4c3d79",
+                        "surface-bright": "#fbf9f8",
+                        "secondary-container": "#bbeceb",
+                        "background": "#fbf9f8",
+                        "on-secondary": "#ffffff",
+                        "inverse-surface": "#303030",
+                        "surface-dim": "#dbd9d9",
+                        "tertiary": "#72545c",
+                        "surface-variant": "#e4e2e2",
+                        "tertiary-fixed": "#ffd9e1",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#8c6c74",
+                        "on-secondary-container": "#3e6c6c",
+                        "on-surface": "#1b1c1c",
+                        "secondary": "#376666",
+                        "outline": "#7a7580",
+                        "on-secondary-fixed": "#002020",
+                        "on-tertiary-fixed": "#2b151b",
+                        "secondary-fixed": "#bbeceb",
+                        "on-primary-fixed": "#200e4b",
+                        "on-secondary-fixed-variant": "#1d4e4e",
+                        "surface-container": "#efeded",
+                        "outline-variant": "#cac4d0",
+                        "error-container": "#ffdad6",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed-dim": "#9fcfcf",
+                        "on-surface-variant": "#49454f",
+                        "surface-tint": "#655592",
+                        "on-primary-container": "#fffbff",
+                        "surface-container-high": "#eae8e7",
+                        "on-background": "#1b1c1c",
+                        "on-tertiary-fixed-variant": "#5b3f46",
+                        "error": "#ba1a1a",
+                        "on-tertiary": "#ffffff",
+                        "primary-container": "#7b6baa",
+                        "inverse-on-surface": "#f2f0f0",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-container": "#fffbff",
+                        "tertiary-fixed-dim": "#e3bdc5",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e4e2e2",
+                        "inverse-primary": "#cfbdff",
+                        "primary-fixed-dim": "#cfbdff",
+                        "primary": "#625290",
+                        "surface": "#fbf9f8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px",
+                        "2xl": "1rem",
+                        "3xl": "1.5rem"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "md": "16px",
+                        "gutter": "24px",
+                        "xxl": "48px",
+                        "unit": "8px",
+                        "xl": "32px",
+                        "container-max": "1200px",
+                        "lg": "24px",
+                        "sm": "8px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Plus Jakarta Sans"],
+                        "display-lg-mobile": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Plus Jakarta Sans"],
+                        "title-sm": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "title-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Hide scrollbar for horizontal scrolling but keep functionality */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Soft Ambient Shadow for cards (Level 1) */
+        .shadow-ambient {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04);
+        }
+        /* Soft Ambient Shadow for cards hover (Level 2) */
+        .shadow-ambient-hover:hover {
+            box-shadow: 0 12px 48px rgba(98, 82, 144, 0.08);
+            transform: translateY(-2px);
+        }
+        
+        /* Glowing button shadow */
+        .shadow-glow {
+            box-shadow: 0 4px 16px rgba(98, 82, 144, 0.3);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface-bright text-on-surface font-body-md antialiased min-h-screen flex flex-col">
+<!-- TopAppBar Shared Component -->
+<header class="fixed top-4 left-4 right-4 rounded-xl bg-white/70 dark:bg-black/40 backdrop-blur-md flex justify-between items-center px-md py-sm z-50 border-none shadow-sm shadow-[0_8px_32px_rgba(0,0,0,0.05)]">
+<button class="text-primary dark:text-primary-fixed-dim hover:opacity-80 transition-opacity active:scale-95 duration-200 ease-in-out">
+<span class="material-symbols-outlined">cloud</span>
+</button>
+<h1 class="text-headline-md font-headline-md text-primary dark:text-primary-fixed-dim tracking-tight">Moongsil</h1>
+<button class="text-primary dark:text-primary-fixed-dim hover:opacity-80 transition-opacity active:scale-95 duration-200 ease-in-out">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-[104px] pb-24 md:pb-12 px-gutter max-w-container-max mx-auto w-full flex flex-col gap-lg">
+<!-- Header Section: Title & Search -->
+<section class="flex flex-col gap-md">
+<h2 class="text-display-lg-mobile md:text-display-lg font-display-lg-mobile md:font-display-lg text-on-surface tracking-tight">탐색</h2>
+<div class="relative w-full">
+<div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-outline">search</span>
+</div>
+<input class="w-full pl-12 pr-4 py-3 bg-surface-container-low text-on-surface text-body-md font-body-md rounded-full border-none focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all shadow-sm outline-none placeholder:text-outline-variant" placeholder="Find habits, users, or topics..." type="text"/>
+</div>
+</section>
+<!-- Filters Section -->
+<section class="-mx-gutter px-gutter hide-scrollbar overflow-x-auto pb-2">
+<div class="flex gap-sm w-max">
+<button class="px-5 py-2 rounded-full bg-primary text-on-primary text-title-sm font-title-sm whitespace-nowrap shadow-sm">All</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-title-sm font-title-sm whitespace-nowrap">Workout</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-title-sm font-title-sm whitespace-nowrap">Study</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-title-sm font-title-sm whitespace-nowrap">Health</button>
+<button class="px-5 py-2 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors text-title-sm font-title-sm whitespace-nowrap">Hobby</button>
+</div>
+</section>
+<!-- Feed Section (Bento/Card Grid) -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-lg">
+<!-- Post Card 1: Study -->
+<article class="bg-surface-container-lowest rounded-2xl p-md flex flex-col gap-md shadow-ambient shadow-ambient-hover transition-all duration-300 border border-surface-container-low">
+<!-- User Info Header -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full bg-primary-fixed overflow-hidden border-2 border-white">
+<img class="w-full h-full object-cover" data-alt="A serene avatar profile picture featuring a soft, pastel-colored illustration of a sleepy white cloud character with a tiny yellow star on its cheek, set against a solid light lavender background. The art style is minimalist and whimsical." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLC167r3N6u8TgH9BManbPaHqxoKOSJjuPrDZBvT3e69rHf51-Qe7CK8LsdKRgPIS1EtTTJhJYjEMpsYk6ZPBj9pdumU1P1-Yxdbi-cNorANLJrCrH9FJuWfU14E_E97rENJE0tDR84JNQn2qw_04ij_HXrfwcATr8X00t_hBWERLbOKsqI8Bdwldb-8mN3iR_wVyHHdJw_NW0HN7-xkfi8UmVPp8L9nCwhNThwicKEPyH6G2IcnrY1w"/>
+</div>
+<div class="flex flex-col">
+<span class="text-title-sm font-title-sm text-on-surface leading-tight">Jiwoo Kim</span>
+<span class="text-label-caps font-label-caps text-primary">Lvl 12</span>
+</div>
+</div>
+<span class="text-label-caps font-label-caps text-outline-variant">2h ago</span>
+</div>
+<!-- High Quality Photo -->
+<div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover" data-alt="A clean, modern study desk setup bathed in soft, natural morning light. The desk features a minimalist white surface, an open notebook with neat handwriting, a steaming cup of coffee in a pastel ceramic mug, and a sleek laptop. The atmosphere is calm, focused, and productive, reflecting a serene light-mode aesthetic with gentle shadows." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBFMCvEYoGbLggG2VBrl5kN1-OCWgLYgQkRlt6HTTrGvTvdh9Ae_BcSoUGZm4Rm4mPE1nbfWzjHciWkzo-kibhKdtlrWaf5VliXqvy4Ftz2BPbHHNxReqVeMW8uJt42Yxih4A8lWwmCKCRjF-UevxE-75E1hMEqvKq48RzH-WKQokUFAKsWv9t_h9zpuuE6e8pRDcrs8cGOYNel3URa0G-GJ7EuDHJD5-mxNBMTCJJwVIa-O3UVd5nXJA"/>
+</div>
+<!-- Content -->
+<div class="flex flex-col gap-xs">
+<div class="flex gap-xs items-center mb-1">
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant text-label-caps font-label-caps">Study</span>
+<h3 class="text-title-sm font-title-sm text-on-surface">Morning Reading</h3>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant line-clamp-2">Starting the day right with 30 pages of deep work. The morning light makes everything feel possible. ☕️📚</p>
+</div>
+<!-- Actions -->
+<div class="flex items-center justify-between mt-auto pt-sm border-t border-surface-container border-dashed">
+<div class="flex items-center gap-md">
+<button class="flex items-center gap-1 text-outline hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[20px]">favorite</span>
+<span class="text-label-caps font-label-caps">24</span>
+</button>
+<button class="flex items-center gap-1 text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">chat_bubble</span>
+<span class="text-label-caps font-label-caps">5</span>
+</button>
+</div>
+<button class="bg-primary hover:bg-surface-tint text-on-primary px-4 py-2 rounded-full text-title-sm font-title-sm shadow-glow transition-all active:scale-95">
+                        나도 할래요
+                    </button>
+</div>
+</article>
+<!-- Post Card 2: Workout -->
+<article class="bg-surface-container-lowest rounded-2xl p-md flex flex-col gap-md shadow-ambient shadow-ambient-hover transition-all duration-300 border border-surface-container-low">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed overflow-hidden border-2 border-white">
+<img class="w-full h-full object-cover" data-alt="A minimalist avatar profile picture showing a smooth, abstract geometric shape resembling a pebble, rendered in soft mint green, set against a pristine white background with subtle ambient lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDrz6IYlO1Y4gFqJPhMLhLIqXyMqQG7zHamMhj9Xc3b2jHVgsQqlTCk0RZV83pkJ9N_w1drEqI-Ca2PJjaoYGUqDZdAQiIC7yXb-xo_5i9Stb61z_UjpzLdVXQTxF_LMxKI3ZXKe8PsGEYFN-hyEoxLctAOQI7YN0QKEF0l2L3ev5HBe22jcVN17TxxDrShzJcxEfmTKwrl6ew0mBhvmQTozFqVF4NpUcgIlON58owN5M4yShtI2vgImA"/>
+</div>
+<div class="flex flex-col">
+<span class="text-title-sm font-title-sm text-on-surface leading-tight">Alex Y.</span>
+<span class="text-label-caps font-label-caps text-secondary">Lvl 8</span>
+</div>
+</div>
+<span class="text-label-caps font-label-caps text-outline-variant">5h ago</span>
+</div>
+<div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-surface-container-low">
+<img class="w-full h-full object-cover" data-alt="A light purple yoga mat rolled out on a light wood floor in a spacious, airy room. Sun rays stream through sheer white curtains, creating soft shadows. Next to the mat is a sleek reusable water bottle and a small potted green plant. The aesthetic is tranquil, refreshing, and minimalist, emphasizing clean spacing and pastel tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7tR3y1vrk7kJfU7GJXDGXvgdN9NC5h3PFalGPihFOtzJZ_YwfltSF635hSZ-5ONRXh5rgkIdXsvfrsoDE-3YejuI7uXh06bAQX23k_J1KG2Xl88oEXFu3B2RcJbciPGUhtdKgdvlmTJN6zygqVyo63S1SXRKZWsnDrHwE0XhtrkN4tFIXLmHzn1OVnw11FWnrSr9301_vMg2lfCP3rFMhTvpq3D5DJmJwKMEtW7QCsdNNcv8tQwV5tg"/>
+</div>
+<div class="flex flex-col gap-xs">
+<div class="flex gap-xs items-center mb-1">
+<span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container text-label-caps font-label-caps">Workout</span>
+<h3 class="text-title-sm font-title-sm text-on-surface">15m Stretch</h3>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant line-clamp-2">Just a quick flow to loosen up the shoulders before diving into meetings. Highly recommend taking breaks!</p>
+</div>
+<div class="flex items-center justify-between mt-auto pt-sm border-t border-surface-container border-dashed">
+<div class="flex items-center gap-md">
+<button class="flex items-center gap-1 text-error transition-colors">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">favorite</span>
+<span class="text-label-caps font-label-caps text-outline">128</span>
+</button>
+<button class="flex items-center gap-1 text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">chat_bubble</span>
+<span class="text-label-caps font-label-caps">12</span>
+</button>
+</div>
+<button class="bg-primary hover:bg-surface-tint text-on-primary px-4 py-2 rounded-full text-title-sm font-title-sm shadow-glow transition-all active:scale-95">
+                        나도 할래요
+                    </button>
+</div>
+</article>
+<!-- Post Card 3: Health -->
+<article class="bg-surface-container-lowest rounded-2xl p-md flex flex-col gap-md shadow-ambient shadow-ambient-hover transition-all duration-300 border border-surface-container-low">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed overflow-hidden border-2 border-white">
+<img class="w-full h-full object-cover" data-alt="A stylized avatar profile picture depicting a delicate, simplified pink blossom flower on a soft peach background. The design is clean, flat vector art emphasizing a serene and wholesome vibe." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCghnJftZ13jnUgiuQGSbLeGO-OkP51D3F_kIN9iVnzievOrghEGI8U8NiZ218DbL0lfFv2Y9UQFXpc1Dvj4i1c0UFG-Ew1MCRN2GPmKYWoEIXc9liYBbk3y46LM3jwYCCFE3cEykDBvCw7PG52-C1aywRQv0dsafNeqtq1v9-DUPAURYYKAwJ58iPQ_tN6auwfQLM7yJpdRu07XIh1ze0MOurD7QYUnk3ZAOWOaJqoDETwCM5vQ1mHeg"/>
+</div>
+<div class="flex flex-col">
+<span class="text-title-sm font-title-sm text-on-surface leading-tight">Sora Park</span>
+<span class="text-label-caps font-label-caps text-tertiary">Lvl 24</span>
+</div>
+</div>
+<span class="text-label-caps font-label-caps text-outline-variant">Yesterday</span>
+</div>
+<div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-surface-container-low relative">
+<!-- Example of using a subtle gradient overlay if needed, though clean photo is better -->
+<img class="w-full h-full object-cover" data-alt="A beautifully arranged, healthy breakfast bowl on a white marble countertop. The bowl contains creamy yogurt, fresh colorful berries, and granola, served in a matte pastel green ceramic bowl. The lighting is bright and cheerful, highlighting the freshness of the ingredients. The overall mood is healthy, revitalizing, and aesthetically pleasing in a light-mode setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpVju_CwErrh1xcg4ldXf9z9XdExYNJiyXJwHpigLfe34QAmm6KF8dQt-ASS5FQfXj-H0BBWaf5n5cOVOP9HzyMkzyZN7xxQeayWrjHbZGDL6qJhxpUOtD0M5ZdXlrTdmESmn6pJlWjHXwnEhrV26HVyCFAge-Yr-YjhAHoM5NS5EGWsBwHlyjQHtiyCf7seycSMj53fOnLfYxce2Ar2Kxf9b0zrsTr2Xt7_vCh-FZS8IzZTiWPy9o-w"/>
+</div>
+<div class="flex flex-col gap-xs">
+<div class="flex gap-xs items-center mb-1">
+<span class="px-2 py-0.5 rounded bg-tertiary-container text-on-tertiary-container text-label-caps font-label-caps">Health</span>
+<h3 class="text-title-sm font-title-sm text-on-surface">Clean Eating</h3>
+</div>
+<p class="text-body-sm font-body-sm text-on-surface-variant line-clamp-2">Swapped my usual pastry for a nutrient-packed bowl today. Feeling surprisingly energized! 🍓🥝</p>
+</div>
+<div class="flex items-center justify-between mt-auto pt-sm border-t border-surface-container border-dashed">
+<div class="flex items-center gap-md">
+<button class="flex items-center gap-1 text-outline hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[20px]">favorite</span>
+<span class="text-label-caps font-label-caps">56</span>
+</button>
+<button class="flex items-center gap-1 text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">chat_bubble</span>
+<span class="text-label-caps font-label-caps">2</span>
+</button>
+</div>
+<button class="bg-primary hover:bg-surface-tint text-on-primary px-4 py-2 rounded-full text-title-sm font-title-sm shadow-glow transition-all active:scale-95">
+                        나도 할래요
+                    </button>
+</div>
+</article>
+</section>
+</main>
+<!-- BottomNavBar Shared Component -->
+<nav class="fixed bottom-0 left-0 right-0 z-50 bg-white/70 dark:bg-black/40 backdrop-blur-md border-none shadow-lg shadow-[0_-4px_24px_rgba(0,0,0,0.05)] md:hidden">
+<div class="flex justify-around items-center w-full px-gutter py-md">
+<!-- Today (Inactive) -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="text-label-caps font-label-caps mt-1">Today</span>
+</button>
+<!-- Explore (Active) -->
+<button class="flex flex-col items-center justify-center bg-secondary-container dark:bg-on-secondary-container text-on-secondary-container dark:text-secondary-container rounded-full px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors active:scale-90 duration-150">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">explore</span>
+<span class="text-label-caps font-label-caps mt-1">Explore</span>
+</button>
+<!-- TODO (Inactive) -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors">
+<span class="material-symbols-outlined">task_alt</span>
+<span class="text-label-caps font-label-caps mt-1">TODO</span>
+</button>
+<!-- Challenge (Inactive) -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors">
+<span class="material-symbols-outlined">emoji_events</span>
+<span class="text-label-caps font-label-caps mt-1">Challenge</span>
+</button>
+<!-- My (Inactive) -->
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors">
+<span class="material-symbols-outlined">person</span>
+<span class="text-label-caps font-label-caps mt-1">My</span>
+</button>
+</div>
+</nav>
+</body></html>

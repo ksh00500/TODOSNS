@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Moongsil - Today</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Plus Jakarta Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed": "#e8ddff",
+                        "surface-container-low": "#f5f3f3",
+                        "on-primary-fixed-variant": "#4c3d79",
+                        "surface-bright": "#fbf9f8",
+                        "secondary-container": "#bbeceb",
+                        "background": "#fbf9f8",
+                        "on-secondary": "#ffffff",
+                        "inverse-surface": "#303030",
+                        "surface-dim": "#dbd9d9",
+                        "tertiary": "#72545c",
+                        "surface-variant": "#e4e2e2",
+                        "tertiary-fixed": "#ffd9e1",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#8c6c74",
+                        "on-secondary-container": "#3e6c6c",
+                        "on-surface": "#1b1c1c",
+                        "secondary": "#376666",
+                        "outline": "#7a7580",
+                        "on-secondary-fixed": "#002020",
+                        "on-tertiary-fixed": "#2b151b",
+                        "secondary-fixed": "#bbeceb",
+                        "on-primary-fixed": "#200e4b",
+                        "on-secondary-fixed-variant": "#1d4e4e",
+                        "surface-container": "#efeded",
+                        "outline-variant": "#cac4d0",
+                        "error-container": "#ffdad6",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed-dim": "#9fcfcf",
+                        "on-surface-variant": "#49454f",
+                        "surface-tint": "#655592",
+                        "on-primary-container": "#fffbff",
+                        "surface-container-high": "#eae8e7",
+                        "on-background": "#1b1c1c",
+                        "on-tertiary-fixed-variant": "#5b3f46",
+                        "error": "#ba1a1a",
+                        "on-tertiary": "#ffffff",
+                        "primary-container": "#7b6baa",
+                        "inverse-on-surface": "#f2f0f0",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-container": "#fffbff",
+                        "tertiary-fixed-dim": "#e3bdc5",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e4e2e2",
+                        "inverse-primary": "#cfbdff",
+                        "primary-fixed-dim": "#cfbdff",
+                        "primary": "#625290",
+                        "surface": "#fbf9f8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "md": "16px",
+                        "gutter": "24px",
+                        "xxl": "48px",
+                        "unit": "8px",
+                        "xl": "32px",
+                        "container-max": "1200px",
+                        "lg": "24px",
+                        "sm": "8px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Plus Jakarta Sans"],
+                        "display-lg-mobile": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Plus Jakarta Sans"],
+                        "title-sm": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "title-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Ambient shadows and Glassmorphism */
+        .ambient-shadow-lvl1 {
+            box-shadow: 0 4px 24px rgba(0,0,0,0.05);
+        }
+        .ambient-shadow-lvl2 {
+            box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+        }
+        .glass-panel {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            background-color: rgba(255, 255, 255, 0.7);
+        }
+        .circular-progress {
+            transform: rotate(-90deg);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-4 left-4 right-4 rounded-xl border-none shadow-sm shadow-[0_8px_32px_rgba(0,0,0,0.05)] bg-white/70 backdrop-blur-md z-50">
+<div class="flex justify-between items-center px-md py-sm z-50">
+<button class="hover:opacity-80 transition-opacity active:scale-95 duration-200 ease-in-out text-on-surface-variant">
+<span class="material-symbols-outlined">cloud</span>
+</button>
+<h1 class="text-headline-md font-headline-md text-primary tracking-tight">Moongsil</h1>
+<button class="hover:opacity-80 transition-opacity active:scale-95 duration-200 ease-in-out text-on-surface-variant">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</div>
+</header>
+<main class="pt-24 px-gutter max-w-container-max mx-auto space-y-lg">
+<!-- Header Greeting -->
+<section class="mt-md">
+<h2 class="text-display-lg-mobile md:text-display-lg font-display-lg-mobile md:font-display-lg text-on-surface">안녕하세요, 지수님!</h2>
+<p class="text-body-md font-body-md text-on-surface-variant mt-sm">Monday, October 23</p>
+</section>
+<!-- Central Widget: Progress Chart -->
+<section class="flex justify-center py-md">
+<div class="relative w-64 h-64 flex items-center justify-center bg-white rounded-full ambient-shadow-lvl2 border-2 border-primary-fixed">
+<!-- SVG Circular Progress -->
+<svg class="absolute inset-0 w-full h-full circular-progress" viewbox="0 0 100 100">
+<!-- Background circle -->
+<circle class="text-surface-container-low" cx="50" cy="50" fill="none" r="45" stroke="currentColor" stroke-width="6"></circle>
+<!-- Progress circle (62%) -->
+<circle class="text-primary transition-all duration-1000 ease-out" cx="50" cy="50" fill="none" r="45" stroke="currentColor" stroke-dasharray="282.74" stroke-dashoffset="107.44" stroke-linecap="round" stroke-width="6"></circle>
+</svg>
+<!-- Inner content -->
+<div class="text-center z-10 flex flex-col items-center">
+<span class="material-symbols-outlined text-4xl text-secondary mb-xs" style="font-variation-settings: 'FILL' 1;">cloud</span>
+<span class="text-title-sm font-title-sm text-on-surface">62%</span>
+<span class="text-label-caps font-label-caps text-on-surface-variant mt-xs">Journey progress</span>
+</div>
+</div>
+</section>
+<!-- Inspiration Quote -->
+<section>
+<div class="glass-panel rounded-xl p-md ambient-shadow-lvl1 border border-white/50 relative overflow-hidden">
+<div class="absolute top-2 left-4 text-4xl text-primary/20 font-serif">"</div>
+<p class="text-body-md font-body-md text-on-surface-variant text-center relative z-10 italic px-md py-sm">
+                    "Small daily improvements over time lead to stunning results."
+                </p>
+<div class="absolute bottom-[-10px] right-4 text-4xl text-primary/20 font-serif">"</div>
+</div>
+</section>
+<!-- Today's Tasks -->
+<section>
+<h3 class="text-title-sm font-title-sm text-on-surface mb-md">Today's Tasks</h3>
+<div class="space-y-sm">
+<!-- Completed Task -->
+<div class="bg-secondary-fixed rounded-xl p-md flex items-center justify-between ambient-shadow-lvl1 transition-all">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-on-secondary flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div>
+<p class="text-body-md font-body-md text-on-secondary-container line-through opacity-70">Morning Meditation</p>
+<p class="text-body-sm font-body-sm text-secondary opacity-70">8:00 AM</p>
+</div>
+</div>
+</div>
+<!-- Active Task -->
+<div class="bg-white rounded-xl p-md flex items-center justify-between ambient-shadow-lvl2 border-2 border-primary transition-all scale-[1.02]">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">water_drop</span>
+</div>
+<div>
+<p class="text-title-sm font-title-sm text-on-surface">Drink 2L Water</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Ongoing - 1L / 2L</p>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full border-2 border-primary flex items-center justify-center hover:bg-primary hover:text-white transition-colors text-primary">
+<span class="material-symbols-outlined text-sm">add</span>
+</button>
+</div>
+<!-- Inactive/Upcoming Task -->
+<div class="bg-surface-container-low rounded-xl p-md flex items-center justify-between border border-dashed border-outline-variant transition-all">
+<div class="flex items-center gap-md opacity-60">
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">book</span>
+</div>
+<div>
+<p class="text-body-md font-body-md text-on-surface">Read 20 Pages</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Evening</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-24 right-gutter w-14 h-14 bg-primary text-on-primary rounded-full flex items-center justify-center shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all z-40 focus:outline-none focus:ring-4 focus:ring-primary-fixed">
+<span class="material-symbols-outlined text-2xl">add</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 right-0 z-50 bg-white/70 backdrop-blur-md border-none shadow-lg shadow-[0_-4px_24px_rgba(0,0,0,0.05)] md:hidden">
+<div class="flex justify-around items-center w-full px-gutter py-md">
+<!-- Active Tab: Today -->
+<button class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-full px-4 py-1 hover:text-primary transition-colors active:scale-90 duration-150">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+<span class="text-label-caps font-label-caps mt-xs">Today</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">explore</span>
+<span class="text-label-caps font-label-caps mt-xs">Explore</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">task_alt</span>
+<span class="text-label-caps font-label-caps mt-xs">TODO</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">emoji_events</span>
+<span class="text-label-caps font-label-caps mt-xs">Challenge</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">person</span>
+<span class="text-label-caps font-label-caps mt-xs">My</span>
+</button>
+</div>
+</nav>
+<!-- Desktop Nav Cluster (Hidden on Mobile) -->
+<nav class="hidden md:flex fixed top-4 right-16 items-center gap-md z-50 h-16">
+<!-- Active Tab -->
+<button class="text-primary font-label-caps text-label-caps hover:opacity-80 transition-opacity">Today</button>
+<button class="text-on-surface-variant font-label-caps text-label-caps hover:opacity-80 transition-opacity">Explore</button>
+<button class="text-on-surface-variant font-label-caps text-label-caps hover:opacity-80 transition-opacity">TODO</button>
+<button class="text-on-surface-variant font-label-caps text-label-caps hover:opacity-80 transition-opacity">Challenge</button>
+<button class="text-on-surface-variant font-label-caps text-label-caps hover:opacity-80 transition-opacity">My</button>
+</nav>
+</body></html>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Moongsil - My Profile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Subtle glow animation for badges */
+        @keyframes subtle-glow {
+            0%, 100% { box-shadow: 0 0 10px rgba(187, 236, 235, 0.4); } /* secondary-container based */
+            50% { box-shadow: 0 0 20px rgba(98, 82, 144, 0.6); } /* primary based */
+        }
+        .animate-glow {
+            animation: subtle-glow 3s infinite ease-in-out;
+        }
+
+        /* Hide scrollbar for badge list but allow scrolling */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary-fixed": "#e8ddff",
+                      "surface-container-low": "#f5f3f3",
+                      "on-primary-fixed-variant": "#4c3d79",
+                      "surface-bright": "#fbf9f8",
+                      "secondary-container": "#bbeceb",
+                      "background": "#fbf9f8",
+                      "on-secondary": "#ffffff",
+                      "inverse-surface": "#303030",
+                      "surface-dim": "#dbd9d9",
+                      "tertiary": "#72545c",
+                      "surface-variant": "#e4e2e2",
+                      "tertiary-fixed": "#ffd9e1",
+                      "surface-container-lowest": "#ffffff",
+                      "tertiary-container": "#8c6c74",
+                      "on-secondary-container": "#3e6c6c",
+                      "on-surface": "#1b1c1c",
+                      "secondary": "#376666",
+                      "outline": "#7a7580",
+                      "on-secondary-fixed": "#002020",
+                      "on-tertiary-fixed": "#2b151b",
+                      "secondary-fixed": "#bbeceb",
+                      "on-primary-fixed": "#200e4b",
+                      "on-secondary-fixed-variant": "#1d4e4e",
+                      "surface-container": "#efeded",
+                      "outline-variant": "#cac4d0",
+                      "error-container": "#ffdad6",
+                      "on-primary": "#ffffff",
+                      "secondary-fixed-dim": "#9fcfcf",
+                      "on-surface-variant": "#49454f",
+                      "surface-tint": "#655592",
+                      "on-primary-container": "#fffbff",
+                      "surface-container-high": "#eae8e7",
+                      "on-background": "#1b1c1c",
+                      "on-tertiary-fixed-variant": "#5b3f46",
+                      "error": "#ba1a1a",
+                      "on-tertiary": "#ffffff",
+                      "primary-container": "#7b6baa",
+                      "inverse-on-surface": "#f2f0f0",
+                      "on-error-container": "#93000a",
+                      "on-tertiary-container": "#fffbff",
+                      "tertiary-fixed-dim": "#e3bdc5",
+                      "on-error": "#ffffff",
+                      "surface-container-highest": "#e4e2e2",
+                      "inverse-primary": "#cfbdff",
+                      "primary-fixed-dim": "#cfbdff",
+                      "primary": "#625290",
+                      "surface": "#fbf9f8"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "xs": "4px",
+                      "md": "16px",
+                      "gutter": "24px",
+                      "xxl": "48px",
+                      "unit": "8px",
+                      "xl": "32px",
+                      "container-max": "1200px",
+                      "lg": "24px",
+                      "sm": "8px"
+              },
+              "fontFamily": {
+                      "label-caps": ["Plus Jakarta Sans"],
+                      "display-lg-mobile": ["Plus Jakarta Sans"],
+                      "headline-md": ["Plus Jakarta Sans"],
+                      "body-md": ["Plus Jakarta Sans"],
+                      "display-lg": ["Plus Jakarta Sans"],
+                      "title-sm": ["Plus Jakarta Sans"],
+                      "body-sm": ["Plus Jakarta Sans"]
+              },
+              "fontSize": {
+                      "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "display-lg-mobile": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md text-body-md min-h-screen flex flex-col antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TopAppBar (Web & Mobile Shell) -->
+<header class="fixed top-4 left-4 right-4 rounded-xl border-none shadow-sm shadow-[0_8px_32px_rgba(0,0,0,0.05)] bg-white/70 dark:bg-black/40 backdrop-blur-md flex justify-between items-center px-md py-sm z-50">
+<!-- Leading Icon -->
+<button class="w-10 h-10 flex items-center justify-center text-primary dark:text-primary-fixed-dim hover:opacity-80 transition-opacity rounded-full">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">cloud</span>
+</button>
+<!-- Brand / Headline -->
+<div class="flex-1 flex justify-center md:justify-start md:ml-4">
+<h1 class="text-headline-md font-headline-md text-primary dark:text-primary-fixed-dim tracking-tight">Moongsil</h1>
+</div>
+<!-- Desktop Navigation Cluster (Hidden on Mobile) -->
+<nav class="hidden md:flex items-center space-x-unit flex-1 justify-center">
+<a class="text-on-surface-variant dark:text-outline-variant hover:opacity-80 transition-opacity px-md py-sm rounded-full" href="#">
+<span class="font-body-md text-body-md">Today</span>
+</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:opacity-80 transition-opacity px-md py-sm rounded-full" href="#">
+<span class="font-body-md text-body-md">Explore</span>
+</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:opacity-80 transition-opacity px-md py-sm rounded-full" href="#">
+<span class="font-body-md text-body-md">TODO</span>
+</a>
+<a class="text-on-surface-variant dark:text-outline-variant hover:opacity-80 transition-opacity px-md py-sm rounded-full" href="#">
+<span class="font-body-md text-body-md">Challenge</span>
+</a>
+<!-- Active State on Desktop Nav for 'My' -->
+<a class="text-primary dark:text-primary-fixed-dim hover:opacity-80 transition-opacity bg-secondary-container dark:bg-on-secondary-container px-md py-sm rounded-full flex items-center gap-2" href="#">
+<span class="font-label-caps text-label-caps text-on-secondary-container dark:text-secondary-container">My</span>
+</a>
+</nav>
+<!-- Trailing Icon -->
+<button class="w-10 h-10 flex items-center justify-center text-primary dark:text-primary-fixed-dim hover:opacity-80 transition-opacity rounded-full">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 pt-24 pb-32 px-gutter md:px-lg max-w-container-max mx-auto w-full flex flex-col space-y-lg">
+<!-- Profile Header Section -->
+<section class="flex flex-col items-center justify-center pt-md space-y-4 relative">
+<div class="relative group">
+<!-- Avatar -->
+<div class="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-primary-fixed to-secondary-container shadow-[0_8px_32px_rgba(0,0,0,0.05)]">
+<img class="w-full h-full rounded-full object-cover border-4 border-surface-container-lowest" data-alt="A highly detailed portrait of an adorable, fluffy white dog (perhaps a Samoyed or Bichon) posing happily outdoors in a bright, sunlit park. The lighting is soft and cinematic, creating a warm, premium 'Cloud Comfort' aesthetic consistent with a light-mode wellness app. The background is slightly blurred with soft pastel greens and blues." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTcLre0reBg9kLfZF2Fk93CtpiUjYwhsVIpfzAVFbMw00ZRUzJ0oeCLfu-qMyhZx3xCJFbwvSXzyds3_fRBFuCIsx13vDI8cd1nSDtbj97Mi3ukp8Bx5sHhgbdDcfurkCLpsf0Fxq2HmV3om_6rbeWD9zdHyGNMmvgNT1WaiC84nO7cevQXRA931oGxl7sGg7A42gSe4baZb16SvzyhK1pAFF7JBUfyD8jKpxCzA7Xz_Dxg-QGYEZY5g"/>
+</div>
+</div>
+<div class="text-center">
+<h2 class="font-headline-md text-headline-md text-on-surface">Snowball</h2>
+<p class="font-body-sm text-body-sm text-outline mt-1">@fluffy_snowball</p>
+</div>
+<button class="mt-4 px-md py-sm rounded-full bg-surface-container-lowest border border-primary text-primary font-title-sm text-title-sm shadow-[0_8px_32px_rgba(0,0,0,0.05)] hover:-translate-y-0.5 transition-transform duration-200 flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+                Edit Profile
+            </button>
+</section>
+<!-- Stats Row (Bento Grid Style) -->
+<section class="grid grid-cols-3 gap-md w-full max-w-md mx-auto">
+<div class="bg-surface-container-lowest rounded-xl p-md flex flex-col items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.05)] border border-surface-container/50">
+<span class="font-title-sm text-title-sm text-on-surface">142</span>
+<span class="font-body-sm text-body-sm text-outline mt-1">Posts</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-md flex flex-col items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.05)] border border-surface-container/50">
+<span class="font-title-sm text-title-sm text-on-surface">8.4k</span>
+<span class="font-body-sm text-body-sm text-outline mt-1">Followers</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-md flex flex-col items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.05)] border border-surface-container/50">
+<span class="font-title-sm text-title-sm text-on-surface">256</span>
+<span class="font-body-sm text-body-sm text-outline mt-1">Following</span>
+</div>
+</section>
+<!-- Moongsil Rank Card -->
+<section class="w-full max-w-lg mx-auto">
+<div class="bg-surface-container-lowest rounded-xl p-lg shadow-[0_8px_32px_rgba(0,0,0,0.05)] border border-primary-fixed flex flex-col space-y-md relative overflow-hidden">
+<!-- Decorative background element -->
+<div class="absolute -right-10 -top-10 w-32 h-32 bg-primary-fixed/30 rounded-full blur-2xl"></div>
+<div class="flex justify-between items-center relative z-10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">stars</span>
+<h3 class="font-title-sm text-title-sm text-on-surface">Moongsil Rank</h3>
+</div>
+<span class="font-label-caps text-label-caps text-primary bg-primary-fixed px-3 py-1 rounded-full">Level 12</span>
+</div>
+<div class="relative z-10 space-y-2">
+<div class="flex justify-between text-body-sm font-body-sm text-outline">
+<span>2,450 XP</span>
+<span>3,000 XP</span>
+</div>
+<!-- Progress Bar -->
+<div class="w-full h-2 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-1000 ease-out" style="width: 81%;"></div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant pt-1 text-center">Only 550 XP to reach Cloud Walker rank!</p>
+</div>
+</div>
+</section>
+<!-- Badges Section (Horizontal Scroll) -->
+<section class="w-full max-w-lg mx-auto space-y-sm">
+<h3 class="font-title-sm text-title-sm text-on-surface px-sm">Earned Badges</h3>
+<div class="flex overflow-x-auto no-scrollbar gap-4 px-sm pb-4 pt-2 snap-x">
+<!-- Badge 1 -->
+<div class="snap-center shrink-0 flex flex-col items-center gap-2">
+<div class="w-16 h-16 rounded-full bg-surface-container-lowest border-2 border-secondary-container flex items-center justify-center animate-glow shadow-[0_8px_32px_rgba(0,0,0,0.05)] text-secondary">
+<span class="material-symbols-outlined text-[32px]" style="font-variation-settings: 'FILL' 1;">directions_run</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Early Bird</span>
+</div>
+<!-- Badge 2 -->
+<div class="snap-center shrink-0 flex flex-col items-center gap-2">
+<div class="w-16 h-16 rounded-full bg-surface-container-lowest border-2 border-primary-fixed flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.05)] text-primary">
+<span class="material-symbols-outlined text-[32px]" style="font-variation-settings: 'FILL' 1;">hotel_class</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">7 Day Streak</span>
+</div>
+<!-- Badge 3 -->
+<div class="snap-center shrink-0 flex flex-col items-center gap-2">
+<div class="w-16 h-16 rounded-full bg-surface-container-lowest border-2 border-tertiary-fixed flex items-center justify-center shadow-[0_8px_32px_rgba(0,0,0,0.05)] text-tertiary">
+<span class="material-symbols-outlined text-[32px]" style="font-variation-settings: 'FILL' 1;">eco</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Nature Walk</span>
+</div>
+<!-- Badge 4 -->
+<div class="snap-center shrink-0 flex flex-col items-center gap-2 opacity-50">
+<div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center border-2 border-dashed border-outline-variant text-outline">
+<span class="material-symbols-outlined text-[32px]">lock</span>
+</div>
+<span class="font-label-caps text-label-caps text-outline">Locked</span>
+</div>
+</div>
+</section>
+<!-- List Menu -->
+<section class="w-full max-w-lg mx-auto bg-surface-container-lowest rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.05)] overflow-hidden">
+<ul class="flex flex-col divide-y divide-surface-container">
+<li>
+<a class="flex items-center justify-between p-md hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3 text-on-surface">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">person</span>
+<span class="font-body-md text-body-md">Account Info</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">chevron_right</span>
+</a>
+</li>
+<li>
+<a class="flex items-center justify-between p-md hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3 text-on-surface">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">pets</span>
+<span class="font-body-md text-body-md">Pet Profiles</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">chevron_right</span>
+</a>
+</li>
+<li>
+<a class="flex items-center justify-between p-md hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3 text-on-surface">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">bookmark</span>
+<span class="font-body-md text-body-md">Saved Posts</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">chevron_right</span>
+</a>
+</li>
+<li>
+<a class="flex items-center justify-between p-md hover:bg-surface-container-low transition-colors group" href="#">
+<div class="flex items-center gap-3 text-on-surface">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">chevron_right</span>
+</a>
+</li>
+</ul>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 z-50 border-none shadow-lg shadow-[0_-4px_24px_rgba(0,0,0,0.05)] bg-white/70 dark:bg-black/40 backdrop-blur-md flex justify-around items-center w-full px-gutter py-md">
+<!-- Today (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-90 duration-150">calendar_today</span>
+<span class="font-label-caps text-label-caps mt-1">Today</span>
+</a>
+<!-- Explore (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-90 duration-150">explore</span>
+<span class="font-label-caps text-label-caps mt-1">Explore</span>
+</a>
+<!-- TODO (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-90 duration-150">task_alt</span>
+<span class="font-label-caps text-label-caps mt-1">TODO</span>
+</a>
+<!-- Challenge (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors group" href="#">
+<span class="material-symbols-outlined group-active:scale-90 duration-150">emoji_events</span>
+<span class="font-label-caps text-label-caps mt-1">Challenge</span>
+</a>
+<!-- My (Active - Semantic Match) -->
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-on-secondary-container text-on-secondary-container dark:text-secondary-container rounded-full px-4 py-1 hover:text-primary dark:hover:text-primary-fixed-dim transition-colors scale-95 duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-caps text-label-caps mt-1">My</span>
+</a>
+</nav>
+</body></html>

@@ -1,0 +1,66 @@
+{
+  "source": {
+    "file": "stitch_moongsil (1).zip",
+    "importedAt": "2026-07-28",
+    "sha256": "E1F0B44129E269AA334AC92CFCC43996094DA5E9F684C605E965A644BD74B9BD"
+  },
+  "designSystem": {
+    "name": "Cloud Comfort",
+    "source": "stitch_moongsil/cloud_comfort/DESIGN.md"
+  },
+  "screens": [
+    {
+      "id": "today",
+      "routeCandidate": "/today",
+      "title": "오늘",
+      "image": "stitch_moongsil/_1/screen.png",
+      "html": "stitch_moongsil/_1/code.html",
+      "width": 602,
+      "height": 1600
+    },
+    {
+      "id": "explore",
+      "routeCandidate": "/explore",
+      "title": "탐색",
+      "image": "stitch_moongsil/_2/screen.png",
+      "html": "stitch_moongsil/_2/code.html",
+      "width": 438,
+      "height": 2319
+    },
+    {
+      "id": "import-todo",
+      "routeCandidate": "/todos/import",
+      "title": "TODO 가져오기",
+      "image": "stitch_moongsil/todo/screen.png",
+      "html": "stitch_moongsil/todo/code.html",
+      "width": 706,
+      "height": 1600
+    },
+    {
+      "id": "my",
+      "routeCandidate": "/me",
+      "title": "마이",
+      "image": "stitch_moongsil/_3/screen.png",
+      "html": "stitch_moongsil/_3/code.html",
+      "width": 438,
+      "height": 1427
+    }
+  ],
+  "missingProductScreens": [
+    "landing",
+    "login",
+    "signup",
+    "onboarding",
+    "todo-calendar",
+    "todo-editor",
+    "todo-list-editor",
+    "share",
+    "post-detail-comments",
+    "notifications",
+    "challenges",
+    "public-profile",
+    "settings",
+    "system-states"
+  ]
+}
+

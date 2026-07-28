@@ -30,12 +30,24 @@ export interface TodoDto {
   sourceTodoId?: string | null;
 }
 
+export interface TodoListDto {
+  id: string;
+  title: string;
+  description?: string | null;
+  visibility: Visibility;
+  sourceTodoListId?: string | null;
+  items: Array<{ order: number; todo: TodoDto }>;
+  copyCount?: number;
+  _count?: { copies: number };
+}
+
 export interface FeedPostDto {
   id: string;
   author: UserSummary;
   caption?: string | null;
   mediaUrl?: string | null;
   todos: TodoDto[];
+  todoList?: TodoListDto | null;
   cheerCount: number;
   commentCount: number;
   copyCount: number;

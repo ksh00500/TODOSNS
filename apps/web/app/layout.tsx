@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/plus-jakarta-sans";
 import "./globals.css";
+import { AppProviders } from "@/components/app-providers";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
@@ -14,22 +16,21 @@ export const metadata: Metadata = {
     locale: "ko_KR",
     title: "뭉실 — 오늘의 작은 실천",
     description: "완료하고, 나누고, 함께 둥실 떠오르는 TODO SNS",
-    images: [{ url: "/mungsil-og.png", width: 1792, height: 922, alt: "하늘로 떠오르는 뭉실 구름" }],
+    images: [{ url: "/mungsil-og-cloud-comfort.png", width: 1733, height: 908, alt: "좋아요로 끝나지 않는 건강한 루틴 SNS, 뭉실" }],
   },
-  twitter: { card: "summary_large_image", images: ["/mungsil-og.png"] },
+  twitter: { card: "summary_large_image", images: ["/mungsil-og-cloud-comfort.png"] },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: "#f6fbff",
+  themeColor: "#fbf8f3",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body><AppProviders>{children}</AppProviders></body>
     </html>
   );
 }

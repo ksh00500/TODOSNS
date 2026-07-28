@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtAuthGuard } from "./auth";
-import { CheckInDto, CloneTodoDto, CommentDto, CompleteTodoDto, CreateChallengeDto, CreatePostDto, CreateReportDto, CreateTodoDto, MessageRequestDto, PageDto, PresignDto, ResolveReportDto, SendMessageDto, UpdateTodoDto, UserTargetDto } from "./dtos";
+import { CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteTodoDto, CreateChallengeDto, CreatePostDto, CreateReportDto, CreateTodoDto, CreateTodoListDto, MessageRequestDto, PageDto, PresignDto, ResolveReportDto, SendMessageDto, UpdateProfileDto, UpdateTodoDto, UpdateTodoListDto, UserTargetDto } from "./dtos";
 import { MediaService } from "./media.service";
 import { MungsilService } from "./mungsil.service";
 
@@ -19,13 +19,36 @@ export class TodoController {
 }
 
 @UseGuards(JwtAuthGuard)
+@Controller("todo-lists")
+export class TodoListController {
+  constructor(private readonly service: MungsilService) {}
+  @Get() list(@CurrentUser() u: JwtUser) { return this.service.listTodoLists(u.sub); }
+  @Post() create(@CurrentUser() u: JwtUser, @Body() dto: CreateTodoListDto) { return this.service.createTodoList(u.sub, dto); }
+  @Patch(":id") update(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateTodoListDto) { return this.service.updateTodoList(u.sub, id, dto); }
+  @Delete(":id") remove(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.removeTodoList(u.sub, id); }
+  @Post(":id/clone") clone(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: CloneTodoListDto) { return this.service.cloneTodoList(u.sub, id, dto); }
+}
+
+@UseGuards(JwtAuthGuard)
 @Controller("feed")
 export class FeedController {
   constructor(private readonly service: MungsilService) {}
-  @Get() feed(@CurrentUser() u: JwtUser, @Query() page: PageDto, @Query("mode") mode?: string) { return this.service.feed(u.sub, page, mode); }
+  @Get() feed(@CurrentUser() u: JwtUser, @Query() page: PageDto, @Query("mode") mode?: string, @Query("category") category?: string) { return this.service.feed(u.sub, page, mode, category); }
+  @Get("posts/:id") detail(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.postDetail(id, u.sub); }
+  @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.postComments(id, u.sub); }
   @Post("posts") post(@CurrentUser() u: JwtUser, @Body() dto: CreatePostDto) { return this.service.createPost(u.sub, dto); }
   @Post("posts/:id/cheer") cheer(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.toggleCheer(u.sub, id); }
   @Post("posts/:id/comments") comment(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: CommentDto) { return this.service.comment(u.sub, id, dto.body); }
+}
+
+@Controller("public")
+export class PublicController {
+  constructor(private readonly service: MungsilService) {}
+  @Get("feed") feed(@Query() page: PageDto, @Query("mode") mode?: string, @Query("category") category?: string) { return this.service.feed(null, page, mode, category); }
+  @Get("posts/:id") post(@Param("id") id: string) { return this.service.postDetail(id, null); }
+  @Get("posts/:id/comments") comments(@Param("id") id: string) { return this.service.postComments(id, null); }
+  @Get("users/:handle") user(@Param("handle") handle: string) { return this.service.publicProfile(handle); }
+  @Get("challenges") challenges() { return this.service.publicChallenges(); }
 }
 
 @UseGuards(JwtAuthGuard)
@@ -63,6 +86,7 @@ export class MessageController {
 export class MeController {
   constructor(private readonly service: MungsilService, private readonly media: MediaService) {}
   @Get() profile(@CurrentUser() u: JwtUser) { return this.service.profile(u.sub); }
+  @Patch() update(@CurrentUser() u: JwtUser, @Body() dto: UpdateProfileDto) { return this.service.updateProfile(u.sub, dto); }
   @Get("notifications") notifications(@CurrentUser() u: JwtUser) { return this.service.notifications(u.sub); }
   @Post("notifications/read") read(@CurrentUser() u: JwtUser) { return this.service.readNotifications(u.sub); }
   @Post("media/presign") presign(@CurrentUser() u: JwtUser, @Body() dto: PresignDto) { return this.media.presign(u.sub, dto); }

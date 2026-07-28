@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>뭉실 Stitch 디자인 참고</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4f4f4; color: #202020; font-family: system-ui, sans-serif; }
+    header { padding: 32px max(24px, calc((100vw - 1440px) / 2)); background: #fff; border-bottom: 1px solid #ddd; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    header p { margin: 0; color: #666; }
+    main { max-width: 1440px; margin: 0 auto; padding: 32px 24px 64px; display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); gap: 24px; align-items: start; }
+    article { overflow: hidden; border: 1px solid #d8d8d8; border-radius: 12px; background: #fff; }
+    article header { padding: 16px; border: 0; border-bottom: 1px solid #e7e7e7; }
+    article h2 { margin: 0 0 4px; font-size: 17px; }
+    article p { margin: 0; color: #666; font-size: 13px; }
+    article img { display: block; width: 100%; height: auto; }
+    article footer { padding: 12px 16px; border-top: 1px solid #e7e7e7; }
+    article a { color: #333; font-size: 13px; }
+    @media (max-width: 1050px) { main { grid-template-columns: repeat(2, minmax(240px, 1fr)); } }
+    @media (max-width: 600px) { main { grid-template-columns: 1fr; padding-inline: 12px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>뭉실 Stitch 디자인 참고</h1>
+    <p>원본 결과물을 수정하지 않고 화면 구조를 비교하기 위한 인덱스</p>
+  </header>
+  <main>
+    <article>
+      <header><h2>오늘</h2><p>진행률과 상태별 TODO 카드</p></header>
+      <img src="./stitch_moongsil/_1/screen.png" alt="Stitch 오늘 화면">
+      <footer><a href="./stitch_moongsil/_1/code.html">원본 HTML 보기</a></footer>
+    </article>
+    <article>
+      <header><h2>탐색</h2><p>사진 피드와 나도 할래요 행동</p></header>
+      <img src="./stitch_moongsil/_2/screen.png" alt="Stitch 탐색 화면">
+      <footer><a href="./stitch_moongsil/_2/code.html">원본 HTML 보기</a></footer>
+    </article>
+    <article>
+      <header><h2>TODO 가져오기</h2><p>저장 전 제목·일정·반복 수정</p></header>
+      <img src="./stitch_moongsil/todo/screen.png" alt="Stitch TODO 가져오기 화면">
+      <footer><a href="./stitch_moongsil/todo/code.html">원본 HTML 보기</a></footer>
+    </article>
+    <article>
+      <header><h2>마이</h2><p>프로필, 등급, 배지, 설정</p></header>
+      <img src="./stitch_moongsil/_3/screen.png" alt="Stitch 마이 화면">
+      <footer><a href="./stitch_moongsil/_3/code.html">원본 HTML 보기</a></footer>
+    </article>
+  </main>
+</body>
+</html>

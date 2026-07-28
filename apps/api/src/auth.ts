@@ -75,7 +75,7 @@ export class AuthService {
   async logout(userId: string) { await this.prisma.user.update({ where: { id: userId }, data: { refreshTokenHash: null } }); return { ok: true }; }
   async me(userId: string) { const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } }); return this.safeUser(user); }
   async requestDeletion(userId: string) { await this.prisma.user.update({ where: { id: userId }, data: { deletionRequestedAt: new Date(), refreshTokenHash: null } }); return { ok: true, purgeWithinDays: 7 }; }
-  private safeUser(user: { id: string; email: string; nickname: string; handle: string; role: string; availablePoints: number; lifetimePower: number; recentVitality: number; avatarUrl: string | null }) { return { id: user.id, email: user.email, nickname: user.nickname, handle: user.handle, role: user.role, availablePoints: user.availablePoints, lifetimePower: user.lifetimePower, recentVitality: user.recentVitality, avatarUrl: user.avatarUrl }; }
+  private safeUser(user: { id: string; email: string; nickname: string; handle: string; role: string; availablePoints: number; lifetimePower: number; recentVitality: number; avatarUrl: string | null; bio?: string | null; interests?: string[] }) { return { id: user.id, email: user.email, nickname: user.nickname, handle: user.handle, role: user.role, availablePoints: user.availablePoints, lifetimePower: user.lifetimePower, recentVitality: user.recentVitality, avatarUrl: user.avatarUrl, bio: user.bio, interests: user.interests ?? [] }; }
 }
 
 @Controller("auth")

@@ -85,6 +85,7 @@ model User {
   nickname              String
   handle                String   @unique
   bio                    String?  @db.VarChar(160)
+  interests              String[] @default([])
   avatarUrl              String?
   birthDate              DateTime
   role                   Role     @default(USER)
@@ -147,12 +148,18 @@ model TodoList {
   id          String     @id @default(cuid())
   userId      String
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceTodoListId String?
+  sourceTodoList TodoList? @relation("TodoListCopies", fields: [sourceTodoListId], references: [id], onDelete: SetNull)
+  copies      TodoList[] @relation("TodoListCopies")
   title       String     @db.VarChar(100)
   description String?    @db.VarChar(300)
   visibility  Visibility @default(PRIVATE)
   items       TodoListItem[]
+  posts       Post[]
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+  @@index([userId, createdAt])
+  @@index([sourceTodoListId])
 }
 
 model TodoListItem {
@@ -169,6 +176,8 @@ model Post {
   authorId    String
   author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
   caption     String?    @db.VarChar(180)
+  todoListId  String?
+  todoList    TodoList?  @relation(fields: [todoListId], references: [id], onDelete: SetNull)
   visibility  Visibility @default(PUBLIC)
   mediaKey    String?
   hiddenAt    DateTime?
@@ -180,6 +189,7 @@ model Post {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@index([createdAt])
+  @@index([todoListId])
 }
 
 model PostTodo {

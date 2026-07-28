@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
 import { ChallengeKind, ReportStatus, ReportTarget, VerificationMode, Visibility } from "@prisma/client";
 
 export class PageDto {
@@ -37,10 +37,30 @@ export class CloneTodoDto extends UpdateTodoDto {
 }
 
 export class CreatePostDto {
-  @IsString() todoId!: string;
+  @IsOptional() @IsString() todoId?: string;
+  @IsOptional() @IsString() todoListId?: string;
   @IsOptional() @IsString() @Length(0, 180) caption?: string;
   @IsOptional() @IsString() mediaKey?: string;
   @IsOptional() @IsEnum(Visibility) visibility: Visibility = Visibility.PUBLIC;
+}
+
+export class CreateTodoListDto {
+  @IsString() @Length(1, 100) title!: string;
+  @IsOptional() @IsString() @Length(0, 300) description?: string;
+  @IsOptional() @IsEnum(Visibility) visibility: Visibility = Visibility.PRIVATE;
+  @IsArray() @ArrayMaxSize(30) @IsString({ each: true }) todoIds!: string[];
+}
+
+export class UpdateTodoListDto {
+  @IsOptional() @IsString() @Length(1, 100) title?: string;
+  @IsOptional() @IsString() @Length(0, 300) description?: string;
+  @IsOptional() @IsEnum(Visibility) visibility?: Visibility;
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @IsString({ each: true }) todoIds?: string[];
+}
+
+export class CloneTodoListDto {
+  @IsOptional() @IsString() @Length(1, 100) title?: string;
+  @IsOptional() @IsDateString() dueDate?: string;
 }
 
 export class CommentDto { @IsString() @Length(1, 300) body!: string; }
@@ -80,4 +100,10 @@ export class PresignDto {
   @IsString() @Length(1, 120) filename!: string;
   @IsString() mimeType!: string;
   @IsInt() @Min(1) @Max(10_000_000) size!: number;
+}
+
+export class UpdateProfileDto {
+  @IsOptional() @IsString() @Length(2, 20) nickname?: string;
+  @IsOptional() @IsString() @Length(0, 160) bio?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) interests?: string[];
 }

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Import TODO - Moongsil</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+        /* Custom scrollbar for horizontal lists */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-fixed": "#e8ddff",
+                        "surface-container-low": "#f5f3f3",
+                        "on-primary-fixed-variant": "#4c3d79",
+                        "surface-bright": "#fbf9f8",
+                        "secondary-container": "#bbeceb",
+                        "background": "#fbf9f8",
+                        "on-secondary": "#ffffff",
+                        "inverse-surface": "#303030",
+                        "surface-dim": "#dbd9d9",
+                        "tertiary": "#72545c",
+                        "surface-variant": "#e4e2e2",
+                        "tertiary-fixed": "#ffd9e1",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#8c6c74",
+                        "on-secondary-container": "#3e6c6c",
+                        "on-surface": "#1b1c1c",
+                        "secondary": "#376666",
+                        "outline": "#7a7580",
+                        "on-secondary-fixed": "#002020",
+                        "on-tertiary-fixed": "#2b151b",
+                        "secondary-fixed": "#bbeceb",
+                        "on-primary-fixed": "#200e4b",
+                        "on-secondary-fixed-variant": "#1d4e4e",
+                        "surface-container": "#efeded",
+                        "outline-variant": "#cac4d0",
+                        "error-container": "#ffdad6",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed-dim": "#9fcfcf",
+                        "on-surface-variant": "#49454f",
+                        "surface-tint": "#655592",
+                        "on-primary-container": "#fffbff",
+                        "surface-container-high": "#eae8e7",
+                        "on-background": "#1b1c1c",
+                        "on-tertiary-fixed-variant": "#5b3f46",
+                        "error": "#ba1a1a",
+                        "on-tertiary": "#ffffff",
+                        "primary-container": "#7b6baa",
+                        "inverse-on-surface": "#f2f0f0",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-container": "#fffbff",
+                        "tertiary-fixed-dim": "#e3bdc5",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e4e2e2",
+                        "inverse-primary": "#cfbdff",
+                        "primary-fixed-dim": "#cfbdff",
+                        "primary": "#625290",
+                        "surface": "#fbf9f8"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "xs": "4px",
+                        "md": "16px",
+                        "gutter": "24px",
+                        "xxl": "48px",
+                        "unit": "8px",
+                        "xl": "32px",
+                        "container-max": "1200px",
+                        "lg": "24px",
+                        "sm": "8px"
+                    },
+                    fontFamily: {
+                        "label-caps": ["Plus Jakarta Sans"],
+                        "display-lg-mobile": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Plus Jakarta Sans"],
+                        "title-sm": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"]
+                    },
+                    fontSize: {
+                        "label-caps": ["12px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "700" }],
+                        "display-lg-mobile": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "headline-md": ["24px", { lineHeight: "32px", letterSpacing: "-0.01em", fontWeight: "600" }],
+                        "body-md": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+                        "display-lg": ["40px", { lineHeight: "48px", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "title-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }],
+                        "body-sm": ["14px", { lineHeight: "20px", fontWeight: "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- Modal Header (Task-Focused, suppresses global navigation) -->
+<header class="sticky top-0 z-50 bg-background/80 backdrop-blur-md px-gutter py-md flex items-center justify-between border-b border-surface-container-high">
+<button class="p-2 -ml-2 text-on-surface-variant hover:text-on-surface transition-colors rounded-full hover:bg-surface-container-low focus:outline-none">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+<h1 class="font-title-sm text-title-sm text-on-surface">할 일 가져오기</h1>
+<div class="w-10"></div> <!-- Spacer for centering -->
+</header>
+<main class="flex-1 px-gutter py-lg space-y-xl max-w-container-max mx-auto w-full pb-32">
+<!-- Source Card (Original Post Context) -->
+<section class="bg-surface-container-low rounded-xl p-md flex items-start gap-md shadow-[0_8px_32px_rgba(0,0,0,0.02)] border border-surface-container-highest/50 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary-fixed/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
+<div class="w-12 h-12 rounded-full overflow-hidden shrink-0 shadow-sm border border-surface-container">
+<img class="w-full h-full object-cover" data-alt="A macro shot of a gentle, pastel-colored stylized cloud character smiling warmly, representing a user avatar in a soft, bright environment. Soft lighting, smooth textures, whimsical modern 3d rendering style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCat8dRTF_-_n_mj3noagfKC3DcxlTRkodAopn3VMUPe-E9oM-5HcJQF_w68DAQUAXnPcPMNteHXo9dx4-UIw-Fl0CtF-Exvz5jy0KcjcjNJuPYgvAFpdR_3UUYleC5x9wCiyQnU6g9Tbog7HyoFTI7EB58WhRXjkCDQiOeECa_fX35-G_HA94YkBj8rhbntRn4VIH2UBNbnkpBUOUDbGNK54M5D9qtb-ECHP-ekFqDsOGqjxKpAqapFg"/>
+</div>
+<div class="flex-1 z-10">
+<div class="flex items-center gap-2 mb-1">
+<span class="font-label-caps text-label-caps text-primary">@cloud_walker</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">님의 습관</span>
+</div>
+<h2 class="font-title-sm text-title-sm text-on-surface mb-xs">아침 공복에 물 한 잔 마시기 💧</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2">"이 작은 습관 하나가 하루의 활력을 완전히 바꿔놓았어요. 추천합니다!"</p>
+</div>
+</section>
+<!-- Form Fields -->
+<form class="space-y-lg">
+<!-- 1. Title -->
+<div class="space-y-sm">
+<label class="block font-title-sm text-title-sm text-on-surface" for="todo-title">어떤 이름으로 저장할까요?</label>
+<div class="relative">
+<input class="w-full bg-surface-container-low border-none rounded-xl p-md pr-12 font-body-md text-body-md text-on-surface focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/30 transition-all shadow-sm placeholder:text-outline-variant" id="todo-title" type="text" value="아침 공복에 물 한 잔 마시기"/>
+<button class="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface-variant p-1" type="button">
+<span class="material-symbols-outlined text-[20px]" data-icon="cancel">cancel</span>
+</button>
+</div>
+</div>
+<!-- 2. Date & Time -->
+<div class="space-y-sm">
+<label class="block font-title-sm text-title-sm text-on-surface">언제 할까요?</label>
+<div class="grid grid-cols-2 gap-sm">
+<button class="flex items-center justify-between bg-surface-container-low rounded-xl p-md hover:bg-surface-container-high transition-colors text-left shadow-sm border border-transparent focus:border-primary/20" type="button">
+<div>
+<span class="block font-label-caps text-label-caps text-on-surface-variant mb-1">시작일</span>
+<span class="block font-body-md text-body-md text-on-surface">오늘</span>
+</div>
+<span class="material-symbols-outlined text-outline" data-icon="calendar_today">calendar_today</span>
+</button>
+<button class="flex items-center justify-between bg-surface-container-low rounded-xl p-md hover:bg-surface-container-high transition-colors text-left shadow-sm border border-transparent focus:border-primary/20" type="button">
+<div>
+<span class="block font-label-caps text-label-caps text-on-surface-variant mb-1">시간</span>
+<span class="block font-body-md text-body-md text-on-surface">오전 07:00</span>
+</div>
+<span class="material-symbols-outlined text-outline" data-icon="schedule">schedule</span>
+</button>
+</div>
+</div>
+<!-- 3. Category (Pill-style) -->
+<div class="space-y-sm">
+<label class="block font-title-sm text-title-sm text-on-surface flex items-center justify-between">
+                    카테고리
+                    <span class="material-symbols-outlined text-outline text-[20px]" data-icon="add_circle">add_circle</span>
+</label>
+<div class="flex gap-sm overflow-x-auto hide-scrollbar pb-2 -mx-gutter px-gutter">
+<button class="whitespace-nowrap bg-secondary-container text-on-secondary-container px-md py-sm rounded-full font-label-caps text-label-caps shadow-sm border border-secondary/20 transition-transform active:scale-95" type="button">건강</button>
+<button class="whitespace-nowrap bg-surface-container text-on-surface-variant px-md py-sm rounded-full font-label-caps text-label-caps hover:bg-surface-container-high transition-colors" type="button">루틴</button>
+<button class="whitespace-nowrap bg-surface-container text-on-surface-variant px-md py-sm rounded-full font-label-caps text-label-caps hover:bg-surface-container-high transition-colors" type="button">자기계발</button>
+<button class="whitespace-nowrap bg-surface-container text-on-surface-variant px-md py-sm rounded-full font-label-caps text-label-caps hover:bg-surface-container-high transition-colors" type="button">휴식</button>
+</div>
+</div>
+<!-- 4. Repeat Settings -->
+<div class="space-y-sm">
+<label class="block font-title-sm text-title-sm text-on-surface">반복 설정</label>
+<div class="bg-surface-container-low rounded-xl p-1 flex gap-1 shadow-inner border border-surface-container-highest/30">
+<button class="flex-1 py-2 text-center rounded-lg bg-surface-container-lowest text-on-surface font-title-sm text-title-sm shadow-sm transition-all" type="button">매일</button>
+<button class="flex-1 py-2 text-center rounded-lg text-on-surface-variant hover:bg-surface-container-high/50 font-body-md text-body-md transition-all" type="button">평일</button>
+<button class="flex-1 py-2 text-center rounded-lg text-on-surface-variant hover:bg-surface-container-high/50 font-body-md text-body-md transition-all" type="button">사용자 지정</button>
+</div>
+</div>
+</form>
+</main>
+<!-- Bottom Action Button (Fixed) -->
+<div class="fixed bottom-0 left-0 right-0 p-gutter bg-gradient-to-t from-background via-background/90 to-transparent backdrop-blur-[2px] z-40 max-w-container-max mx-auto">
+<button class="w-full bg-primary text-on-primary py-md rounded-xl font-title-sm text-title-sm shadow-[0_8px_24px_rgba(98,82,144,0.3)] hover:opacity-90 hover:-translate-y-0.5 transition-all active:scale-[0.98] active:shadow-md flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="task_alt">task_alt</span>
+            내 TODO에 저장
+        </button>
+</div>
+</body></html>

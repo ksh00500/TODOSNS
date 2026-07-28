@@ -2,9 +2,18 @@
   "name": "뭉실 — 오늘의 작은 실천",
   "short_name": "뭉실",
   "description": "TODO를 완료하고 좋은 습관을 함께 실천하는 루틴 SNS",
-  "start_url": "/",
+  "id": "/",
+  "start_url": "/today",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f6fbff",
-  "theme_color": "#67b8ed",
-  "lang": "ko"
+  "orientation": "portrait-primary",
+  "background_color": "#fbf8f3",
+  "theme_color": "#fbf8f3",
+  "lang": "ko",
+  "categories": ["productivity", "lifestyle", "social"],
+  "shortcuts": [
+    { "name": "오늘의 TODO", "short_name": "오늘", "url": "/today" },
+    { "name": "좋은 습관 탐색", "short_name": "탐색", "url": "/explore" },
+    { "name": "TODO 추가", "short_name": "추가", "url": "/todos" }
+  ]
 }

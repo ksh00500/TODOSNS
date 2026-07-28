@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function PrivacyPage() { return <main className="legal-page"><Link href="/start">← 돌아가기</Link><h1>개인정보 처리방침</h1><p>이 문서는 출시 전 개인정보 전문가의 검토가 필요한 초안 자리입니다.</p><h2>수집 정보</h2><p>계정 생성과 서비스 제공을 위해 이메일, 닉네임, 생년월일, 사용자가 작성한 TODO와 게시물 정보를 처리합니다.</p><h2>이용 목적</h2><p>본인 확인, TODO와 활동 기록 보관, 소셜 기능 제공, 서비스 안전성 확보를 위해 정보를 이용합니다.</p><h2>보관과 삭제</h2><p>탈퇴 요청 후 법적 보관 의무가 없는 정보는 정해진 기간 안에 안전하게 삭제합니다.</p></main>; }

@@ -33,6 +33,7 @@ yarn-error.log*
 .env*
 !.env.example
 .codex-dev.*.log
+.local-web.*.log
 
 # vercel
 .vercel
