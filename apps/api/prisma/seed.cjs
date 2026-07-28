@@ -20,6 +20,7 @@ async function main() {
   const adminPassword = seedValue("SEED_ADMIN_PASSWORD", "Mungsil!234");
   const demoPassword = seedValue("SEED_DEMO_PASSWORD", "Mungsil!234");
   const inviteCode = seedValue("SEED_INVITE_CODE", "MUNGSIL-BETA");
+  const normalizedInviteCode = inviteCode.trim().toUpperCase();
   const birthDate = new Date("1995-01-01");
 
   const admin = await prisma.user.upsert({
@@ -60,7 +61,7 @@ async function main() {
     },
   });
 
-  const betaCodeHash = createHash("sha256").update(inviteCode).digest("hex");
+  const betaCodeHash = createHash("sha256").update(normalizedInviteCode).digest("hex");
   await prisma.inviteCode.upsert({
     where: { codeHash: betaCodeHash },
     update: { maxUses: 100, disabledAt: null },
