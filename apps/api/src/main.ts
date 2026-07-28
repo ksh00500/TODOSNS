@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import cookieParser from "cookie-parser";
+import * as cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";

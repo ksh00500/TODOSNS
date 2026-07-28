@@ -9,7 +9,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Cron } from "@nestjs/schedule";
 import { Media, MediaStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import sharp from "sharp";
+import * as sharp from "sharp";
 import { CompleteMediaDto, PresignDto } from "./dtos";
 import { PrismaService } from "./prisma.service";
 
