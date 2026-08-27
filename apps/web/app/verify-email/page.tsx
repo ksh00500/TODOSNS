@@ -24,6 +24,7 @@ function VerifyEmailContent() {
   const { refresh } = useSession();
   const token = params.get("token");
   const email = params.get("email") ?? "";
+  const emailWasSent = params.get("sent") !== "0";
   const [state, setState] = useState<"waiting" | "verifying" | "verified" | "error">(
     token ? "verifying" : "waiting",
   );
@@ -57,7 +58,7 @@ function VerifyEmailContent() {
         method: "POST",
         body: JSON.stringify({ email }),
       });
-      setMessage("새 인증 메일을 보냈어요.");
+      setMessage("인증 메일 전송을 다시 요청했어요. 잠시 후 메일함을 확인해주세요.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "메일을 다시 보내지 못했어요.");
     } finally {
@@ -81,7 +82,9 @@ function VerifyEmailContent() {
   return (
     <AuthFlowState
       title="메일함을 확인해주세요"
-      body={`${email || "가입한 이메일"}로 인증 링크를 보냈어요. 링크는 24시간 동안 유효해요.`}
+      body={emailWasSent
+        ? `${email || "가입한 이메일"}로 인증 링크를 보냈어요. 링크는 24시간 동안 유효해요.`
+        : "계정은 만들어졌지만 인증 메일을 보내지 못했어요. 잠시 후 아래 버튼으로 다시 요청해주세요."}
       action={
         <>
           <button className="button full secondary" onClick={resend} disabled={!email || resending}>

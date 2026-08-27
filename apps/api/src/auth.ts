@@ -8,6 +8,7 @@ import {
   ExecutionContext,
   Get,
   Injectable,
+  Logger,
   Post,
   Req,
   Res,
@@ -83,6 +84,7 @@ export class OptionalJwtAuthGuard implements CanActivate {
 @Injectable()
 export class AuthService {
   private readonly google = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  private readonly logger = new Logger(AuthService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -123,8 +125,12 @@ export class AuthService {
       throw error;
     }
     const token = await this.issueVerificationToken(user.id, VerificationTokenType.EMAIL_VERIFY, 24);
-    await this.email.sendVerification(user.email, token);
-    return { email: user.email, requiresVerification: true };
+    const verificationEmailSent = await this.deliverEmail(
+      "EMAIL_VERIFY",
+      user.id,
+      () => this.email.sendVerification(user.email, token),
+    );
+    return { email: user.email, requiresVerification: true as const, verificationEmailSent };
   }
 
   async login(dto: LoginDto, context: RequestContext) {
@@ -210,7 +216,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (user && !user.emailVerifiedAt && !user.deletionRequestedAt && !user.suspendedAt) {
       const token = await this.issueVerificationToken(user.id, VerificationTokenType.EMAIL_VERIFY, 24);
-      await this.email.sendVerification(user.email, token);
+      await this.deliverEmail(
+        "EMAIL_VERIFY_RESEND",
+        user.id,
+        () => this.email.sendVerification(user.email, token),
+      );
     }
     return { ok: true };
   }
@@ -219,7 +229,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (user?.passwordHash && !user.deletionRequestedAt && !user.suspendedAt) {
       const token = await this.issueVerificationToken(user.id, VerificationTokenType.PASSWORD_RESET, 1);
-      await this.email.sendPasswordReset(user.email, token);
+      await this.deliverEmail(
+        "PASSWORD_RESET",
+        user.id,
+        () => this.email.sendPasswordReset(user.email, token),
+      );
     }
     return { ok: true };
   }
@@ -416,6 +430,21 @@ export class AuthService {
 
   private digest(value: string) {
     return createHash("sha256").update(value).digest("hex");
+  }
+
+  private async deliverEmail(kind: string, userId: string, send: () => Promise<void>) {
+    try {
+      await send();
+      return true;
+    } catch (error) {
+      this.logger.error(JSON.stringify({
+        message: "auth.email_delivery_failed",
+        kind,
+        userId,
+        error: error instanceof Error ? error.message : "unknown",
+      }));
+      return false;
+    }
   }
 
   private safeDigestEqual(left: string, right: string) {

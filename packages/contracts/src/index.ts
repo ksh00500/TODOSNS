@@ -9,6 +9,12 @@ export interface ApiEnvelope<T> {
   meta?: Record<string, unknown>;
 }
 
+export interface SignupResultDto {
+  email: string;
+  requiresVerification: true;
+  verificationEmailSent: boolean;
+}
+
 export interface UserSummary {
   id: string;
   nickname: string;

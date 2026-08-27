@@ -8,9 +8,9 @@ import { apiFetch, setAccessToken } from "@/lib/api";
 import { CloudMark } from "./cloud-mark";
 import { useSession } from "./app-providers";
 import { DemoEntryButton } from "./demo-entry-button";
+import type { SignupResultDto } from "@mungsil/contracts";
 
 type LoginResult = { accessToken: string; user: { nickname: string } };
-type SignupResult = { email: string; requiresVerification: true };
 
 export function AuthScreen() {
   const router = useRouter();
@@ -28,11 +28,12 @@ export function AuthScreen() {
     delete values.terms;
     try {
       if (signup) {
-        const result = await apiFetch<SignupResult>("/auth/signup", {
+        const result = await apiFetch<SignupResultDto>("/auth/signup", {
           method: "POST",
           body: JSON.stringify(values),
         });
-        router.push(`/verify-email?email=${encodeURIComponent(result.email)}`);
+        const sent = result.verificationEmailSent ? "1" : "0";
+        router.push(`/verify-email?email=${encodeURIComponent(result.email)}&sent=${sent}`);
         return;
       }
       const result = await apiFetch<LoginResult>("/auth/login", {
