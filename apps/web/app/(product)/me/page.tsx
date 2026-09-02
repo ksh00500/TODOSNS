@@ -27,6 +27,7 @@ type Profile = SessionUser & {
   rank: string;
   _count: { followers: number; following: number; posts: number };
   stats: { completedCount: number; receivedCheers: number; copiedCount: number };
+  earnedTitles: Array<{ titleAwarded: string; finalRank?: number | null; challenge: { id: string; title: string } }>;
 };
 
 const interestOptions = ["운동", "공부", "독서", "식단", "수면", "마음 관리", "커리어", "일상 관리"];
@@ -100,7 +101,7 @@ export default function MePage() {
         <p>@{me.handle}</p>
         <span>{me.bio || "작은 실천을 오래 이어가는 중이에요."}</span>
         <div className="profile-numbers">
-          <div><b>{me._count.posts}</b><small>공유</small></div>
+          <div><b>{me._count.posts}</b><small>게시물</small></div>
           <Link href={`/people/${me.handle}/connections?type=followers`}><b>{me._count.followers}</b><small>팔로워</small></Link>
           <Link href={`/people/${me.handle}/connections?type=following`}><b>{me._count.following}</b><small>팔로잉</small></Link>
         </div>
@@ -139,12 +140,12 @@ export default function MePage() {
       </div>
       <section className="shared-records">
         <div className="section-heading spaced">
-          <div><h2>공유한 실천</h2><span>{posts.data?.items.length ?? 0}개의 최근 기록</span></div>
+          <div><h2>게시한 실천</h2><span>{posts.data?.items.length ?? 0}개의 최근 기록</span></div>
         </div>
         {posts.isLoading ? (
           <ListSkeleton count={2} />
         ) : !posts.data?.items.length ? (
-          <div className="inline-empty">완료한 TODO를 공유하면 이곳에 기록돼요.</div>
+          <div className="inline-empty">완료한 TODO를 게시하면 이곳에 기록돼요.</div>
         ) : (
           <div className="profile-post-grid">
             {posts.data.items.map((post) => (
@@ -164,9 +165,10 @@ export default function MePage() {
       <section className="badge-section">
         <div className="section-heading"><div><h2>나의 배지</h2><span>실천으로 얻은 기록</span></div></div>
         <div className="badges">
-          <span className={me._count.posts > 0 ? "" : "locked"}><Award /><b>첫 공유</b></span>
+          <span className={me._count.posts > 0 ? "" : "locked"}><Award /><b>첫 게시</b></span>
           <span className={(lists.data?.length ?? 0) > 0 ? "" : "locked"}><Trophy /><b>루틴 메이커</b></span>
           <span className={me.lifetimePower >= 100 ? "" : "locked"}><Award /><b>조각구름</b></span>
+          {me.earnedTitles.map((item) => <Link key={`${item.challenge.id}-${item.titleAwarded}`} href={`/challenges/${item.challenge.id}`}><Trophy /><b>{item.titleAwarded}</b></Link>)}
         </div>
       </section>
       {editing && (

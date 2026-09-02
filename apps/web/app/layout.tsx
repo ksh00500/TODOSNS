@@ -6,7 +6,7 @@ import { AppProviders } from "@/components/app-providers";
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: "뭉실 — 오늘의 작은 실천",
-  description: "TODO를 완료하고, 좋은 습관을 나누고, 함께 실천하는 건강한 루틴 SNS",
+  description: "완료하고, 나누고, 함께 이어가는 TODO SNS",
   applicationName: "뭉실",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "뭉실", statusBarStyle: "default" },
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "ko_KR",
     title: "뭉실 — 오늘의 작은 실천",
-    description: "완료하고, 나누고, 함께 둥실 떠오르는 TODO SNS",
+    description: "완료하고, 나누고, 함께 이어가는 TODO SNS",
     images: [{ url: "/mungsil-og-cloud-comfort.png", width: 1733, height: 908, alt: "좋아요로 끝나지 않는 건강한 루틴 SNS, 뭉실" }],
   },
   twitter: { card: "summary_large_image", images: ["/mungsil-og-cloud-comfort.png"] },

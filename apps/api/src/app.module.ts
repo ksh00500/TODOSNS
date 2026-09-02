@@ -5,7 +5,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { ScheduleModule } from "@nestjs/schedule";
 import { AuthController, AuthService, JwtAuthGuard, OptionalJwtAuthGuard } from "./auth";
-import { AdminController, ChallengeController, FeedController, MeController, MessageController, PublicController, SocialController, TodoController, TodoListController } from "./controllers";
+import { AdminController, ChallengeChatController, ChallengeController, ChallengeVerificationController, FeedController, MeController, MessageController, PublicController, SocialController, TodoController, TodoListController } from "./controllers";
 import { ChatGateway } from "./chat.gateway";
 import { MediaService } from "./media.service";
 import { MungsilService } from "./mungsil.service";
@@ -17,10 +17,13 @@ import { RecurrenceService } from "./recurrence.service";
 import { MaintenanceService } from "./maintenance.service";
 import { IdempotencyInterceptor } from "./idempotency.interceptor";
 import { resolve } from "node:path";
+import { ChallengeChatService } from "./challenge-chat.service";
+import { ChatEvents } from "./chat.events";
+import { DirectChatService } from "./direct-chat.service";
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../../.env")], validate: validateEnvironment }), JwtModule.register({}), ScheduleModule.forRoot(), ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
-  controllers: [HealthController, AuthController, PublicController, TodoController, TodoListController, FeedController, ChallengeController, SocialController, MessageController, MeController, AdminController],
+  controllers: [HealthController, AuthController, PublicController, TodoController, TodoListController, FeedController, ChallengeController, ChallengeChatController, ChallengeVerificationController, SocialController, MessageController, MeController, AdminController],
   providers: [
     PrismaService,
     JwtAuthGuard,
@@ -32,6 +35,9 @@ import { resolve } from "node:path";
     EmailService,
     RecurrenceService,
     MaintenanceService,
+    ChallengeChatService,
+    DirectChatService,
+    ChatEvents,
     ChatGateway,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },

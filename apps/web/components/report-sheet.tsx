@@ -11,7 +11,7 @@ export function ReportSheet({
   onClose,
   onReported,
 }: {
-  targetType: "USER" | "POST" | "COMMENT" | "CHALLENGE";
+  targetType: "USER" | "POST" | "COMMENT" | "MESSAGE" | "CHALLENGE" | "CHALLENGE_CHECK_IN";
   targetId: string;
   onClose: () => void;
   onReported?: () => void;

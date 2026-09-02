@@ -2,17 +2,18 @@
 
 import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Flag, HeartHandshake, UserPlus } from "lucide-react";
+import { Ban, Flag, HeartHandshake, MessageCircleMore, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import type { FeedPage, FeedPost } from "@/lib/types";
+import type { DirectMessageStart, FeedPage, FeedPost } from "@/lib/types";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/states";
 import { CloudMark } from "@/components/cloud-mark";
 import { useSession } from "@/components/app-providers";
 import { FeedCard } from "@/components/feed-card";
 import { ReportSheet } from "@/components/report-sheet";
+import { ConfirmSheet } from "@/components/confirm-sheet";
 
 type PublicProfile = {
   id: string;
@@ -39,6 +40,7 @@ export default function PersonPage({ params }: { params: Promise<{ handle: strin
   const router = useRouter();
   const client = useQueryClient();
   const [reporting, setReporting] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [notice, setNotice] = useState("");
   const query = useQuery({
     queryKey: ["people", handle],
@@ -77,7 +79,14 @@ export default function PersonPage({ params }: { params: Promise<{ handle: strin
         method: "POST",
         body: JSON.stringify({ userId: query.data?.id }),
       }),
-    onSuccess: () => router.replace("/explore"),
+    onSuccess: () => { setConfirmingBlock(false); router.replace("/explore"); },
+  });
+  const message = useMutation({
+    mutationFn: () => {
+      if (status !== "authenticated") { requireLogin(); throw new Error("LOGIN_REQUIRED"); }
+      return apiFetch<DirectMessageStart>("/messages/requests", { method: "POST", body: JSON.stringify({ receiverId: query.data?.id }) });
+    },
+    onSuccess: (result) => result.kind === "CONVERSATION" ? router.push(`/messages/${result.conversationId}`) : setNotice("메시지 요청을 보냈어요. 상대방이 수락하면 대화를 시작할 수 있어요."),
   });
   const cheer = useMutation({
     mutationFn: (post: FeedPost) =>
@@ -112,23 +121,17 @@ export default function PersonPage({ params }: { params: Promise<{ handle: strin
         <p>@{person.handle}</p>
         <span>{person.bio || "작은 실천을 오래 이어가는 중이에요."}</span>
         <div className="profile-numbers">
-          <div><b>{person._count.posts}</b><small>공유</small></div>
+          <div><b>{person._count.posts}</b><small>게시물</small></div>
           <Link href={`/people/${handle}/connections?type=followers`}><b>{followState.data?.followerCount ?? person._count.followers}</b><small>팔로워</small></Link>
           <Link href={`/people/${handle}/connections?type=following`}><b>{followState.data?.followingCount ?? person._count.following}</b><small>팔로잉</small></Link>
         </div>
         {!isMe && (
           <>
-            <button
-              className={`button full ${following ? "secondary" : ""}`}
-              onClick={() => follow.mutate()}
-              disabled={follow.isPending}
-            >
-              <UserPlus /> {following ? "팔로잉" : "팔로우"}
-            </button>
+            <div className="profile-primary-actions"><button className={`button ${following ? "secondary" : ""}`} onClick={() => follow.mutate()} disabled={follow.isPending}><UserPlus /> {following ? "팔로잉" : "팔로우"}</button><button className="button secondary" onClick={() => message.mutate()} disabled={message.isPending || followState.data?.blocked}><MessageCircleMore /> {message.isPending ? "확인 중…" : "메시지"}</button></div>
             {status === "authenticated" && (
               <div className="safety-actions">
                 <button onClick={() => setReporting(true)}><Flag /> 신고</button>
-                <button onClick={() => block.mutate()} disabled={block.isPending}><Ban /> 차단</button>
+                <button onClick={() => setConfirmingBlock(true)} disabled={block.isPending}><Ban /> 차단</button>
               </div>
             )}
           </>
@@ -145,14 +148,14 @@ export default function PersonPage({ params }: { params: Promise<{ handle: strin
       </section>
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}</button>}
       <div className="section-heading spaced">
-        <div><h2>공유한 실천</h2><span>{person._count.posts}개의 기록</span></div>
+        <div><h2>게시한 실천</h2><span>{person._count.posts}개의 기록</span></div>
       </div>
       {posts.isLoading ? (
         <ListSkeleton />
       ) : posts.isError ? (
         <ErrorState onRetry={() => void posts.refetch()} />
       ) : !posts.data?.items.length ? (
-        <EmptyState title="아직 공유한 실천이 없어요" body="첫 실천이 올라오면 이곳에서 볼 수 있어요." />
+        <EmptyState title="아직 게시한 실천이 없어요" body="첫 실천이 올라오면 이곳에서 볼 수 있어요." />
       ) : (
         <div className="feed-stack">
           {posts.data.items.map((post) => (
@@ -180,6 +183,7 @@ export default function PersonPage({ params }: { params: Promise<{ handle: strin
           onReported={() => setNotice("신고를 접수했어요. 운영팀이 확인할게요.")}
         />
       )}
+      {confirmingBlock && <ConfirmSheet title={`${person.nickname}님을 차단할까요?`} body="서로 팔로우가 해제되고 더 이상 메시지를 주고받을 수 없어요." confirmLabel="차단하기" danger busy={block.isPending} onClose={() => setConfirmingBlock(false)} onConfirm={() => block.mutate()} />}
     </main>
   );
 }

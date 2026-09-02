@@ -16,10 +16,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
 function SessionProvider({ children }: { children: React.ReactNode }) {
   const version = useSyncExternalStore(subscribeSession, getSessionVersion, () => 0);
+  const demo = useSyncExternalStore(subscribeSession, isDemoMode, () => false);
   const query = useQuery({ queryKey: ["session", version], queryFn: () => getCurrentSession<SessionUser>(), retry: false });
   const refresh = useCallback(async () => { await query.refetch(); }, [query]);
   const status: Session["status"] = query.isPending ? "loading" : query.data ? "authenticated" : "guest";
-  const session = useMemo(() => ({ status, user: query.data ?? null, demo: isDemoMode(), refresh }), [status, query.data, refresh]);
+  const session = useMemo(() => ({ status, user: query.data ?? null, demo, refresh }), [status, query.data, demo, refresh]);
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }
 

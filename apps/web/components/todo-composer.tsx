@@ -1,25 +1,20 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { CalendarDays, Clock3, Repeat2 } from "lucide-react";
 import { Sheet } from "./sheet";
 import type { TodoDto } from "@/lib/types";
 import { localDateKey } from "@/lib/date";
+import { CategoryPicker, RepeatPicker, TodoSchedulePicker } from "./todo-form-controls";
+import { toRepeatPreset, type RepeatPreset } from "@/lib/todo-options";
 
 export type TodoDraft = {
   title: string;
+  notes?: string | null;
   category: string;
   dueDate: string;
   repeatRule?: string | null;
   recurrenceScope?: "THIS" | "FUTURE";
 };
-
-function simpleRepeatRule(rule?: string | null) {
-  if (!rule) return "";
-  if (rule.includes("MO,TU,WE,TH,FR")) return "WEEKDAYS";
-  if (rule.includes("DAILY")) return "DAILY";
-  return "WEEKLY";
-}
 
 export function TodoComposer({
   date,
@@ -40,12 +35,13 @@ export function TodoComposer({
 }) {
   const due = todo ? new Date(todo.dueDate) : new Date(`${date}T09:00:00`);
   const [title, setTitle] = useState(todo?.title ?? "");
+  const [notes, setNotes] = useState(todo?.notes ?? "");
   const [category, setCategory] = useState(todo?.category ?? "생활");
   const [day, setDay] = useState(localDateKey(due));
   const [time, setTime] = useState(
     `${String(due.getHours()).padStart(2, "0")}:${String(due.getMinutes()).padStart(2, "0")}`,
   );
-  const [repeatRule, setRepeatRule] = useState(simpleRepeatRule(todo?.repeatRule));
+  const [repeatRule, setRepeatRule] = useState<RepeatPreset>(toRepeatPreset(todo?.repeatRule));
   const [recurrenceScope, setRecurrenceScope] = useState<"THIS" | "FUTURE">("THIS");
 
   const submit = (event: FormEvent) => {
@@ -53,6 +49,7 @@ export function TodoComposer({
     if (!title.trim()) return;
     onSave({
       title: title.trim(),
+      notes: notes.trim() || null,
       category,
       dueDate: new Date(`${day}T${time}:00`).toISOString(),
       repeatRule: repeatRule || (todo?.seriesId ? null : undefined),
@@ -61,7 +58,7 @@ export function TodoComposer({
   };
 
   return (
-    <Sheet title={todo ? "TODO 편집" : "새 TODO"} onClose={onClose}>
+    <Sheet title={todo ? "TODO 상세 및 편집" : "새 TODO"} onClose={onClose}>
       <form className="composer-form" onSubmit={submit}>
         <label className="field">
           <span>무엇을 실천할까요?</span>
@@ -75,32 +72,12 @@ export function TodoComposer({
           />
         </label>
         <label className="field">
-          <span>카테고리</span>
-          <select value={category} onChange={(event) => setCategory(event.target.value)}>
-            {["생활", "운동", "공부", "건강", "마음", "커리어", "취미"].map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
+          <span>메모 <small>선택</small></span>
+          <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} placeholder="실천에 필요한 내용을 적어두세요." />
         </label>
-        <div className="field-grid">
-          <label className="field">
-            <span><CalendarDays /> 날짜</span>
-            <input type="date" value={day} onChange={(event) => setDay(event.target.value)} />
-          </label>
-          <label className="field">
-            <span><Clock3 /> 시간</span>
-            <input type="time" value={time} onChange={(event) => setTime(event.target.value)} />
-          </label>
-        </div>
-        <label className="field">
-          <span><Repeat2 /> 반복</span>
-          <select value={repeatRule} onChange={(event) => setRepeatRule(event.target.value)}>
-            <option value="">반복 안 함</option>
-            <option value="DAILY">매일</option>
-            <option value="WEEKDAYS">평일</option>
-            <option value="WEEKLY">매주</option>
-          </select>
-        </label>
+        <TodoSchedulePicker day={day} time={time} onDayChange={setDay} onTimeChange={setTime} />
+        <CategoryPicker value={category} onChange={setCategory} />
+        <RepeatPicker value={repeatRule} onChange={setRepeatRule} />
         {todo?.seriesId && (
           <fieldset className="repeat-scope">
             <legend>변경 범위</legend>

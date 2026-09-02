@@ -27,9 +27,11 @@ export class RecurrenceService {
         ? "FREQ=DAILY"
         : rule === "WEEKDAYS"
           ? "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
-          : rule === "WEEKLY"
-            ? "FREQ=WEEKLY"
-            : rule.trim().toUpperCase();
+          : rule === "WEEKENDS"
+            ? "FREQ=WEEKLY;BYDAY=SA,SU"
+            : rule === "WEEKLY"
+              ? "FREQ=WEEKLY"
+              : rule.trim().toUpperCase();
     if (!/^FREQ=(DAILY|WEEKLY)(;BYDAY=(MO|TU|WE|TH|FR|SA|SU)(,(MO|TU|WE|TH|FR|SA|SU))*)?$/.test(normalized)) {
       throw new BadRequestException("지원하지 않는 반복 설정이에요.");
     }

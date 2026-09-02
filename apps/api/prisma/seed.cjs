@@ -93,7 +93,7 @@ async function main() {
       todos: { create: { todoId: todo.id } },
     },
   });
-  await prisma.challenge.upsert({
+  const seededChallenge = await prisma.challenge.upsert({
     where: { id: "official-morning-30" },
     update: {},
     create: {
@@ -102,11 +102,36 @@ async function main() {
       title: "30일 아침 루틴",
       description: "매일 아침 나만의 작은 루틴을 완료하고 함께 인증해요.",
       kind: ChallengeKind.OFFICIAL,
-      verificationMode: VerificationMode.OPTIONAL_PHOTO,
+      verificationMode: VerificationMode.PEER_PHOTO,
+      verificationCriteria: [
+        "사진에서 오늘의 아침 실천을 확인할 수 있나요?",
+        "사진이 챌린지 주제와 맞나요?",
+        "재사용하거나 조작한 흔적 없이 자연스러운 인증인가요?",
+      ],
       startsAt: new Date(Date.now() - 86_400_000),
       endsAt: new Date(Date.now() + 30 * 86_400_000),
       rewardLabel: "완주자 공식 배지",
-      rewardTerms: "운영자 검토 후 지급",
+      rewardTerms: "완주율 충족 여부를 확인한 뒤 지급",
+    },
+  });
+  const challengeRoom = await prisma.conversation.upsert({
+    where: { challengeId: seededChallenge.id },
+    update: {},
+    create: {
+      kind: "CHALLENGE",
+      challengeId: seededChallenge.id,
+      purgeAt: new Date(seededChallenge.endsAt.getTime() + 90 * 86_400_000),
+    },
+  });
+  await prisma.message.upsert({
+    where: { conversationId_systemKey: { conversationId: challengeRoom.id, systemKey: "CHALLENGE_STARTED" } },
+    update: {},
+    create: {
+      conversationId: challengeRoom.id,
+      kind: "SYSTEM",
+      systemKey: "CHALLENGE_STARTED",
+      body: "챌린지가 시작됐어요. 서로에게 도움이 되는 팁과 경험을 나눠보세요.",
+      createdAt: seededChallenge.startsAt,
     },
   });
 }

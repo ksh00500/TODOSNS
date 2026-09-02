@@ -15,6 +15,12 @@ const notifySession = () => {
 };
 
 export function hasAccessToken() { return isDemoMode() || Boolean(accessToken); }
+export async function getSocketAccessToken(forceRefresh = false) {
+  if (isDemoMode()) return null;
+  if (forceRefresh) accessToken = null;
+  if (!accessToken) accessToken = await refreshAccessToken().catch(() => null);
+  return accessToken;
+}
 export function getSessionVersion() { return sessionVersion; }
 export function setAccessToken(token: string) {
   accessToken = token;

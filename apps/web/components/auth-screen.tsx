@@ -8,6 +8,7 @@ import { apiFetch, setAccessToken } from "@/lib/api";
 import { CloudMark } from "./cloud-mark";
 import { useSession } from "./app-providers";
 import { DemoEntryButton } from "./demo-entry-button";
+import { BirthDatePicker } from "./todo-form-controls";
 import type { SignupResultDto } from "@mungsil/contracts";
 
 type LoginResult = { accessToken: string; user: { nickname: string } };
@@ -19,13 +20,19 @@ export function AuthScreen() {
   const [signup, setSignup] = useState(params.get("mode") === "signup");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [birthDate, setBirthDate] = useState("");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
     setError("");
+    if (signup && !birthDate) {
+      setError("생년월일을 선택해주세요.");
+      return;
+    }
+    setBusy(true);
     const values = Object.fromEntries(new FormData(event.currentTarget));
     delete values.terms;
+    if (signup) values.birthDate = birthDate;
     try {
       if (signup) {
         const result = await apiFetch<SignupResultDto>("/auth/signup", {
@@ -114,12 +121,7 @@ export function AuthScreen() {
                 </label>
               </div>
             )}
-            {signup && (
-              <label className="field">
-                <span>생년월일</span>
-                <input name="birthDate" type="date" required />
-              </label>
-            )}
+            {signup && <BirthDatePicker value={birthDate} onChange={setBirthDate} />}
             {signup && (
               <label className="field">
                 <span>초대 코드</span>

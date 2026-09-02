@@ -1,8 +1,11 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtAuthGuard, OptionalJwtAuthGuard } from "./auth";
-import { CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeDto, CreatePostDto, CreateReportDto, CreateTodoDto, CreateTodoListDto, MessageRequestDto, PageDto, PresignDto, ResolveReportDto, SearchDto, SendMessageDto, UpdateChallengeRewardDto, UpdateProfileDto, UpdateTodoDto, UpdateTodoListDto, UserTargetDto } from "./dtos";
+import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeChatMessageDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoDto, CreateTodoListDto, MessageRequestDto, ModerateChatMessageDto, MuteChatMemberDto, PageDto, PresignDto, ReadChallengeChatDto, ResolveReportDto, SearchDto, ToggleChatReactionDto, UpdateChallengeChatMessageDto, UpdateChallengeDto, UpdateChallengeRewardDto, UpdateChatSettingsDto, UpdateContentVisibilityDto, UpdateInviteCodeDto, UpdateProfileDto, UpdateTodoDto, UpdateTodoListDto, UpdateUserSuspensionDto, UserTargetDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
 import { MediaService } from "./media.service";
 import { MungsilService } from "./mungsil.service";
+import { ChallengeChatService } from "./challenge-chat.service";
+import { DirectChatService } from "./direct-chat.service";
+import { ChatReactionType } from "@prisma/client";
 
 type JwtUser = { sub: string; role: string; email: string };
 
@@ -55,9 +58,11 @@ export class PublicController {
   @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser | undefined, @Param("id") id: string) { return this.service.postComments(id, u?.sub ?? null); }
   @Get("users/:handle") user(@CurrentUser() u: JwtUser | undefined, @Param("handle") handle: string) { return this.service.publicProfile(handle, u?.sub ?? null); }
   @Get("users/:handle/posts") userPosts(@CurrentUser() u: JwtUser | undefined, @Param("handle") handle: string, @Query() page: PageDto) { return this.service.publicUserPosts(handle, page, u?.sub ?? null); }
+  @Get("search/suggestions") searchSuggestions(@Query("limit") limit?: string) { const parsed = Number(limit ?? 10); return this.service.publicSearchSuggestions(Number.isFinite(parsed) ? parsed : 10); }
   @Get("search") search(@CurrentUser() u: JwtUser | undefined, @Query() query: SearchDto) { return this.service.publicSearch(query, u?.sub ?? null); }
   @Get("challenges") challenges(@CurrentUser() u: JwtUser | undefined) { return this.service.publicChallenges(u?.sub ?? null); }
   @Get("challenges/:id") challenge(@CurrentUser() u: JwtUser | undefined, @Param("id") id: string) { return this.service.challengeDetail(id, u?.sub ?? null); }
+  @Get("challenges/:id/leaderboard") challengeLeaderboard(@CurrentUser() u: JwtUser | undefined, @Param("id") id: string) { return this.service.challengeLeaderboard(id, u?.sub ?? null); }
 }
 
 @UseGuards(JwtAuthGuard)
@@ -65,11 +70,45 @@ export class PublicController {
 export class ChallengeController {
   constructor(private readonly service: MungsilService) {}
   @Get() list(@CurrentUser() u: JwtUser) { return this.service.listChallenges(u.sub); }
+  @Get("past") past(@CurrentUser() u: JwtUser) { return this.service.pastChallenges(u.sub); }
   @Get(":id") detail(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.challengeDetail(id, u.sub); }
+  @Get(":id/leaderboard") leaderboard(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.challengeLeaderboard(id, u.sub); }
   @Post() create(@CurrentUser() u: JwtUser, @Body() dto: CreateChallengeDto) { return this.service.createChallenge(u.sub, u.role, dto); }
+  @Patch(":id") update(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateChallengeDto) { return this.service.updateChallenge(u.sub, u.role, id, dto); }
+  @Delete(":id") remove(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.removeChallenge(u.sub, u.role, id); }
   @Post(":id/join") join(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.joinChallenge(u.sub, id); }
   @Delete(":id/join") leave(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.leaveChallenge(u.sub, id); }
   @Post(":id/check-in") checkIn(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: CheckInDto) { return this.service.checkIn(u.sub, id, dto); }
+}
+
+@UseGuards(JwtAuthGuard)
+@Controller("challenges/:challengeId/chat")
+export class ChallengeChatController {
+  constructor(private readonly chat: ChallengeChatService) {}
+  @Get() list(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Query() page: PageDto) { return this.chat.chat(u.sub, u.role, challengeId, page); }
+  @Get("summary") summary(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string) { return this.chat.summaryForChallenge(u.sub, challengeId); }
+  @Get("members") members(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Query() page: PageDto) { return this.chat.members(u.sub, challengeId, page); }
+  @Post("read") read(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Body() dto: ReadChallengeChatDto) { return this.chat.markRead(u.sub, challengeId, dto.messageId); }
+  @Patch("settings") settings(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Body() dto: UpdateChatSettingsDto) { return this.chat.settings(u.sub, challengeId, dto.notificationLevel); }
+  @Post("messages") send(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Body() dto: CreateChallengeChatMessageDto) { return this.chat.send(u.sub, u.role, challengeId, dto); }
+  @Patch("messages/:messageId") update(@CurrentUser() u: JwtUser, @Param("messageId") messageId: string, @Body() dto: UpdateChallengeChatMessageDto) { return this.chat.update(u.sub, u.role, messageId, dto.body); }
+  @Delete("messages/:messageId") remove(@CurrentUser() u: JwtUser, @Param("messageId") messageId: string) { return this.chat.remove(u.sub, messageId); }
+  @Get("messages/:messageId/revisions") revisions(@CurrentUser() u: JwtUser, @Param("messageId") messageId: string) { return this.chat.revisions(u.sub, messageId); }
+  @Post("messages/:messageId/reactions") reaction(@CurrentUser() u: JwtUser, @Param("messageId") messageId: string, @Body() dto: ToggleChatReactionDto) { return this.chat.toggleReaction(u.sub, u.role, messageId, dto.type); }
+  @Get("messages/:messageId/reactions") reactionUsers(@CurrentUser() u: JwtUser, @Param("messageId") messageId: string, @Query("type") type: ChatReactionType) { return this.chat.reactionUsers(u.sub, messageId, type); }
+  @Patch("messages/:messageId/visibility") visibility(@CurrentUser() u: JwtUser, @Param("messageId") messageId: string, @Body() dto: UpdateContentVisibilityDto) { return this.chat.setHidden(u.sub, u.role, messageId, dto.hidden, dto.reason ?? "대화방 운영 원칙에 따른 조치예요."); }
+  @Post("members/:userId/mute") mute(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Param("userId") userId: string, @Body() dto: MuteChatMemberDto) { return this.chat.mute(u.sub, u.role, challengeId, userId, dto); }
+  @Post("members/:userId/unmute") unmute(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Param("userId") userId: string, @Body() dto: ModerateChatMessageDto) { return this.chat.unmute(u.sub, u.role, challengeId, userId, dto.reason); }
+}
+
+@UseGuards(JwtAuthGuard)
+@Controller("challenge-verifications")
+export class ChallengeVerificationController {
+  constructor(private readonly service: MungsilService) {}
+  @Get("queue") queue(@CurrentUser() u: JwtUser, @Query() query: VerificationQueueDto) { return this.service.verificationQueue(u.sub, query); }
+  @Post(":checkInId/vote") vote(@CurrentUser() u: JwtUser, @Param("checkInId") checkInId: string, @Body() dto: VerificationVoteDto) { return this.service.voteChallengeVerification(u.sub, checkInId, dto); }
+  @Post("check-ins/:checkInId/resubmit") resubmit(@CurrentUser() u: JwtUser, @Param("checkInId") checkInId: string, @Body() dto: CheckInDto) { return this.service.resubmitChallengeVerification(u.sub, checkInId, dto); }
+  @Post("check-ins/:checkInId/reverify") reverify(@CurrentUser() u: JwtUser, @Param("checkInId") checkInId: string) { return this.service.reverifyChallengeVerification(u.sub, checkInId); }
 }
 
 @UseGuards(JwtAuthGuard)
@@ -87,12 +126,20 @@ export class SocialController {
 @UseGuards(JwtAuthGuard)
 @Controller("messages")
 export class MessageController {
-  constructor(private readonly service: MungsilService) {}
-  @Get() conversations(@CurrentUser() u: JwtUser) { return this.service.listConversations(u.sub); }
-  @Post("requests") request(@CurrentUser() u: JwtUser, @Body() dto: MessageRequestDto) { return this.service.requestMessage(u.sub, dto.receiverId); }
-  @Post("requests/:id/accept") accept(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.acceptMessage(u.sub, id); }
-  @Get(":id") messages(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.messages(u.sub, id); }
-  @Post(":id") send(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: SendMessageDto) { return this.service.sendMessage(u.sub, id, dto); }
+  constructor(private readonly chat: DirectChatService) {}
+  @Get() conversations(@CurrentUser() u: JwtUser) { return this.chat.conversations(u.sub); }
+  @Get("inbox") inbox(@CurrentUser() u: JwtUser) { return this.chat.inbox(u.sub); }
+  @Get("unread-count") unreadCount(@CurrentUser() u: JwtUser) { return this.chat.unreadCount(u.sub); }
+  @Get("requests") requests(@CurrentUser() u: JwtUser) { return this.chat.requests(u.sub); }
+  @Post("requests") request(@CurrentUser() u: JwtUser, @Body() dto: MessageRequestDto) { return this.chat.start(u.sub, dto.receiverId); }
+  @Post("requests/:id/accept") accept(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.chat.accept(u.sub, id); }
+  @Delete("requests/:id") reject(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.chat.reject(u.sub, id); }
+  @Get(":id") messages(@CurrentUser() u: JwtUser, @Param("id") id: string, @Query() page: PageDto) { return this.chat.chat(u.sub, id, page); }
+  @Post(":id/read") read(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: ReadChallengeChatDto) { return this.chat.markRead(u.sub, id, dto.messageId); }
+  @Post(":id/messages") send(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: CreateChallengeChatMessageDto) { return this.chat.send(u.sub, id, dto); }
+  @Delete(":id/messages/:messageId") remove(@CurrentUser() u: JwtUser, @Param("id") id: string, @Param("messageId") messageId: string) { return this.chat.remove(u.sub, id, messageId); }
+  @Post(":id/messages/:messageId/reactions") react(@CurrentUser() u: JwtUser, @Param("id") id: string, @Param("messageId") messageId: string, @Body() dto: ToggleChatReactionDto) { return this.chat.toggleReaction(u.sub, id, messageId, dto.type); }
+  @Get(":id/messages/:messageId/reactions") reactionUsers(@CurrentUser() u: JwtUser, @Param("id") id: string, @Param("messageId") messageId: string, @Query("type") type: ChatReactionType) { return this.chat.reactionUsers(u.sub, id, messageId, type); }
 }
 
 @UseGuards(JwtAuthGuard)
@@ -111,10 +158,24 @@ export class MeController {
 @UseGuards(JwtAuthGuard)
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly service: MungsilService) {}
+  constructor(private readonly service: MungsilService, private readonly chat: ChallengeChatService) {}
   private allow(u: JwtUser) { if (!["ADMIN", "MODERATOR"].includes(u.role)) throw new ForbiddenException("운영자 권한이 필요해요."); }
+  private allowAdmin(u: JwtUser) { if (u.role !== "ADMIN") throw new ForbiddenException("관리자 권한이 필요해요."); }
+  @Get("overview") overview(@CurrentUser() u: JwtUser) { this.allow(u); return this.service.adminOverview(); }
+  @Get("invite-codes") inviteCodes(@CurrentUser() u: JwtUser) { this.allowAdmin(u); return this.service.adminInviteCodes(); }
+  @Post("invite-codes") createInviteCode(@CurrentUser() u: JwtUser, @Body() dto: CreateInviteCodeDto) { this.allowAdmin(u); return this.service.createInviteCode(u.sub, dto); }
+  @Patch("invite-codes/:id") updateInviteCode(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateInviteCodeDto) { this.allowAdmin(u); return this.service.updateInviteCode(u.sub, id, dto.disabled); }
+  @Get("users") users(@CurrentUser() u: JwtUser, @Query() query: AdminUserQueryDto) { this.allowAdmin(u); return this.service.adminUsers(query); }
+  @Patch("users/:id/suspension") suspendUser(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateUserSuspensionDto) { this.allowAdmin(u); return this.service.updateUserSuspension(u.sub, id, dto.suspended, dto.reason); }
+  @Get("content") content(@CurrentUser() u: JwtUser, @Query() query: AdminContentQueryDto) { this.allow(u); return this.service.adminContent(query); }
+  @Patch("content/:type/:id/visibility") contentVisibility(@CurrentUser() u: JwtUser, @Param("type") type: string, @Param("id") id: string, @Body() dto: UpdateContentVisibilityDto) { this.allow(u); return this.service.updateAdminContentVisibility(u.sub, type, id, dto.hidden, dto.reason); }
+  @Get("audit-logs") auditLogs(@CurrentUser() u: JwtUser, @Query() page: PageDto) { this.allowAdmin(u); return this.service.adminAuditLogs(page); }
   @Get("reports") reports(@CurrentUser() u: JwtUser) { this.allow(u); return this.service.adminReports(); }
   @Patch("reports/:id") resolve(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: ResolveReportDto) { this.allow(u); return this.service.resolveReport(u.sub, id, dto.status as "RESOLVED" | "DISMISSED" | "REVIEWING", dto.resolution); }
+  @Get("reports/:id/message-context") messageContext(@CurrentUser() u: JwtUser, @Param("id") id: string) { this.allow(u); return this.chat.adminReportedContext(id); }
+  @Patch("chat/messages/:messageId/visibility") chatMessageVisibility(@CurrentUser() u: JwtUser, @Param("messageId") messageId: string, @Body() dto: UpdateContentVisibilityDto) { this.allow(u); return this.chat.setHidden(u.sub, u.role, messageId, dto.hidden, dto.reason ?? "운영 정책에 따른 조치예요."); }
   @Get("challenges/:challengeId/participants") challengeParticipants(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string) { this.allow(u); return this.service.adminChallengeParticipants(challengeId); }
-  @Patch("challenges/:challengeId/participants/:userId/reward") reward(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Param("userId") userId: string, @Body() dto: UpdateChallengeRewardDto) { this.allow(u); return this.service.updateChallengeReward(challengeId, userId, dto.status); }
+  @Get("challenge-verifications") challengeVerifications(@CurrentUser() u: JwtUser) { this.allow(u); return this.service.adminChallengeVerificationOverview(); }
+  @Patch("challenge-check-ins/:id/visibility") challengeCheckInVisibility(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateContentVisibilityDto) { this.allow(u); return this.service.updateChallengeCheckInVisibility(u.sub, id, dto.hidden, dto.reason); }
+  @Patch("challenges/:challengeId/participants/:userId/reward") reward(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Param("userId") userId: string, @Body() dto: UpdateChallengeRewardDto) { this.allow(u); return this.service.updateChallengeReward(challengeId, userId, dto.status, u.sub); }
 }

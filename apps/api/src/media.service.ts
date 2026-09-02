@@ -161,21 +161,21 @@ export class MediaService {
 
   async attachToPost(userId: string, mediaId: string, postId: string) {
     const media = await this.readyOwned(userId, mediaId);
-    if (media.postId || media.checkInId || (media.avatarFor && media.avatarFor.id !== userId)) {
+    if (media.postId || media.checkInId || media.messageId || (media.avatarFor && media.avatarFor.id !== userId)) {
       throw new BadRequestException("이미 사용 중인 사진이에요. 새로 업로드해주세요.");
     }
-    const claimed = await this.prisma.media.updateMany({ where: { id: mediaId, ownerId: userId, status: MediaStatus.READY, postId: null, checkInId: null }, data: { postId } });
+    const claimed = await this.prisma.media.updateMany({ where: { id: mediaId, ownerId: userId, status: MediaStatus.READY, postId: null, checkInId: null, messageId: null }, data: { postId } });
     if (claimed.count !== 1) throw new BadRequestException("이미 사용 중인 사진이에요. 새로 업로드해주세요.");
     return this.prisma.media.findUniqueOrThrow({ where: { id: mediaId } });
   }
 
   async attachToCheckIn(userId: string, mediaId: string, checkInId: string) {
     const media = await this.readyOwned(userId, mediaId);
-    if (media.postId || (media.checkInId && media.checkInId !== checkInId) || media.avatarFor) {
+    if (media.postId || media.messageId || (media.checkInId && media.checkInId !== checkInId) || media.avatarFor) {
       throw new BadRequestException("이미 사용 중인 사진이에요. 새로 업로드해주세요.");
     }
     return this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.media.updateMany({ where: { id: mediaId, ownerId: userId, status: MediaStatus.READY, postId: null, OR: [{ checkInId: null }, { checkInId }] }, data: { checkInId } });
+      const claimed = await tx.media.updateMany({ where: { id: mediaId, ownerId: userId, status: MediaStatus.READY, postId: null, messageId: null, OR: [{ checkInId: null }, { checkInId }] }, data: { checkInId } });
       if (claimed.count !== 1) throw new BadRequestException("이미 사용 중인 사진이에요. 새로 업로드해주세요.");
       await tx.media.updateMany({ where: { checkInId, id: { not: mediaId } }, data: { checkInId: null } });
       return tx.media.findUniqueOrThrow({ where: { id: mediaId } });
@@ -184,7 +184,7 @@ export class MediaService {
 
   async setAvatar(userId: string, mediaId: string) {
     const media = await this.readyOwned(userId, mediaId);
-    if (media.postId || media.checkInId || (media.avatarFor && media.avatarFor.id !== userId)) {
+    if (media.postId || media.checkInId || media.messageId || (media.avatarFor && media.avatarFor.id !== userId)) {
       throw new BadRequestException("게시물이나 인증에 사용한 사진은 프로필 사진으로 설정할 수 없어요.");
     }
     await this.prisma.user.update({ where: { id: userId }, data: { avatarMediaId: mediaId } });
@@ -207,6 +207,28 @@ export class MediaService {
     );
   }
 
+  async attachToMessage(userId: string, mediaIds: string[], messageId: string) {
+    if (mediaIds.length > 4 || new Set(mediaIds).size !== mediaIds.length) throw new BadRequestException("사진은 메시지마다 최대 4장까지 올릴 수 있어요.");
+    for (const mediaId of mediaIds) {
+      const media = await this.readyOwned(userId, mediaId);
+      if (media.postId || media.checkInId || media.messageId || media.avatarFor) throw new BadRequestException("이미 사용 중인 사진이에요. 새로 업로드해주세요.");
+    }
+    await this.prisma.$transaction(async (tx) => {
+      for (const [messageOrder, mediaId] of mediaIds.entries()) {
+        const claimed = await tx.media.updateMany({ where: { id: mediaId, ownerId: userId, status: MediaStatus.READY, postId: null, checkInId: null, messageId: null }, data: { messageId, messageOrder } });
+        if (claimed.count !== 1) throw new BadRequestException("이미 사용 중인 사진이에요. 새로 업로드해주세요.");
+      }
+    });
+  }
+
+  async purgeMessageMedia(conversationId: string) {
+    const media = await this.prisma.media.findMany({ where: { message: { conversationId } }, select: { id: true, objectKey: true, thumbnailKey: true } });
+    for (const item of media) {
+      await Promise.all([item.objectKey, item.thumbnailKey].filter((key): key is string => Boolean(key)).map((key) => this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })).catch(() => undefined)));
+    }
+    if (media.length) await this.prisma.media.deleteMany({ where: { id: { in: media.map((item) => item.id) } } });
+  }
+
   @Cron("0 30 3 * * *", { timeZone: "UTC" })
   async cleanupIncompleteUploads() {
     const expired = await this.prisma.media.findMany({
@@ -215,6 +237,7 @@ export class MediaService {
         createdAt: { lt: new Date(Date.now() - 24 * 3600_000) },
         postId: null,
         checkInId: null,
+        messageId: null,
       },
       take: 200,
     });
