@@ -101,6 +101,11 @@ test("TODO 일정·그룹·카테고리는 밀도 높은 별도 관리 화면을
   assert.match(categories, /category-gallery/);
   assert.match(categories, /CategoryOrderEditor/);
   assert.match(categories, /category-drag-handle/);
+  assert.match(categories, /CategoryTodoSheet/);
+  assert.match(categories, /category-card-open/);
+  assert.match(categories, /todo-categories\/\$\{category\.id\}\/todos/);
+  assert.match(categories, /TODO 상태 필터/);
+  assert.match(categories, /일정에서 보기/);
   assert.match(categories, /맨 위/);
   assert.match(categories, /맨 아래/);
   assert.match(categories, /todo-categories\/reorder/);
@@ -108,6 +113,8 @@ test("TODO 일정·그룹·카테고리는 밀도 높은 별도 관리 화면을
   assert.match(schema, /model TodoCategory/);
   assert.match(schema, /categoryId\s+String\?/);
   assert.match(service, /resolveTodoCategory/);
+  assert.match(service, /listTodoCategoryTodos/);
+  assert.match(service, /todoSeries\.updateMany/);
   assert.match(service, /최대 12개/);
 });
 

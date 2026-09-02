@@ -205,9 +205,19 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     ids.forEach((id, position) => { const category = state.categories.find((item) => item.id === id); if (category) category.position = position; });
     state.categories.sort((left, right) => left.position - right.position); writeState(state); return clone(state.categories.filter((item) => !item.archivedAt)) as T;
   }
+  const categoryTodosMatch = pathname.match(/^\/me\/todo-categories\/([^/]+)\/todos$/);
+  if (categoryTodosMatch && method === "GET") {
+    const categoryId = decodeURIComponent(categoryTodosMatch[1]);
+    const category = state.categories.find((item) => item.id === categoryId);
+    if (!category) throw new Error("카테고리를 찾지 못했어요.");
+    return clone(state.todos
+      .filter((todo) => todo.categoryId === category.id || (!todo.categoryId && todo.category === category.name))
+      .sort((left, right) => Number(Boolean(left.completedAt)) - Number(Boolean(right.completedAt)) || new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime())) as T;
+  }
   const categoryMatch = pathname.match(/^\/me\/todo-categories\/([^/]+)$/);
   if (categoryMatch && method === "PATCH") {
-    const category = state.categories.find((item) => item.id === categoryMatch[1]); if (!category) throw new Error("카테고리를 찾지 못했어요.");
+    const categoryId = decodeURIComponent(categoryMatch[1]);
+    const category = state.categories.find((item) => item.id === categoryId); if (!category) throw new Error("카테고리를 찾지 못했어요.");
     if (body.archived === true && state.categories.filter((item) => !item.archivedAt).length <= 1) throw new Error("TODO를 만들려면 카테고리를 하나 이상 남겨주세요.");
     if (body.archived !== undefined) category.archivedAt = body.archived ? new Date().toISOString() : null;
     if (!category.isDefault) { if (body.name) category.name = String(body.name).trim(); if (body.baseCategory) category.baseCategory = String(body.baseCategory); if (body.icon) category.icon = String(body.icon); if (body.color) category.color = String(body.color); }

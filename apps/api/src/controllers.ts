@@ -151,6 +151,7 @@ export class MeController {
   @Get("todo-categories") todoCategories(@CurrentUser() u: JwtUser, @Query("archived") archived?: string) { return this.service.listTodoCategories(u.sub, archived === "true"); }
   @Post("todo-categories") createTodoCategory(@CurrentUser() u: JwtUser, @Body() dto: CreateTodoCategoryDto) { return this.service.createTodoCategory(u.sub, dto); }
   @Patch("todo-categories/reorder") reorderTodoCategories(@CurrentUser() u: JwtUser, @Body() dto: ReorderTodoCategoriesDto) { return this.service.reorderTodoCategories(u.sub, dto.ids); }
+  @Get("todo-categories/:id/todos") todoCategoryTodos(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.listTodoCategoryTodos(u.sub, id); }
   @Patch("todo-categories/:id") updateTodoCategory(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateTodoCategoryDto) { return this.service.updateTodoCategory(u.sub, id, dto); }
   @Get("notifications") notifications(@CurrentUser() u: JwtUser, @Query() page: PageDto) { return this.service.notifications(u.sub, page); }
   @Get("notifications/unread-count") unreadCount(@CurrentUser() u: JwtUser) { return this.service.unreadNotificationCount(u.sub); }

@@ -1,17 +1,77 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArrowDown, ArrowUp, Check, ChevronsDown, ChevronsUp, Eye, EyeOff, GripVertical, Pencil, Plus, Tags } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, CalendarDays, Check, CheckCircle2, ChevronRight, ChevronsDown, ChevronsUp, Circle, Clock3, Eye, EyeOff, GripVertical, Pencil, Plus, Repeat2, Tags } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { TodoCategoryDto } from "@/lib/types";
-import { TODO_CATEGORIES } from "@/lib/todo-options";
+import type { TodoCategoryDto, TodoDto } from "@/lib/types";
+import { REPEAT_OPTIONS, TODO_CATEGORIES, toRepeatPreset } from "@/lib/todo-options";
 import { useSession } from "@/components/app-providers";
 import { AuthGate, EmptyState, ErrorState, ListSkeleton } from "@/components/states";
 import { Sheet } from "@/components/sheet";
 import { TodoSectionNav } from "@/components/todo-section-nav";
 
 const colors = [{ value: "aqua", label: "민트" }, { value: "blush", label: "핑크" }, { value: "butter", label: "옐로" }, { value: "lilac", label: "라일락" }];
+
+type CategoryTodoFilter = "ALL" | "OPEN" | "DONE";
+
+function localDateKey(value: string) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function repeatLabel(rule?: string | null) {
+  const preset = toRepeatPreset(rule);
+  return REPEAT_OPTIONS.find((option) => option.value === preset)?.label ?? "반복";
+}
+
+function CategoryTodoSheet({ category, onClose }: { category: TodoCategoryDto; onClose: () => void }) {
+  const [filter, setFilter] = useState<CategoryTodoFilter>("ALL");
+  const todos = useQuery({
+    queryKey: ["todo-category-todos", category.id],
+    queryFn: () => apiFetch<TodoDto[]>(`/me/todo-categories/${category.id}/todos`),
+  });
+  const rows = todos.data ?? [];
+  const openCount = rows.filter((todo) => !todo.completedAt).length;
+  const doneCount = rows.length - openCount;
+  const totalCount = todos.isLoading ? category.todoCount ?? 0 : rows.length;
+  const filtered = rows.filter((todo) => filter === "ALL" || (filter === "DONE" ? Boolean(todo.completedAt) : !todo.completedAt));
+  const filters: Array<{ value: CategoryTodoFilter; label: string; count: number }> = [
+    { value: "ALL", label: "전체", count: rows.length },
+    { value: "OPEN", label: "예정", count: openCount },
+    { value: "DONE", label: "완료", count: doneCount },
+  ];
+
+  return (
+    <Sheet title={`${category.name} TODO`} onClose={onClose}>
+      <div className="category-todo-sheet">
+        <section className={`category-todo-summary category-tone-${category.color}`} aria-label={`${category.name} 카테고리 요약`}>
+          <span><Tags aria-hidden /></span>
+          <div><small>{category.baseCategory} 기준</small><b>전체 {totalCount}개</b><p>{todos.isLoading ? "예정·완료 상태를 확인하고 있어요" : `예정 ${openCount}개 · 완료 ${doneCount}개`}</p></div>
+        </section>
+        <div className="category-todo-filters" aria-label="TODO 상태 필터">
+          {filters.map((item) => <button type="button" key={item.value} className={filter === item.value ? "selected" : ""} aria-pressed={filter === item.value} disabled={todos.isLoading} onClick={() => setFilter(item.value)}>{item.label}<span>{todos.isLoading ? "…" : item.count}</span></button>)}
+        </div>
+        {todos.isLoading ? <ListSkeleton /> : todos.isError ? <ErrorState message={todos.error instanceof Error ? todos.error.message : "카테고리 TODO를 불러오지 못했어요."} onRetry={() => void todos.refetch()} /> : filtered.length === 0 ? <EmptyState title={filter === "ALL" ? "아직 담긴 TODO가 없어요" : `${filters.find((item) => item.value === filter)?.label} TODO가 없어요`} body={filter === "ALL" ? "TODO를 만들 때 이 카테고리를 선택하면 여기에 모여요." : "다른 상태를 선택해 목록을 확인해보세요."} /> : (
+          <div className="category-todo-list">
+            {filtered.map((todo) => {
+              const date = new Date(todo.dueDate);
+              const dateKey = localDateKey(todo.dueDate);
+              return (
+                <Link href={`/todos?date=${dateKey}`} onClick={onClose} key={todo.id} aria-label={`${todo.title}, ${todo.completedAt ? "완료" : "예정"}, 일정에서 보기`}>
+                  <span className={todo.completedAt ? "done" : "open"}>{todo.completedAt ? <CheckCircle2 aria-hidden /> : <Circle aria-hidden />}</span>
+                  <div><b>{todo.title}</b><small><CalendarDays aria-hidden />{date.toLocaleDateString("ko-KR", { month: "short", day: "numeric", weekday: "short" })}<Clock3 aria-hidden />{date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}{todo.repeatRule && <><Repeat2 aria-hidden />{repeatLabel(todo.repeatRule)}</>}</small></div>
+                  <ChevronRight aria-hidden />
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Sheet>
+  );
+}
 
 function CategoryEditor({ category, onClose, onSaved }: { category?: TodoCategoryDto | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(category?.name ?? "");
@@ -121,6 +181,7 @@ export default function TodoCategoriesPage() {
   const { status } = useSession();
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<"new" | TodoCategoryDto | null>(null);
+  const [viewing, setViewing] = useState<TodoCategoryDto | null>(null);
   const [ordering, setOrdering] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [notice, setNotice] = useState("");
@@ -146,8 +207,11 @@ export default function TodoCategoriesPage() {
             <button type="button" className="category-create-card" onClick={() => setEditor("new")}><span><Plus aria-hidden /></span><b>새 카테고리</b><small>나만의 분류 만들기</small></button>
             {active.map((item) => (
               <article className={`category-gallery-card category-tone-${item.color}`} key={item.id}>
-                <header><span><Tags aria-hidden /></span><small>{item.isDefault ? "기본" : `${item.baseCategory} 기준`}</small></header>
-                <div><h2>{item.name}</h2><p>TODO {item.todoCount ?? 0}개</p></div>
+                <button type="button" className="category-card-open" onClick={() => setViewing(item)} aria-label={`${item.name} 카테고리 TODO 보기`}>
+                  <header><span><Tags aria-hidden /></span><small>{item.isDefault ? "기본" : `${item.baseCategory} 기준`}</small></header>
+                  <div><h2>{item.name}</h2><p>TODO {item.todoCount ?? 0}개</p></div>
+                  <span className="category-card-hint">목록 보기 <ChevronRight aria-hidden /></span>
+                </button>
                 <footer>{!item.isDefault && <button type="button" onClick={() => setEditor(item)}><Pencil />편집</button>}<button type="button" onClick={() => update.mutate({ id: item.id, archived: true })}><EyeOff />숨김</button></footer>
               </article>
             ))}
@@ -157,6 +221,7 @@ export default function TodoCategoriesPage() {
       )}
       <button className="archived-category-toggle" onClick={() => setShowArchived((value) => !value)} aria-expanded={showArchived}>{showArchived ? <Eye /> : <Archive />}보관된 카테고리 {showArchived ? "접기" : "보기"}</button>
       {showArchived && archived.length > 0 && <div className="category-manage-list archived">{archived.map((item) => <article key={item.id}><span className="category-manage-icon"><Archive /></span><div><b>{item.name}</b><small>{item.baseCategory} 기준 · 기존 TODO 유지</small></div><button className="category-restore" onClick={() => update.mutate({ id: item.id, archived: false })}>다시 사용</button></article>)}</div>}
+      {viewing && <CategoryTodoSheet category={viewing} onClose={() => setViewing(null)} />}
       {editor && <CategoryEditor category={editor === "new" ? null : editor} onClose={() => setEditor(null)} onSaved={saved} />}
       {ordering && <CategoryOrderEditor categories={active} busy={reorder.isPending} onClose={() => setOrdering(false)} onSave={async (ids) => { await reorder.mutateAsync(ids); }} />}
     </main>

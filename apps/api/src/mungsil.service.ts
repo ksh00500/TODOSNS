@@ -104,6 +104,24 @@ export class MungsilService {
     return rows.map(({ _count, ...row }) => ({ ...row, todoCount: _count.todos }));
   }
 
+  async listTodoCategoryTodos(userId: string, id: string) {
+    await this.ensureTodoCategories(userId);
+    const category = await this.prisma.todoCategory.findFirst({ where: { id, userId } });
+    if (!category) throw new NotFoundException("카테고리를 찾을 수 없어요.");
+    return this.prisma.todo.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        OR: [
+          { categoryId: id },
+          ...(category.isDefault ? [{ categoryId: null, category: category.name }] : []),
+        ],
+      },
+      orderBy: [{ completedAt: "asc" }, { dueDate: "asc" }],
+      include: { categoryRef: true },
+    });
+  }
+
   async createTodoCategory(userId: string, dto: CreateTodoCategoryDto) {
     await this.ensureTodoCategories(userId);
     if (!TODO_BASE_CATEGORIES.has(dto.baseCategory as typeof TODO_CATEGORY_DEFAULTS[number]["baseCategory"])) throw new BadRequestException("기준 카테고리를 확인해주세요.");
@@ -1355,6 +1373,16 @@ export class MungsilService {
   private async ownTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, userId, deletedAt: null } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); return todo; }
   private async ensureTodoCategories(userId: string) {
     await this.prisma.todoCategory.createMany({ data: TODO_CATEGORY_DEFAULTS.map((item, position) => ({ userId, ...item, position, isDefault: true })), skipDuplicates: true });
+    const [unassignedTodo, unassignedSeries] = await Promise.all([
+      this.prisma.todo.findFirst({ where: { userId, categoryId: null }, select: { id: true } }),
+      this.prisma.todoSeries.findFirst({ where: { userId, categoryId: null }, select: { id: true } }),
+    ]);
+    if (!unassignedTodo && !unassignedSeries) return;
+    const defaults = await this.prisma.todoCategory.findMany({ where: { userId, isDefault: true }, select: { id: true, baseCategory: true } });
+    await this.prisma.$transaction(defaults.flatMap((category) => [
+      ...(unassignedTodo ? [this.prisma.todo.updateMany({ where: { userId, categoryId: null, category: category.baseCategory }, data: { categoryId: category.id } })] : []),
+      ...(unassignedSeries ? [this.prisma.todoSeries.updateMany({ where: { userId, categoryId: null, category: category.baseCategory }, data: { categoryId: category.id } })] : []),
+    ]));
   }
   private async resolveTodoCategory(userId: string, categoryId?: string | null, fallback = "생활", allowArchived = false) {
     if (categoryId) {
