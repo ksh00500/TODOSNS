@@ -1,7 +1,7 @@
 import type { Challenge, ChallengeChatMessage, ChatInboxItem, ChatNotificationLevel, Comment, DirectChatMessage, DirectConversation, DirectMessageRequest, FeedPage, FeedPost, SearchResults, SessionUser, TodoDto, TodoListDto, UserSummary } from "./types";
 
 export const DEMO_MODE_KEY = "mungsil_demo_mode";
-const DEMO_DATA_KEY = "mungsil_demo_data_v7";
+const DEMO_DATA_KEY = "mungsil_demo_data_v8";
 export const demoAvailable = process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_DEMO === "true";
 const demoAdminPreview = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEMO_ADMIN === "true";
 
@@ -53,10 +53,10 @@ function initialState(): DemoState {
     interests: ["운동", "독서", "마음"],
   };
   const todos: TodoDto[] = [
-    { id: "demo-todo-walk", title: "출근 전 20분 산책", dueDate: at(0, 8), completedAt: at(0, 8, 24), visibility: "PRIVATE", repeatRule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", category: "운동" },
-    { id: "demo-todo-words", title: "영어 단어 30개 복습", dueDate: at(0, 12, 30), completedAt: at(0, 12, 48), visibility: "PRIVATE", repeatRule: "FREQ=DAILY", category: "공부" },
-    { id: "demo-todo-water", title: "물 1.5L 마시기", dueDate: at(0, 18), visibility: "PRIVATE", repeatRule: "FREQ=DAILY", category: "건강" },
-    { id: "demo-todo-book", title: "잠들기 전 책 10쪽", notes: "휴대폰은 거실에 두기", dueDate: at(0, 22, 30), visibility: "PRIVATE", repeatRule: "FREQ=DAILY", category: "독서" },
+    { id: "demo-todo-walk", seriesId: "demo-series-walk", title: "출근 전 20분 산책", dueDate: at(0, 8), completedAt: at(0, 8, 24), visibility: "PRIVATE", repeatRule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", category: "운동" },
+    { id: "demo-todo-words", seriesId: "demo-series-words", title: "영어 단어 30개 복습", dueDate: at(0, 12, 30), completedAt: at(0, 12, 48), visibility: "PRIVATE", repeatRule: "FREQ=DAILY", category: "공부" },
+    { id: "demo-todo-water", seriesId: "demo-series-water", title: "물 1.5L 마시기", dueDate: at(0, 18), visibility: "PRIVATE", repeatRule: "FREQ=DAILY", category: "건강" },
+    { id: "demo-todo-book", seriesId: "demo-series-book", title: "잠들기 전 책 10쪽", notes: "휴대폰은 거실에 두기", dueDate: at(0, 22, 30), visibility: "PRIVATE", repeatRule: "FREQ=DAILY", category: "독서" },
     { id: "demo-todo-plan", title: "다음 주 우선순위 세 가지 정리", dueDate: at(1, 19), visibility: "PRIVATE", category: "커리어" },
     { id: "demo-todo-stretch", title: "목과 어깨 스트레칭 10분", dueDate: at(-1, 21), completedAt: at(-1, 21, 12), visibility: "PRIVATE", category: "건강" },
   ];
@@ -159,6 +159,16 @@ function readState() {
 
 function writeState(state: DemoState) {
   window.localStorage.setItem(DEMO_DATA_KEY, JSON.stringify(state));
+}
+
+function setDemoTodoList(state: DemoState, todo: TodoDto, todoListId: unknown) {
+  for (const list of state.lists) {
+    list.items = list.items.filter(({ todo: listed }) => listed.id !== todo.id && !(todo.seriesId && listed.seriesId === todo.seriesId));
+  }
+  if (typeof todoListId !== "string") return;
+  const target = state.lists.find((list) => list.id === todoListId);
+  if (!target) throw new Error("루틴 묶음을 찾지 못했어요.");
+  target.items.push({ order: target.items.length, todo: { ...todo } });
 }
 
 function bodyOf(init: RequestInit) {
@@ -298,14 +308,23 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     return clone(state.todos.filter((todo) => (!from || new Date(todo.dueDate) >= new Date(from)) && (!to || new Date(todo.dueDate) <= new Date(to)))) as T;
   }
   if (pathname === "/todos" && method === "POST") {
-    const todo: TodoDto = { id: uid("demo-todo"), title: String(body.title), notes: body.notes ? String(body.notes) : null, dueDate: String(body.dueDate), visibility: (body.visibility as TodoDto["visibility"]) ?? "PRIVATE", repeatRule: body.repeatRule ? String(body.repeatRule) : null, category: String(body.category ?? "기타") };
-    state.todos.push(todo); writeState(state); return clone(todo) as T;
+    const repeatRule = body.repeatRule ? String(body.repeatRule) : null;
+    const todo: TodoDto = { id: uid("demo-todo"), seriesId: repeatRule ? uid("demo-series") : null, title: String(body.title), notes: body.notes ? String(body.notes) : null, dueDate: String(body.dueDate), visibility: (body.visibility as TodoDto["visibility"]) ?? "PRIVATE", repeatRule, category: String(body.category ?? "기타") };
+    state.todos.push(todo); setDemoTodoList(state, todo, body.todoListId); writeState(state); return clone(todo) as T;
   }
   const todoMatch = pathname.match(/^\/todos\/([^/]+)$/);
   if (todoMatch && method === "PATCH") {
     const index = state.todos.findIndex((item) => item.id === todoMatch[1]);
     if (index < 0) throw new Error("TODO를 찾지 못했어요.");
-    state.todos[index] = { ...state.todos[index], ...body } as TodoDto; writeState(state); return clone(state.todos[index]) as T;
+    const { todoListId, ...changes } = body;
+    state.todos[index] = { ...state.todos[index], ...changes } as TodoDto;
+    if (changes.repeatRule === null) state.todos[index].seriesId = null;
+    else if (typeof changes.repeatRule === "string" && !state.todos[index].seriesId) state.todos[index].seriesId = uid("demo-series");
+    for (const list of state.lists) {
+      list.items = list.items.map((item) => item.todo.id === state.todos[index].id ? { ...item, todo: { ...state.todos[index] } } : item);
+    }
+    if (todoListId !== undefined) setDemoTodoList(state, state.todos[index], todoListId);
+    writeState(state); return clone(state.todos[index]) as T;
   }
   if (todoMatch && method === "DELETE") {
     const removed = state.todos.find((item) => item.id === todoMatch[1]);

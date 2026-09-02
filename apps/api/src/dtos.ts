@@ -23,6 +23,7 @@ export class CreateTodoDto {
   @IsDateString() dueDate!: string;
   @IsOptional() @IsString() repeatRule?: string | null;
   @IsOptional() @IsEnum(Visibility) visibility: Visibility = Visibility.PRIVATE;
+  @IsOptional() @IsString() todoListId?: string | null;
 }
 
 export class UpdateTodoDto {
@@ -33,6 +34,7 @@ export class UpdateTodoDto {
   @IsOptional() @IsString() repeatRule?: string | null;
   @IsOptional() @IsEnum(Visibility) visibility?: Visibility;
   @IsOptional() @IsEnum(RecurrenceEditScope) recurrenceScope: RecurrenceEditScope = RecurrenceEditScope.THIS;
+  @IsOptional() @IsString() todoListId?: string | null;
 }
 
 export class CompleteTodoDto {

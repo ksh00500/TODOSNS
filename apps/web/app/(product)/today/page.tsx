@@ -47,6 +47,7 @@ export default function TodayPage() {
       apiFetch<TodoDto>("/todos", { method: "POST", body: JSON.stringify(draft) }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["todos"] });
+      void queryClient.invalidateQueries({ queryKey: ["todo-lists"] });
       setComposer(false);
       setNotice("새 TODO를 오늘에 담았어요.");
     },
@@ -62,6 +63,7 @@ export default function TodayPage() {
       setEditing(null);
       setNotice("변경사항을 저장했어요.");
       void queryClient.invalidateQueries({ queryKey: ["todos"] });
+      void queryClient.invalidateQueries({ queryKey: ["todo-lists"] });
     },
     onError: () => setNotice("변경사항을 저장하지 못했어요."),
   });
@@ -276,8 +278,8 @@ export default function TodayPage() {
         </>
       )}
 
-      {composer && <TodoComposer date={date} busy={create.isPending} onClose={() => setComposer(false)} onSave={(draft) => create.mutate(draft)} />}
-      {editing && <TodoComposer date={date} todo={editing} busy={update.isPending || remove.isPending || endSeries.isPending} onClose={() => setEditing(null)} onSave={(draft) => update.mutate(draft)} onDelete={() => remove.mutate()} onEndSeries={() => endSeries.mutate()} />}
+      {composer && <TodoComposer date={date} lists={lists.data ?? []} busy={create.isPending} onClose={() => setComposer(false)} onSave={(draft) => create.mutate(draft)} />}
+      {editing && <TodoComposer date={date} todo={editing} lists={lists.data ?? []} busy={update.isPending || remove.isPending || endSeries.isPending} onClose={() => setEditing(null)} onSave={(draft) => update.mutate(draft)} onDelete={() => remove.mutate()} onEndSeries={() => endSeries.mutate()} />}
       {publishTodo && <PublishSheet todo={publishTodo} busy={publish.isPending} onClose={() => setPublishTodo(null)} onPublish={(data) => publish.mutate(data)} />}
     </main>
   );

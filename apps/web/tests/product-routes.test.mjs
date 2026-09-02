@@ -53,6 +53,23 @@ test("TODO 작성과 가져오기는 뭉실 전용 선택기 계약을 공유한
   assert.match(importer, /repeatMode: listRepeatMode/);
 });
 
+test("TODO 작성과 편집에서 기존 루틴 묶음을 지정하거나 해제할 수 있다", async () => {
+  const composer = await readFile(new URL("../components/todo-composer.tsx", import.meta.url), "utf8");
+  const today = await readFile(new URL("../app/(product)/today/page.tsx", import.meta.url), "utf8");
+  const todos = await readFile(new URL("../app/(product)/todos/page.tsx", import.meta.url), "utf8");
+  const dto = await readFile(new URL("../../api/src/dtos.ts", import.meta.url), "utf8");
+  const service = await readFile(new URL("../../api/src/mungsil.service.ts", import.meta.url), "utf8");
+  for (const source of [today, todos]) assert.match(source, /lists=\{lists\.data \?\? \[\]\}/);
+  assert.match(composer, /todo-list-selector/);
+  assert.match(composer, /그룹 없음/);
+  assert.match(composer, /aria-pressed/);
+  assert.match(composer, /todoListId: todoListId \|\| null/);
+  assert.match(dto, /todoListId\?: string \| null/);
+  assert.match(service, /setTodoListMembership/);
+  assert.match(service, /preserveDetachedSeriesMembership/);
+  assert.doesNotMatch(composer, /<select/);
+});
+
 test("오늘과 TODO 화면은 루틴을 접을 수 있는 스레드형 그룹으로 표시한다", async () => {
   const group = await readFile(new URL("../components/todo-group-list.tsx", import.meta.url), "utf8");
   const today = await readFile(new URL("../app/(product)/today/page.tsx", import.meta.url), "utf8");

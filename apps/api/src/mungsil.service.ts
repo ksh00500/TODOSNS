@@ -84,11 +84,17 @@ export class MungsilService {
   }
 
   async createTodo(userId: string, dto: CreateTodoDto) {
-    if (dto.repeatRule) {
+    const { todoListId, ...todoInput } = dto;
+    if (todoListId) await this.ownTodoList(userId, todoListId);
+    let todo;
+    if (todoInput.repeatRule) {
       const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
-      return this.recurrence.createSeries(userId, user.timezone, dto);
+      todo = await this.recurrence.createSeries(userId, user.timezone, todoInput);
+    } else {
+      todo = await this.prisma.todo.create({ data: { ...todoInput, userId, dueDate: new Date(todoInput.dueDate), kind: "SINGLE" } });
     }
-    return this.prisma.todo.create({ data: { ...dto, userId, dueDate: new Date(dto.dueDate), kind: "SINGLE" } });
+    if (todoListId) await this.setTodoListMembership(userId, todo, todoListId);
+    return todo;
   }
   listTodos(userId: string, from?: string, to?: string) { return this.prisma.todo.findMany({ where: { userId, deletedAt: null, dueDate: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, orderBy: [{ completedAt: "asc" }, { dueDate: "asc" }] }); }
 
@@ -158,13 +164,14 @@ export class MungsilService {
 
   async updateTodo(userId: string, todoId: string, dto: UpdateTodoDto) {
     const todo = await this.ownTodo(userId, todoId);
+    if (dto.todoListId) await this.ownTodoList(userId, dto.todoListId);
+    let updated;
     if (todo.seriesId && dto.recurrenceScope === "FUTURE") {
-      return dto.repeatRule === null
+      updated = await (dto.repeatRule === null
         ? this.recurrence.stopSeriesFrom(userId, todoId, dto)
-        : this.recurrence.updateFuture(userId, todoId, dto);
-    }
-    if (todo.seriesId && dto.repeatRule === null) {
-      return this.prisma.todo.update({
+        : this.recurrence.updateFuture(userId, todoId, dto));
+    } else if (todo.seriesId && dto.repeatRule === null) {
+      updated = await this.prisma.todo.update({
         where: { id: todoId },
         data: {
           seriesId: null,
@@ -178,8 +185,7 @@ export class MungsilService {
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
         },
       });
-    }
-    if (!todo.seriesId && dto.repeatRule) {
+    } else if (!todo.seriesId && dto.repeatRule) {
       const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
       const merged: CreateTodoDto = {
         title: dto.title ?? todo.title,
@@ -189,19 +195,25 @@ export class MungsilService {
         repeatRule: dto.repeatRule,
         visibility: dto.visibility ?? todo.visibility,
       };
-      return this.recurrence.convertTodo(userId, todoId, user.timezone, merged);
+      updated = await this.recurrence.convertTodo(userId, todoId, user.timezone, merged);
+    } else {
+      updated = await this.prisma.todo.update({
+        where: { id: todoId },
+        data: {
+          title: dto.title,
+          notes: dto.notes,
+          category: dto.category,
+          repeatRule: dto.repeatRule,
+          visibility: dto.visibility,
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        },
+      });
     }
-    return this.prisma.todo.update({
-      where: { id: todoId },
-      data: {
-        title: dto.title,
-        notes: dto.notes,
-        category: dto.category,
-        repeatRule: dto.repeatRule,
-        visibility: dto.visibility,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-      },
-    });
+    if (dto.todoListId !== undefined) {
+      await this.preserveDetachedSeriesMembership(userId, todo, updated);
+      await this.setTodoListMembership(userId, updated, dto.todoListId, todo.id);
+    }
+    return updated;
   }
 
   async removeTodo(userId: string, todoId: string) {
@@ -235,6 +247,7 @@ export class MungsilService {
 
   async cloneTodo(userId: string, sourceId: string, dto: CloneTodoDto) {
     const source = await this.readableTodo(userId, sourceId);
+    if (dto.todoListId) await this.ownTodoList(userId, dto.todoListId);
     const repeatRule = dto.keepRepeat ? (dto.repeatRule ?? source.repeatRule) : null;
     const dueDate = dto.dueDate ?? new Date().toISOString();
     const todo = repeatRule
@@ -243,6 +256,7 @@ export class MungsilService {
           return this.recurrence.createSeriesInTransaction(tx, userId, user.timezone, { title: dto.title ?? source.title, notes: dto.notes ?? source.notes ?? undefined, category: dto.category ?? source.category, dueDate, repeatRule, visibility: dto.visibility ?? Visibility.PRIVATE }, source.id);
         })
       : await this.prisma.todo.create({ data: { userId, sourceTodoId: source.id, title: dto.title ?? source.title, notes: dto.notes ?? source.notes, category: dto.category ?? source.category, dueDate: new Date(dueDate), kind: "SINGLE", visibility: dto.visibility ?? Visibility.PRIVATE } });
+    if (dto.todoListId) await this.setTodoListMembership(userId, todo, dto.todoListId);
     if (source.userId !== userId) {
       await this.reward(source.userId, 5, "UNIQUE_COPY", todo.id, 3);
       await this.notify(source.userId, NotificationType.COPY, "실천을 가져갔어요", "누군가 회원님의 TODO를 자신의 하루에 담았어요.", source.id, "TODO", source.id);
@@ -1206,6 +1220,66 @@ export class MungsilService {
     const now = new Date();
     if (now < startsAt) return 0;
     return Math.max(1, Math.min(Math.floor((endsAt.getTime() - startsAt.getTime()) / 86_400_000) + 1, Math.floor((now.getTime() - startsAt.getTime()) / 86_400_000) + 1));
+  }
+
+  private async preserveDetachedSeriesMembership(
+    userId: string,
+    before: { id: string; seriesId: string | null },
+    after: { id: string; seriesId: string | null },
+  ) {
+    if (!before.seriesId || before.seriesId === after.seriesId) return;
+    const memberships = await this.prisma.todoListItem.findMany({
+      where: { todoId: before.id, list: { userId } },
+      select: { listId: true, todoId: true },
+    });
+    if (!memberships.length) return;
+    const replacement = await this.prisma.todo.findFirst({
+      where: { userId, seriesId: before.seriesId, id: { not: before.id }, deletedAt: null },
+      orderBy: { dueDate: "asc" },
+      select: { id: true },
+    });
+    await this.prisma.$transaction(async (tx) => {
+      for (const membership of memberships) {
+        if (!replacement) {
+          await tx.todoListItem.delete({ where: { listId_todoId: membership } });
+          continue;
+        }
+        const alreadyRepresented = await tx.todoListItem.findUnique({
+          where: { listId_todoId: { listId: membership.listId, todoId: replacement.id } },
+        });
+        if (alreadyRepresented) {
+          await tx.todoListItem.delete({ where: { listId_todoId: membership } });
+        } else {
+          await tx.todoListItem.update({
+            where: { listId_todoId: membership },
+            data: { todoId: replacement.id },
+          });
+        }
+      }
+    });
+  }
+
+  private async setTodoListMembership(
+    userId: string,
+    todo: { id: string; seriesId: string | null },
+    todoListId: string | null,
+    previousTodoId?: string,
+  ) {
+    if (todoListId) await this.ownTodoList(userId, todoListId);
+    const todoIds = [...new Set([todo.id, previousTodoId].filter((id): id is string => Boolean(id)))];
+    const related: Prisma.TodoListItemWhereInput[] = [{ todoId: { in: todoIds } }];
+    if (todo.seriesId) related.push({ todo: { seriesId: todo.seriesId } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.todoListItem.deleteMany({ where: { list: { userId }, OR: related } });
+      if (!todoListId) return;
+      const currentLast = await tx.todoListItem.aggregate({
+        where: { listId: todoListId },
+        _max: { order: true },
+      });
+      await tx.todoListItem.create({
+        data: { listId: todoListId, todoId: todo.id, order: (currentLast._max.order ?? -1) + 1 },
+      });
+    });
   }
 
   private async ownTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, userId, deletedAt: null } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); return todo; }

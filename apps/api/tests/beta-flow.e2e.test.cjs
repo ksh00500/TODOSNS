@@ -59,6 +59,28 @@ test("두 사용자의 생성 → 완료 → 공유 → 응원·댓글 → 가�
       login(server, userCap.email),
     ]);
 
+    const routine = await request(server)
+      .post("/api/v1/todo-lists")
+      .set(auth(sessionA.token))
+      .send({ title: "출근 준비 루틴", todoIds: [], visibility: "PRIVATE" })
+      .expect(201);
+    const groupedRecurring = await request(server)
+      .post("/api/v1/todos")
+      .set(auth(sessionA.token))
+      .send({ title: "가방 챙기기", category: "생활", dueDate: new Date(Date.now() + 300_000).toISOString(), repeatRule: "DAILY", visibility: "PRIVATE", todoListId: routine.body.id })
+      .expect(201);
+    let ownLists = await request(server).get("/api/v1/todo-lists").set(auth(sessionA.token)).expect(200);
+    let groupedList = ownLists.body.find((item) => item.id === routine.body.id);
+    assert.equal(groupedList.items.some((item) => item.todo.seriesId === groupedRecurring.body.seriesId), true);
+    await request(server)
+      .patch(`/api/v1/todos/${groupedRecurring.body.id}`)
+      .set(auth(sessionA.token))
+      .send({ todoListId: null })
+      .expect(200);
+    ownLists = await request(server).get("/api/v1/todo-lists").set(auth(sessionA.token)).expect(200);
+    groupedList = ownLists.body.find((item) => item.id === routine.body.id);
+    assert.equal(groupedList.items.some((item) => item.todo.seriesId === groupedRecurring.body.seriesId), false);
+
     const idempotencyKey = `todo-${Date.now()}`;
     const duplicatePayload = { title: "중복되지 않을 TODO", category: "생활", dueDate: new Date().toISOString(), visibility: "PRIVATE" };
     const firstCreate = await request(server).post("/api/v1/todos").set(auth(sessionA.token)).set("Idempotency-Key", idempotencyKey).send(duplicatePayload).expect(201);
