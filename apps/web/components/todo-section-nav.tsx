@@ -6,7 +6,7 @@ import { CalendarDays, Layers3, Tags } from "lucide-react";
 
 const items = [
   { href: "/todos", label: "일정", icon: CalendarDays },
-  { href: "/todos/routines", label: "루틴", icon: Layers3 },
+  { href: "/todos/routines", label: "그룹", icon: Layers3 },
   { href: "/todos/categories", label: "카테고리", icon: Tags },
 ];
 

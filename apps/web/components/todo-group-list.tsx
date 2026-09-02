@@ -38,21 +38,24 @@ export function TodoGroupList({
   hiddenTodoIds,
   renderTodo,
   onEditGroup,
+  presentation,
 }: {
   todos: TodoDto[];
   lists: TodoListDto[];
   hiddenTodoIds?: ReadonlySet<string>;
   renderTodo: (todo: TodoDto) => ReactNode;
   onEditGroup?: (list: TodoListDto) => void;
+  presentation?: "collapsible" | "flat";
 }) {
   const { groups, ungrouped } = useMemo(() => groupTodos(todos, lists), [todos, lists]);
+  const mode = presentation ?? (onEditGroup ? "flat" : "collapsible");
   const [expanded, setExpanded] = useState<string[]>([]);
   const visibleUngrouped = ungrouped.filter((todo) => !hiddenTodoIds?.has(todo.id));
 
   const toggle = (id: string) => setExpanded((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
 
   return (
-    <div className="todo-group-list">
+    <div className={`todo-group-list ${mode === "flat" ? "flat" : ""}`}>
       {groups.map(({ list, todos: members }) => {
         const visibleMembers = members.filter((todo) => !hiddenTodoIds?.has(todo.id));
         if (!visibleMembers.length) return null;
@@ -60,6 +63,17 @@ export function TodoGroupList({
         const completed = members.filter((todo) => todo.completedAt).length;
         const next = members.find((todo) => !todo.completedAt);
         const progress = Math.round((completed / members.length) * 100);
+        if (mode === "flat") {
+          return (
+            <section className="todo-cluster" key={list.id} aria-label={`${list.title} 그룹`}>
+              <header className="todo-cluster-label">
+                <span><Layers3 aria-hidden /><b>{list.title}</b><small>{completed}/{members.length}</small></span>
+                {onEditGroup && <button type="button" onClick={() => onEditGroup(list)} aria-label={`${list.title} 그룹 관리`}><Settings2 /></button>}
+              </header>
+              <div className="todo-stack compact">{visibleMembers.map((todo) => renderTodo(todo))}</div>
+            </section>
+          );
+        }
         return (
           <section className={`todo-thread ${isExpanded ? "expanded" : ""}`} key={list.id}>
             <div className="todo-thread-head">
@@ -81,7 +95,7 @@ export function TodoGroupList({
 
       {visibleUngrouped.length > 0 && (
         <section className="ungrouped-todos">
-          {groups.length > 0 && <div className="ungrouped-heading"><span>그룹 없는 TODO</span><small>{visibleUngrouped.length}개</small></div>}
+          {groups.length > 0 && <div className="ungrouped-heading"><span>{mode === "flat" ? "개별 TODO" : "그룹 없는 TODO"}</span><small>{visibleUngrouped.length}개</small></div>}
           <div className="todo-stack compact">{visibleUngrouped.map((todo) => renderTodo(todo))}</div>
         </section>
       )}

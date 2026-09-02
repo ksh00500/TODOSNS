@@ -292,12 +292,92 @@ svg { width: 20px; height: 20px; stroke-width: 2; }
 .category-tone-lilac { background:var(--lilac)!important; }
 .category-option small { display:block; margin-top:1px; color:var(--muted); font-size:12px; line-height:1.1; }
 
+/* Flat schedule groups, explicit group selection, and category gallery */
+.todo-group-list.flat { gap:14px; }
+.todo-cluster { padding:7px; border:1px solid rgba(101,85,143,.1); border-radius:19px; background:rgba(245,242,247,.52); }
+.todo-cluster-label { min-height:44px; padding:0 0 5px 6px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.todo-cluster-label > span { min-width:0; display:flex; align-items:center; gap:6px; color:var(--ink-soft); }
+.todo-cluster-label > span > svg { width:15px; height:15px; color:var(--primary); }
+.todo-cluster-label b { overflow:hidden; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.todo-cluster-label small { flex:0 0 auto; color:var(--muted); font-size:12px; }
+.todo-cluster-label > button { width:44px; height:44px; display:grid; place-items:center; border:0; border-radius:12px; background:transparent; color:var(--muted); }
+.todo-cluster-label > button svg { width:16px; }
+.todo-cluster .todo-stack { gap:7px; }
+.todo-cluster .todo-item { box-shadow:none; }
+
+.group-todo-picker { min-width:0; margin:0; padding:0; border:0; }
+.group-todo-picker legend { width:100%; margin-bottom:4px; padding:0; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.group-todo-picker legend span { font-size:13px; font-weight:800; }
+.group-todo-picker legend small { color:var(--primary); font-size:12px; font-weight:800; }
+.group-todo-picker > p { margin:0 0 10px; color:var(--muted); font-size:12px; line-height:1.5; }
+.group-todo-picker > div { display:grid; gap:8px; }
+.group-todo-picker > div > button { width:100%; min-height:78px; padding:11px; display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:10px; border:1px solid var(--line); border-radius:16px; background:var(--paper); color:var(--ink); text-align:left; transition:border-color var(--motion-fast) var(--ease-standard),background var(--motion-fast) var(--ease-standard),transform var(--motion-fast) var(--ease-standard); }
+.group-todo-picker > div > button:active { transform:scale(.99); }
+.group-todo-picker > div > button.selected { border-color:var(--primary); background:var(--lilac); box-shadow:0 0 0 2px rgba(101,85,143,.07); }
+.group-todo-picker > div > button.unavailable { background:var(--surface-low); opacity:.7; }
+.group-todo-check { width:42px; height:42px; display:grid; place-items:center; border-radius:13px; background:var(--surface-low); color:var(--muted); }
+.selected .group-todo-check { background:var(--primary); color:white; }
+.group-todo-check svg { width:19px; }
+.group-todo-copy { min-width:0; }
+.group-todo-copy b,.group-todo-copy small,.group-todo-copy em { display:flex; align-items:center; gap:5px; }
+.group-todo-copy b { overflow:hidden; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+.group-todo-copy small { margin-top:3px; color:var(--muted); font-size:12px; line-height:1.35; }
+.group-todo-copy small svg { width:13px; height:13px; flex:0 0 auto; }
+.group-todo-copy small span { padding:2px 6px; border-radius:999px; background:rgba(255,255,255,.72); color:var(--ink-soft); }
+.group-todo-copy em { margin-top:5px; color:var(--danger); font-size:12px; font-style:normal; font-weight:800; }
+
+.category-page-actions { min-height:44px; margin:0 0 8px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.category-page-actions button { min-height:44px; padding:0 12px; display:flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:13px; background:var(--paper); color:var(--ink-soft); font-size:12px; font-weight:800; }
+.category-page-actions button:disabled { opacity:.42; }
+.category-page-actions button svg { width:17px; }
+.category-page-actions span { color:var(--muted); font-size:12px; }
+.category-gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.category-create-card,.category-gallery-card { min-width:0; min-height:156px; border-radius:20px; }
+.category-create-card { padding:15px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; border:1px dashed rgba(101,85,143,.42); background:rgba(232,222,255,.3); color:var(--primary); text-align:left; }
+.category-create-card > span { width:42px; height:42px; margin-bottom:12px; display:grid; place-items:center; border-radius:14px; background:var(--primary); color:white; }
+.category-create-card svg { width:20px; }
+.category-create-card b,.category-create-card small { display:block; }
+.category-create-card b { font-size:14px; }
+.category-create-card small { margin-top:4px; color:var(--muted); font-size:12px; }
+.category-gallery-card { padding:13px; display:flex; flex-direction:column; border:1px solid rgba(101,85,143,.08); color:var(--ink); }
+.category-gallery-card header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.category-gallery-card header > span { width:38px; height:38px; display:grid; place-items:center; border-radius:12px; background:rgba(255,255,255,.76); color:var(--primary); }
+.category-gallery-card header svg { width:18px; }
+.category-gallery-card header small { overflow:hidden; color:var(--ink-soft); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.category-gallery-card > div { margin:13px 0 8px; flex:1; }
+.category-gallery-card h2 { margin:0; overflow:hidden; font-size:15px; text-overflow:ellipsis; white-space:nowrap; }
+.category-gallery-card p { margin:4px 0 0; color:var(--ink-soft); font-size:12px; }
+.category-gallery-card footer { display:flex; gap:5px; }
+.category-gallery-card footer button { min-width:44px; min-height:44px; padding:0 8px; display:flex; align-items:center; justify-content:center; gap:4px; flex:1; border:0; border-radius:12px; background:rgba(255,255,255,.7); color:var(--ink-soft); font-size:12px; font-weight:800; }
+.category-gallery-card footer svg { width:15px; }
+
+.category-order-editor { display:grid; gap:14px; }
+.category-order-editor > p { margin:0; color:var(--ink-soft); font-size:12px; line-height:1.55; }
+.category-order-list { display:grid; gap:7px; }
+.category-order-list article { min-height:64px; padding:6px; display:grid; grid-template-columns:44px 44px minmax(0,1fr); align-items:center; gap:8px; border:1px solid var(--line); border-radius:16px; background:var(--paper); transition:border-color var(--motion-fast) var(--ease-standard),background var(--motion-fast) var(--ease-standard),opacity var(--motion-fast) var(--ease-standard); }
+.category-order-list article.selected { border-color:rgba(101,85,143,.35); background:var(--lilac); }
+.category-order-list article.dragging { opacity:.65; box-shadow:var(--shadow-sm); }
+.category-drag-handle { width:44px; height:44px; display:grid; place-items:center; border:0; border-radius:12px; background:var(--surface-low); color:var(--primary); cursor:grab; touch-action:none; }
+.category-drag-handle:active { cursor:grabbing; }
+.category-drag-handle svg { width:20px; }
+.category-order-name { min-width:0; min-height:44px; padding:0; border:0; background:transparent; color:var(--ink); text-align:left; }
+.category-order-name b,.category-order-name small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.category-order-name b { font-size:13px; }
+.category-order-name small { margin-top:3px; color:var(--muted); font-size:12px; }
+.category-order-jumps { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+.category-order-jumps button { min-width:0; min-height:52px; padding:5px 2px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:1px solid var(--line); border-radius:13px; background:var(--paper); color:var(--ink-soft); font-size:12px; font-weight:800; }
+.category-order-jumps button:disabled { opacity:.35; }
+.category-order-jumps svg { width:16px; height:16px; }
+
 @media (max-width:370px) {
   .todo-section-nav a { gap:4px; padding-inline:3px; }
   .compact-week-card { margin-inline:-4px; padding-inline:4px; }
   .category-manage-list article { gap:5px; }
   .category-row-action { width:40px; }
   .base-category-options { grid-template-columns:repeat(2,1fr); }
+  .category-gallery { gap:7px; }
+  .category-create-card,.category-gallery-card { min-height:150px; padding:11px; }
+  .category-gallery-card footer button { padding-inline:4px; }
 }
 
 /* Challenge group chat */
