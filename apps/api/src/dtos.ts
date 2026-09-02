@@ -20,6 +20,7 @@ export class CreateTodoDto {
   @IsString() @Length(1, 120) title!: string;
   @IsOptional() @IsString() @Length(0, 500) notes?: string;
   @IsOptional() @IsString() @Length(1, 30) category = "생활";
+  @IsOptional() @IsString() categoryId?: string | null;
   @IsDateString() dueDate!: string;
   @IsOptional() @IsString() repeatRule?: string | null;
   @IsOptional() @IsEnum(Visibility) visibility: Visibility = Visibility.PRIVATE;
@@ -30,11 +31,31 @@ export class UpdateTodoDto {
   @IsOptional() @IsString() @Length(1, 120) title?: string;
   @IsOptional() @IsString() @Length(0, 500) notes?: string;
   @IsOptional() @IsString() @Length(1, 30) category?: string;
+  @IsOptional() @IsString() categoryId?: string | null;
   @IsOptional() @IsDateString() dueDate?: string;
   @IsOptional() @IsString() repeatRule?: string | null;
   @IsOptional() @IsEnum(Visibility) visibility?: Visibility;
   @IsOptional() @IsEnum(RecurrenceEditScope) recurrenceScope: RecurrenceEditScope = RecurrenceEditScope.THIS;
   @IsOptional() @IsString() todoListId?: string | null;
+}
+
+export class CreateTodoCategoryDto {
+  @IsString() @Length(1, 30) name!: string;
+  @IsString() @Length(1, 30) baseCategory!: string;
+  @IsOptional() @IsString() @Length(1, 30) icon = "tag";
+  @IsOptional() @IsString() @Length(1, 30) color = "lilac";
+}
+
+export class UpdateTodoCategoryDto {
+  @IsOptional() @IsString() @Length(1, 30) name?: string;
+  @IsOptional() @IsString() @Length(1, 30) baseCategory?: string;
+  @IsOptional() @IsString() @Length(1, 30) icon?: string;
+  @IsOptional() @IsString() @Length(1, 30) color?: string;
+  @IsOptional() @IsBoolean() archived?: boolean;
+}
+
+export class ReorderTodoCategoriesDto {
+  @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) ids!: string[];
 }
 
 export class CompleteTodoDto {

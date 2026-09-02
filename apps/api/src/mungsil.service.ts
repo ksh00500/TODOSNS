@@ -4,12 +4,23 @@ import { createHash, randomBytes } from "node:crypto";
 import { ChallengeKind, CheckInStatus, ConversationKind, NotificationType, Prisma, ReportTarget, RequestStatus, RewardStatus, VerificationMode, VerificationVoteVerdict, Visibility } from "@prisma/client";
 import { PrismaService } from "./prisma.service";
 import { MediaService } from "./media.service";
-import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CloneTodoListRepeatMode, CompleteTodoDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoDto, CreateTodoListDto, PageDto, SearchDto, SendMessageDto, UpdateChallengeDto, UpdateProfileDto, UpdateTodoDto, UpdateTodoListDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
+import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CloneTodoListRepeatMode, CompleteTodoDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, PageDto, SearchDto, SendMessageDto, UpdateChallengeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
 import { RecurrenceService } from "./recurrence.service";
 import { challengeLeaderboard, challengeTotalDays, PEER_VERIFICATION, peerVerificationDecision, peerVoteVerdict } from "./challenge-policy";
 import { ChallengeChatService } from "./challenge-chat.service";
 
 const COMMUNITY_CHALLENGE_COST = 500;
+const TODO_CATEGORY_DEFAULTS = [
+  { name: "생활", baseCategory: "생활", icon: "home", color: "aqua" },
+  { name: "건강", baseCategory: "건강", icon: "heart", color: "blush" },
+  { name: "운동", baseCategory: "운동", icon: "activity", color: "aqua" },
+  { name: "공부", baseCategory: "공부", icon: "graduation", color: "butter" },
+  { name: "독서", baseCategory: "독서", icon: "book", color: "aqua" },
+  { name: "마음", baseCategory: "마음", icon: "brain", color: "blush" },
+  { name: "커리어", baseCategory: "커리어", icon: "briefcase", color: "aqua" },
+  { name: "취미", baseCategory: "취미", icon: "palette", color: "butter" },
+] as const;
+const TODO_BASE_CATEGORIES = new Set(TODO_CATEGORY_DEFAULTS.map((item) => item.baseCategory));
 const DEFAULT_VERIFICATION_CRITERIA = [
   "사진만 보고 오늘 실천을 완료했다고 판단할 수 있나요?",
   "사진이 챌린지 주제와 맞나요?",
@@ -29,8 +40,8 @@ const captionHashtags = (caption?: string) => [...(caption ?? "").matchAll(/(?:^
 
 const postRelations = (viewerId: string | null) => ({
   author: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } },
-  todos: { include: { todo: { include: { _count: { select: { copies: { where: { deletedAt: null } } } } } } }, orderBy: { order: "asc" as const } },
-  todoList: { include: { items: { include: { todo: true }, orderBy: { order: "asc" as const } }, _count: { select: { copies: true } } } },
+  todos: { include: { todo: { include: { categoryRef: true, _count: { select: { copies: { where: { deletedAt: null } } } } } } }, orderBy: { order: "asc" as const } },
+  todoList: { include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" as const } }, _count: { select: { copies: true } } } },
   media: { where: { status: "READY" as const }, orderBy: { createdAt: "asc" as const }, take: 1 },
   tags: { include: { tag: true }, orderBy: { tag: { name: "asc" as const } } },
   _count: { select: { cheers: true, comments: { where: { hiddenAt: null } } } },
@@ -83,9 +94,59 @@ export class MungsilService {
     return this.profile(userId);
   }
 
+  async listTodoCategories(userId: string, includeArchived = false) {
+    await this.ensureTodoCategories(userId);
+    const rows = await this.prisma.todoCategory.findMany({
+      where: { userId, archivedAt: includeArchived ? undefined : null },
+      orderBy: [{ archivedAt: "asc" }, { position: "asc" }, { createdAt: "asc" }],
+      include: { _count: { select: { todos: { where: { deletedAt: null } } } } },
+    });
+    return rows.map(({ _count, ...row }) => ({ ...row, todoCount: _count.todos }));
+  }
+
+  async createTodoCategory(userId: string, dto: CreateTodoCategoryDto) {
+    await this.ensureTodoCategories(userId);
+    if (!TODO_BASE_CATEGORIES.has(dto.baseCategory as typeof TODO_CATEGORY_DEFAULTS[number]["baseCategory"])) throw new BadRequestException("기준 카테고리를 확인해주세요.");
+    const active = await this.prisma.todoCategory.count({ where: { userId, archivedAt: null } });
+    if (active >= 12) throw new BadRequestException("사용 중인 카테고리는 최대 12개까지 만들 수 있어요.");
+    const name = dto.name.trim();
+    const duplicate = await this.prisma.todoCategory.findFirst({ where: { userId, name } });
+    if (duplicate) throw new ConflictException("이미 같은 이름의 카테고리가 있어요.");
+    const position = (await this.prisma.todoCategory.aggregate({ where: { userId, archivedAt: null }, _max: { position: true } }))._max.position ?? -1;
+    return this.prisma.todoCategory.create({ data: { userId, name, baseCategory: dto.baseCategory, icon: dto.icon, color: dto.color, position: position + 1 } });
+  }
+
+  async updateTodoCategory(userId: string, id: string, dto: UpdateTodoCategoryDto) {
+    const category = await this.prisma.todoCategory.findFirst({ where: { id, userId } });
+    if (!category) throw new NotFoundException("카테고리를 찾을 수 없어요.");
+    if (dto.baseCategory && !TODO_BASE_CATEGORIES.has(dto.baseCategory as typeof TODO_CATEGORY_DEFAULTS[number]["baseCategory"])) throw new BadRequestException("기준 카테고리를 확인해주세요.");
+    if (category.isDefault && (dto.name || dto.baseCategory || dto.icon || dto.color)) throw new BadRequestException("기본 카테고리는 이름과 기준을 바꿀 수 없어요.");
+    if (dto.archived === false) {
+      const active = await this.prisma.todoCategory.count({ where: { userId, archivedAt: null } });
+      if (active >= 12) throw new BadRequestException("사용 중인 카테고리는 최대 12개까지 둘 수 있어요.");
+    }
+    if (dto.archived === true && !category.archivedAt) {
+      const active = await this.prisma.todoCategory.count({ where: { userId, archivedAt: null } });
+      if (active <= 1) throw new BadRequestException("TODO를 만들려면 카테고리를 하나 이상 남겨주세요.");
+    }
+    const { archived, ...changes } = dto;
+    return this.prisma.todoCategory.update({ where: { id }, data: { ...changes, name: changes.name?.trim(), archivedAt: archived === undefined ? undefined : archived ? new Date() : null } });
+  }
+
+  async reorderTodoCategories(userId: string, ids: string[]) {
+    const uniqueIds = [...new Set(ids)];
+    const owned = await this.prisma.todoCategory.count({ where: { userId, id: { in: uniqueIds }, archivedAt: null } });
+    if (owned !== uniqueIds.length) throw new BadRequestException("카테고리 순서를 확인해주세요.");
+    await this.prisma.$transaction(uniqueIds.map((id, position) => this.prisma.todoCategory.update({ where: { id }, data: { position } })));
+    return this.listTodoCategories(userId);
+  }
+
   async createTodo(userId: string, dto: CreateTodoDto) {
     const { todoListId, ...todoInput } = dto;
     if (todoListId) await this.ownTodoList(userId, todoListId);
+    const category = await this.resolveTodoCategory(userId, todoInput.categoryId, todoInput.category);
+    todoInput.category = category.category;
+    todoInput.categoryId = category.categoryId;
     let todo;
     if (todoInput.repeatRule) {
       const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
@@ -94,11 +155,11 @@ export class MungsilService {
       todo = await this.prisma.todo.create({ data: { ...todoInput, userId, dueDate: new Date(todoInput.dueDate), kind: "SINGLE" } });
     }
     if (todoListId) await this.setTodoListMembership(userId, todo, todoListId);
-    return todo;
+    return this.prisma.todo.findUniqueOrThrow({ where: { id: todo.id }, include: { categoryRef: true } });
   }
-  listTodos(userId: string, from?: string, to?: string) { return this.prisma.todo.findMany({ where: { userId, deletedAt: null, dueDate: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, orderBy: [{ completedAt: "asc" }, { dueDate: "asc" }] }); }
+  listTodos(userId: string, from?: string, to?: string) { return this.prisma.todo.findMany({ where: { userId, deletedAt: null, dueDate: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, orderBy: [{ completedAt: "asc" }, { dueDate: "asc" }], include: { categoryRef: true } }); }
 
-  listTodoLists(userId: string) { return this.prisma.todoList.findMany({ where: { userId }, orderBy: { updatedAt: "desc" }, include: { items: { include: { todo: true }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } }); }
+  listTodoLists(userId: string) { return this.prisma.todoList.findMany({ where: { userId }, orderBy: { updatedAt: "desc" }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } }); }
 
   async createTodoList(userId: string, dto: CreateTodoListDto) {
     const todoIds = [...new Set(dto.todoIds)];
@@ -107,7 +168,7 @@ export class MungsilService {
     const seriesIds = owned.flatMap((todo) => todo.seriesId ? [todo.seriesId] : []);
     const grouped = await this.prisma.todoListItem.findFirst({ where: { list: { userId }, OR: [{ todoId: { in: todoIds } }, ...(seriesIds.length ? [{ todo: { seriesId: { in: seriesIds } } }] : [])] } });
     if (grouped) throw new BadRequestException("이미 다른 루틴 그룹에 담긴 TODO가 있어요.");
-    return this.prisma.todoList.create({ data: { userId, title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: true }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+    return this.prisma.todoList.create({ data: { userId, title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
   }
 
   async updateTodoList(userId: string, id: string, dto: UpdateTodoListDto) {
@@ -121,10 +182,10 @@ export class MungsilService {
       if (grouped) throw new BadRequestException("이미 다른 루틴 그룹에 담긴 TODO가 있어요.");
       return this.prisma.$transaction(async (tx) => {
         await tx.todoListItem.deleteMany({ where: { listId: id } });
-        return tx.todoList.update({ where: { id }, data: { title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: true }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+        return tx.todoList.update({ where: { id }, data: { title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
       });
     }
-    return this.prisma.todoList.update({ where: { id }, data: dto, include: { items: { include: { todo: true }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+    return this.prisma.todoList.update({ where: { id }, data: dto, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
   }
 
   async removeTodoList(userId: string, id: string) { await this.ownTodoList(userId, id); const shared = await this.prisma.post.count({ where: { todoListId: id, hiddenAt: null } }); if (shared) throw new BadRequestException("게시 중인 루틴은 삭제할 수 없어요."); await this.prisma.todoList.delete({ where: { id } }); return { ok: true }; }
@@ -165,6 +226,11 @@ export class MungsilService {
   async updateTodo(userId: string, todoId: string, dto: UpdateTodoDto) {
     const todo = await this.ownTodo(userId, todoId);
     if (dto.todoListId) await this.ownTodoList(userId, dto.todoListId);
+    if (dto.categoryId !== undefined) {
+      const category = await this.resolveTodoCategory(userId, dto.categoryId, dto.category ?? todo.category, dto.categoryId === todo.categoryId);
+      dto.category = category.category;
+      dto.categoryId = category.categoryId;
+    }
     let updated;
     if (todo.seriesId && dto.recurrenceScope === "FUTURE") {
       updated = await (dto.repeatRule === null
@@ -181,6 +247,7 @@ export class MungsilService {
           title: dto.title,
           notes: dto.notes,
           category: dto.category,
+          categoryId: dto.categoryId,
           visibility: dto.visibility,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
         },
@@ -191,6 +258,7 @@ export class MungsilService {
         title: dto.title ?? todo.title,
         notes: dto.notes === undefined ? todo.notes ?? undefined : dto.notes,
         category: dto.category ?? todo.category,
+        categoryId: dto.categoryId === undefined ? todo.categoryId : dto.categoryId,
         dueDate: dto.dueDate ?? todo.dueDate.toISOString(),
         repeatRule: dto.repeatRule,
         visibility: dto.visibility ?? todo.visibility,
@@ -203,6 +271,7 @@ export class MungsilService {
           title: dto.title,
           notes: dto.notes,
           category: dto.category,
+          categoryId: dto.categoryId,
           repeatRule: dto.repeatRule,
           visibility: dto.visibility,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
@@ -213,7 +282,7 @@ export class MungsilService {
       await this.preserveDetachedSeriesMembership(userId, todo, updated);
       await this.setTodoListMembership(userId, updated, dto.todoListId, todo.id);
     }
-    return updated;
+    return this.prisma.todo.findUniqueOrThrow({ where: { id: updated.id }, include: { categoryRef: true } });
   }
 
   async removeTodo(userId: string, todoId: string) {
@@ -248,14 +317,15 @@ export class MungsilService {
   async cloneTodo(userId: string, sourceId: string, dto: CloneTodoDto) {
     const source = await this.readableTodo(userId, sourceId);
     if (dto.todoListId) await this.ownTodoList(userId, dto.todoListId);
+    const selectedCategory = dto.categoryId ? await this.resolveTodoCategory(userId, dto.categoryId, dto.category ?? source.category) : { category: dto.category ?? source.category, categoryId: null };
     const repeatRule = dto.keepRepeat ? (dto.repeatRule ?? source.repeatRule) : null;
     const dueDate = dto.dueDate ?? new Date().toISOString();
     const todo = repeatRule
       ? await this.prisma.$transaction(async (tx) => {
           const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
-          return this.recurrence.createSeriesInTransaction(tx, userId, user.timezone, { title: dto.title ?? source.title, notes: dto.notes ?? source.notes ?? undefined, category: dto.category ?? source.category, dueDate, repeatRule, visibility: dto.visibility ?? Visibility.PRIVATE }, source.id);
+          return this.recurrence.createSeriesInTransaction(tx, userId, user.timezone, { title: dto.title ?? source.title, notes: dto.notes ?? source.notes ?? undefined, category: selectedCategory.category, categoryId: selectedCategory.categoryId, dueDate, repeatRule, visibility: dto.visibility ?? Visibility.PRIVATE }, source.id);
         })
-      : await this.prisma.todo.create({ data: { userId, sourceTodoId: source.id, title: dto.title ?? source.title, notes: dto.notes ?? source.notes, category: dto.category ?? source.category, dueDate: new Date(dueDate), kind: "SINGLE", visibility: dto.visibility ?? Visibility.PRIVATE } });
+      : await this.prisma.todo.create({ data: { userId, sourceTodoId: source.id, title: dto.title ?? source.title, notes: dto.notes ?? source.notes, category: selectedCategory.category, categoryId: selectedCategory.categoryId, dueDate: new Date(dueDate), kind: "SINGLE", visibility: dto.visibility ?? Visibility.PRIVATE } });
     if (dto.todoListId) await this.setTodoListMembership(userId, todo, dto.todoListId);
     if (source.userId !== userId) {
       await this.reward(source.userId, 5, "UNIQUE_COPY", todo.id, 3);
@@ -1283,6 +1353,17 @@ export class MungsilService {
   }
 
   private async ownTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, userId, deletedAt: null } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); return todo; }
+  private async ensureTodoCategories(userId: string) {
+    await this.prisma.todoCategory.createMany({ data: TODO_CATEGORY_DEFAULTS.map((item, position) => ({ userId, ...item, position, isDefault: true })), skipDuplicates: true });
+  }
+  private async resolveTodoCategory(userId: string, categoryId?: string | null, fallback = "생활", allowArchived = false) {
+    if (categoryId) {
+      const category = await this.prisma.todoCategory.findFirst({ where: { id: categoryId, userId, archivedAt: allowArchived ? undefined : null } });
+      if (!category) throw new BadRequestException("사용할 수 있는 카테고리를 선택해주세요.");
+      return { category: category.baseCategory, categoryId: category.id };
+    }
+    return { category: fallback, categoryId: null };
+  }
   private async readableTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, deletedAt: null, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { postLinks: { some: { post: { hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } } }] } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); await this.assertNotBlocked(userId, todo.userId); return todo; }
   private async ownTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, userId } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); return list; }
   private async readableTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, user: { followers: { some: { followerId: userId } } } }, { posts: { some: { hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } }] }, include: { items: { include: { todo: true }, orderBy: { order: "asc" } } } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); await this.assertNotBlocked(userId, list.userId); return list; }
@@ -1317,7 +1398,7 @@ export class MungsilService {
       mediaUrl: postMedia ? await this.media.viewUrl(postMedia.objectKey) : post.mediaKey ? await this.media.viewUrl(post.mediaKey) : null,
       thumbnailUrl: postMedia?.thumbnailKey ? await this.media.viewUrl(postMedia.thumbnailKey) : null,
       hashtags: post.tags.map(({ tag }) => tag.name),
-      todos: post.todos.map(({ todo }) => ({ id: todo.id, title: todo.title, notes: todo.notes, category: todo.category, dueDate: todo.dueDate, completedAt: todo.completedAt, visibility: todo.visibility, repeatRule: todo.repeatRule, sourceTodoId: todo.sourceTodoId, seriesId: todo.seriesId, occurrenceKey: todo.occurrenceKey })),
+      todos: post.todos.map(({ todo }) => ({ id: todo.id, title: todo.title, notes: todo.notes, category: todo.category, categoryId: todo.categoryId, categoryRef: todo.categoryRef, dueDate: todo.dueDate, completedAt: todo.completedAt, visibility: todo.visibility, repeatRule: todo.repeatRule, sourceTodoId: todo.sourceTodoId, seriesId: todo.seriesId, occurrenceKey: todo.occurrenceKey })),
       todoList: post.todoList ? { id: post.todoList.id, title: post.todoList.title, description: post.todoList.description, visibility: post.todoList.visibility, sourceTodoListId: post.todoList.sourceTodoListId, items: post.todoList.items.map((item) => ({ order: item.order, todo: item.todo })) } : null,
       cheerCount: post._count.cheers,
       commentCount: post._count.comments,

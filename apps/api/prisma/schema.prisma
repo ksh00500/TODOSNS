@@ -159,6 +159,7 @@ model User {
   updatedAt                  DateTime                    @updatedAt
   todos                      Todo[]
   todoSeries                 TodoSeries[]
+  todoCategories             TodoCategory[]
   todoLists                  TodoList[]
   posts                      Post[]
   comments                   Comment[]
@@ -271,6 +272,8 @@ model Todo {
   title         String         @db.VarChar(120)
   notes         String?        @db.VarChar(500)
   category      String         @default("생활")
+  categoryId    String?
+  categoryRef   TodoCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   kind          TodoKind       @default(SINGLE)
   visibility    Visibility     @default(PRIVATE)
   dueDate       DateTime
@@ -289,30 +292,54 @@ model Todo {
   deletedAt     DateTime?
 
   @@index([userId, dueDate])
+  @@index([categoryId])
   @@index([sourceTodoId])
   @@index([seriesId, dueDate])
 }
 
 model TodoSeries {
-  id               String     @id @default(cuid())
+  id               String        @id @default(cuid())
   userId           String
-  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title            String     @db.VarChar(120)
-  notes            String?    @db.VarChar(500)
-  category         String     @default("생활")
-  visibility       Visibility @default(PRIVATE)
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String        @db.VarChar(120)
+  notes            String?       @db.VarChar(500)
+  category         String        @default("생활")
+  categoryId       String?
+  categoryRef      TodoCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  visibility       Visibility    @default(PRIVATE)
   repeatRule       String
-  timezone         String     @default("Asia/Seoul")
+  timezone         String        @default("Asia/Seoul")
   startAt          DateTime
   endsAt           DateTime?
   generatedThrough DateTime?
-  active           Boolean    @default(true)
+  active           Boolean       @default(true)
   occurrences      Todo[]
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   @@index([userId, active])
+  @@index([categoryId])
   @@index([generatedThrough])
+}
+
+model TodoCategory {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String       @db.VarChar(30)
+  baseCategory String       @db.VarChar(30)
+  icon         String       @default("tag") @db.VarChar(30)
+  color        String       @default("lilac") @db.VarChar(30)
+  position     Int          @default(0)
+  isDefault    Boolean      @default(false)
+  archivedAt   DateTime?
+  todos        Todo[]
+  series       TodoSeries[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId, archivedAt, position])
 }
 
 model TodoList {
@@ -452,33 +479,33 @@ model MessageRequest {
 }
 
 model Conversation {
-  id            String               @id @default(cuid())
-  kind          ConversationKind     @default(DIRECT)
-  challengeId   String?              @unique
+  id            String                 @id @default(cuid())
+  kind          ConversationKind       @default(DIRECT)
+  challengeId   String?                @unique
   readOnlyAt    DateTime?
   purgeAt       DateTime?
-  challenge     Challenge?           @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  challenge     Challenge?             @relation(fields: [challengeId], references: [id], onDelete: Cascade)
   members       ConversationMember[]
   messages      Message[]
   mutes         ConversationMute[]
   moderation    ChatModerationAction[]
   notifications Notification[]
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
 
   @@index([kind, updatedAt])
   @@index([purgeAt])
 }
 
 model ConversationMember {
-  conversationId   String
-  userId           String
-  joinedAt         DateTime              @default(now())
-  lastReadAt       DateTime?
+  conversationId    String
+  userId            String
+  joinedAt          DateTime              @default(now())
+  lastReadAt        DateTime?
   lastReadMessageId String?
   notificationLevel ChatNotificationLevel @default(ALL)
-  conversation     Conversation          @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation      Conversation          @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([conversationId, userId])
   @@index([userId, lastReadAt])
@@ -507,8 +534,8 @@ model Message {
   reports        Report[]
   createdAt      DateTime          @default(now())
 
-  @@index([conversationId, createdAt])
   @@unique([conversationId, systemKey])
+  @@index([conversationId, createdAt])
   @@index([replyToId])
 }
 
@@ -585,7 +612,7 @@ model Challenge {
   thirdPlaceTitle      String?
   hiddenAt             DateTime?
   endedAt              DateTime?
-  chat                  Conversation?
+  chat                 Conversation?
   participants         ChallengeParticipant[]
   checkIns             ChallengeCheckIn[]
   reports              Report[]
@@ -698,24 +725,24 @@ model Report {
 }
 
 model Notification {
-  id          String           @id @default(cuid())
-  userId      String
-  type        NotificationType
-  title       String
-  body        String
-  referenceId String?
-  targetType  String?
-  targetId    String?
+  id                 String           @id @default(cuid())
+  userId             String
+  type               NotificationType
+  title              String
+  body               String
+  referenceId        String?
+  targetType         String?
+  targetId           String?
   chatConversationId String?
-  unreadCount Int              @default(1)
-  readAt      DateTime?
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chatConversation Conversation? @relation(fields: [chatConversationId], references: [id], onDelete: Cascade)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  unreadCount        Int              @default(1)
+  readAt             DateTime?
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatConversation   Conversation?    @relation(fields: [chatConversationId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
-  @@index([userId, readAt, createdAt])
   @@unique([userId, chatConversationId])
+  @@index([userId, readAt, createdAt])
 }
 
 model Media {

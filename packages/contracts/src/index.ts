@@ -33,9 +33,23 @@ export interface TodoDto {
   visibility: Visibility;
   repeatRule?: string | null;
   category: string;
+  categoryId?: string | null;
+  categoryRef?: TodoCategoryDto | null;
   sourceTodoId?: string | null;
   seriesId?: string | null;
   occurrenceKey?: string | null;
+}
+
+export interface TodoCategoryDto {
+  id: string;
+  name: string;
+  baseCategory: string;
+  icon: string;
+  color: string;
+  position: number;
+  isDefault: boolean;
+  archivedAt?: string | null;
+  todoCount?: number;
 }
 
 export interface TodoListDto {

@@ -26,13 +26,14 @@ import type {
   SessionUserDto,
   SearchResultsDto,
   SearchSuggestionsDto,
+  TodoCategoryDto,
   TodoDto,
   TodoListDto,
   UserSummary,
   Visibility,
 } from "@mungsil/contracts";
 
-export type { TodoDto, TodoListDto, UserSummary, Visibility };
+export type { TodoCategoryDto, TodoDto, TodoListDto, UserSummary, Visibility };
 export type SessionUser = SessionUserDto;
 export type FeedPost = FeedPostDto;
 export type FeedPage = FeedPageDto;

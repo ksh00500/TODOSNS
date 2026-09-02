@@ -1,7 +1,7 @@
-import type { Challenge, ChallengeChatMessage, ChatInboxItem, ChatNotificationLevel, Comment, DirectChatMessage, DirectConversation, DirectMessageRequest, FeedPage, FeedPost, SearchResults, SessionUser, TodoDto, TodoListDto, UserSummary } from "./types";
+import type { Challenge, ChallengeChatMessage, ChatInboxItem, ChatNotificationLevel, Comment, DirectChatMessage, DirectConversation, DirectMessageRequest, FeedPage, FeedPost, SearchResults, SessionUser, TodoCategoryDto, TodoDto, TodoListDto, UserSummary } from "./types";
 
 export const DEMO_MODE_KEY = "mungsil_demo_mode";
-const DEMO_DATA_KEY = "mungsil_demo_data_v8";
+const DEMO_DATA_KEY = "mungsil_demo_data_v9";
 export const demoAvailable = process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_ENABLE_DEMO === "true";
 const demoAdminPreview = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEMO_ADMIN === "true";
 
@@ -10,6 +10,7 @@ type DemoState = {
   day: string;
   user: SessionUser;
   todos: TodoDto[];
+  categories: TodoCategoryDto[];
   deletedTodos: TodoDto[];
   lists: TodoListDto[];
   feed: FeedPost[];
@@ -52,6 +53,10 @@ function initialState(): DemoState {
     bio: "조급하지 않게, 오늘 할 수 있는 만큼 실천해요.",
     interests: ["운동", "독서", "마음"],
   };
+  const categories: TodoCategoryDto[] = [
+    ["생활", "home", "aqua"], ["건강", "heart", "blush"], ["운동", "activity", "aqua"], ["공부", "graduation", "butter"],
+    ["독서", "book", "aqua"], ["마음", "brain", "blush"], ["커리어", "briefcase", "aqua"], ["취미", "palette", "butter"],
+  ].map(([name, icon, color], position) => ({ id: `demo-category-${name}`, name, baseCategory: name, icon, color, position, isDefault: true, todoCount: 0 }));
   const todos: TodoDto[] = [
     { id: "demo-todo-walk", seriesId: "demo-series-walk", title: "출근 전 20분 산책", dueDate: at(0, 8), completedAt: at(0, 8, 24), visibility: "PRIVATE", repeatRule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", category: "운동" },
     { id: "demo-todo-words", seriesId: "demo-series-words", title: "영어 단어 30개 복습", dueDate: at(0, 12, 30), completedAt: at(0, 12, 48), visibility: "PRIVATE", repeatRule: "FREQ=DAILY", category: "공부" },
@@ -117,7 +122,7 @@ function initialState(): DemoState {
       directMessage({ id: "demo-direct-hana-3", body: "고마워요. 오늘은 날씨도 좋아서 기분이 더 좋았어요 ☁️", sender: authors.hana, reactions: [{ type: "LIKE", count: 1, mine: false }], createdAt: at(0, 9, 15) }),
     ],
   };
-  return { day: dayKey(), user, todos, deletedTodos: [], lists: [morningList, nightList], feed, comments, challenges, chats, chatSettings: {}, chatMutes: {}, chatRevisions: { "demo-chat-book-2": [{ id: "demo-revision-1", body: "저는 타이머보다 책갈피를 써요.", createdAt: at(0, 20, 30) }, { id: "demo-revision-2", body: "저는 타이머보다 책갈피에 오늘 목표 쪽수를 적어두는 방식이 좋았어요. https://example.com/reading-tip", createdAt: at(0, 20, 32) }] }, directMessages, directPeople: { "demo-direct-hana": authors.hana }, directRequests: [{ id: "demo-request-june", sender: authors.june, createdAt: at(0, 8, 50) }], blockedUsers: [], notifications, following: [] };
+  return { day: dayKey(), user, todos, categories, deletedTodos: [], lists: [morningList, nightList], feed, comments, challenges, chats, chatSettings: {}, chatMutes: {}, chatRevisions: { "demo-chat-book-2": [{ id: "demo-revision-1", body: "저는 타이머보다 책갈피를 써요.", createdAt: at(0, 20, 30) }, { id: "demo-revision-2", body: "저는 타이머보다 책갈피에 오늘 목표 쪽수를 적어두는 방식이 좋았어요. https://example.com/reading-tip", createdAt: at(0, 20, 32) }] }, directMessages, directPeople: { "demo-direct-hana": authors.hana }, directRequests: [{ id: "demo-request-june", sender: authors.june, createdAt: at(0, 8, 50) }], blockedUsers: [], notifications, following: [] };
 }
 
 export function isDemoMode() {
@@ -140,6 +145,7 @@ function readState() {
   initializeDemoData();
   const state = JSON.parse(window.localStorage.getItem(DEMO_DATA_KEY) ?? "null") as DemoState;
   state.deletedTodos ??= [];
+  state.categories ??= initialState().categories;
   state.chats ??= {};
   state.chatSettings ??= {};
   state.chatMutes ??= {};
@@ -187,6 +193,26 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
   const body = bodyOf(init);
 
   if (pathname === "/auth/me") return clone(state.user) as T;
+  if (pathname === "/me/todo-categories" && method === "GET") return clone(state.categories.filter((item) => url.searchParams.get("archived") === "true" || !item.archivedAt).map((item) => ({ ...item, todoCount: state.todos.filter((todo) => todo.categoryId === item.id || (!todo.categoryId && todo.category === item.name)).length }))) as T;
+  if (pathname === "/me/todo-categories" && method === "POST") {
+    if (state.categories.filter((item) => !item.archivedAt).length >= 12) throw new Error("사용 중인 카테고리는 최대 12개까지 만들 수 있어요.");
+    const category: TodoCategoryDto = { id: uid("demo-category"), name: String(body.name).trim(), baseCategory: String(body.baseCategory), icon: String(body.icon ?? "tag"), color: String(body.color ?? "lilac"), position: state.categories.length, isDefault: false, todoCount: 0 };
+    if (state.categories.some((item) => item.name === category.name)) throw new Error("이미 같은 이름의 카테고리가 있어요.");
+    state.categories.push(category); writeState(state); return clone(category) as T;
+  }
+  if (pathname === "/me/todo-categories/reorder" && method === "PATCH") {
+    const ids = Array.isArray(body.ids) ? body.ids.map(String) : [];
+    ids.forEach((id, position) => { const category = state.categories.find((item) => item.id === id); if (category) category.position = position; });
+    state.categories.sort((left, right) => left.position - right.position); writeState(state); return clone(state.categories.filter((item) => !item.archivedAt)) as T;
+  }
+  const categoryMatch = pathname.match(/^\/me\/todo-categories\/([^/]+)$/);
+  if (categoryMatch && method === "PATCH") {
+    const category = state.categories.find((item) => item.id === categoryMatch[1]); if (!category) throw new Error("카테고리를 찾지 못했어요.");
+    if (body.archived === true && state.categories.filter((item) => !item.archivedAt).length <= 1) throw new Error("TODO를 만들려면 카테고리를 하나 이상 남겨주세요.");
+    if (body.archived !== undefined) category.archivedAt = body.archived ? new Date().toISOString() : null;
+    if (!category.isDefault) { if (body.name) category.name = String(body.name).trim(); if (body.baseCategory) category.baseCategory = String(body.baseCategory); if (body.icon) category.icon = String(body.icon); if (body.color) category.color = String(body.color); }
+    writeState(state); return clone(category) as T;
+  }
   if (demoAdminPreview && pathname === "/admin/overview" && method === "GET") return clone({ users: { total: 24, newLast7Days: 7, verified: 21, suspended: 1, activeLast7Days: 16 }, activity: { completedTodosLast7Days: 138, publishedPostsLast7Days: 52, copiedTodosLast7Days: 31 }, moderation: { openReports: 3, pendingCheckIns: 5 }, invites: { active: 2 } }) as T;
   if (demoAdminPreview && pathname === "/admin/invite-codes" && method === "GET") return clone({ items: [{ id: "preview-invite", label: "1차 내부 테스터", maxUses: 30, uses: 18, expiresAt: at(30, 23, 59), disabledAt: null, createdAt: at(-10, 9), state: "ACTIVE" }] }) as T;
   if (demoAdminPreview && pathname === "/admin/users" && method === "GET") return clone({ items: [{ id: "preview-user", email: "sky@example.com", nickname: "하늘", handle: "sky.todo", role: "USER", emailVerifiedAt: at(-20, 9), suspendedAt: null, createdAt: at(-20, 9), _count: { todos: 42, posts: 12, sessions: 1 } }], nextCursor: null }) as T;
@@ -309,7 +335,8 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
   }
   if (pathname === "/todos" && method === "POST") {
     const repeatRule = body.repeatRule ? String(body.repeatRule) : null;
-    const todo: TodoDto = { id: uid("demo-todo"), seriesId: repeatRule ? uid("demo-series") : null, title: String(body.title), notes: body.notes ? String(body.notes) : null, dueDate: String(body.dueDate), visibility: (body.visibility as TodoDto["visibility"]) ?? "PRIVATE", repeatRule, category: String(body.category ?? "기타") };
+    const selectedCategory = state.categories.find((item) => item.id === body.categoryId);
+    const todo: TodoDto = { id: uid("demo-todo"), seriesId: repeatRule ? uid("demo-series") : null, title: String(body.title), notes: body.notes ? String(body.notes) : null, dueDate: String(body.dueDate), visibility: (body.visibility as TodoDto["visibility"]) ?? "PRIVATE", repeatRule, category: selectedCategory?.baseCategory ?? String(body.category ?? "기타"), categoryId: selectedCategory?.id ?? null, categoryRef: selectedCategory ?? null };
     state.todos.push(todo); setDemoTodoList(state, todo, body.todoListId); writeState(state); return clone(todo) as T;
   }
   const todoMatch = pathname.match(/^\/todos\/([^/]+)$/);
@@ -317,6 +344,8 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     const index = state.todos.findIndex((item) => item.id === todoMatch[1]);
     if (index < 0) throw new Error("TODO를 찾지 못했어요.");
     const { todoListId, ...changes } = body;
+    const selectedCategory = state.categories.find((item) => item.id === changes.categoryId);
+    if (selectedCategory) { changes.category = selectedCategory.baseCategory; changes.categoryRef = selectedCategory; }
     state.todos[index] = { ...state.todos[index], ...changes } as TodoDto;
     if (changes.repeatRule === null) state.todos[index].seriesId = null;
     else if (typeof changes.repeatRule === "string" && !state.todos[index].seriesId) state.todos[index].seriesId = uid("demo-series");

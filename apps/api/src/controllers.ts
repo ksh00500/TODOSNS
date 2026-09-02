@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtAuthGuard, OptionalJwtAuthGuard } from "./auth";
-import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeChatMessageDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoDto, CreateTodoListDto, MessageRequestDto, ModerateChatMessageDto, MuteChatMemberDto, PageDto, PresignDto, ReadChallengeChatDto, ResolveReportDto, SearchDto, ToggleChatReactionDto, UpdateChallengeChatMessageDto, UpdateChallengeDto, UpdateChallengeRewardDto, UpdateChatSettingsDto, UpdateContentVisibilityDto, UpdateInviteCodeDto, UpdateProfileDto, UpdateTodoDto, UpdateTodoListDto, UpdateUserSuspensionDto, UserTargetDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
+import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeChatMessageDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, MessageRequestDto, ModerateChatMessageDto, MuteChatMemberDto, PageDto, PresignDto, ReadChallengeChatDto, ReorderTodoCategoriesDto, ResolveReportDto, SearchDto, ToggleChatReactionDto, UpdateChallengeChatMessageDto, UpdateChallengeDto, UpdateChallengeRewardDto, UpdateChatSettingsDto, UpdateContentVisibilityDto, UpdateInviteCodeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, UpdateUserSuspensionDto, UserTargetDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
 import { MediaService } from "./media.service";
 import { MungsilService } from "./mungsil.service";
 import { ChallengeChatService } from "./challenge-chat.service";
@@ -148,6 +148,10 @@ export class MeController {
   constructor(private readonly service: MungsilService, private readonly media: MediaService) {}
   @Get() profile(@CurrentUser() u: JwtUser) { return this.service.profile(u.sub); }
   @Patch() update(@CurrentUser() u: JwtUser, @Body() dto: UpdateProfileDto) { return this.service.updateProfile(u.sub, dto); }
+  @Get("todo-categories") todoCategories(@CurrentUser() u: JwtUser, @Query("archived") archived?: string) { return this.service.listTodoCategories(u.sub, archived === "true"); }
+  @Post("todo-categories") createTodoCategory(@CurrentUser() u: JwtUser, @Body() dto: CreateTodoCategoryDto) { return this.service.createTodoCategory(u.sub, dto); }
+  @Patch("todo-categories/reorder") reorderTodoCategories(@CurrentUser() u: JwtUser, @Body() dto: ReorderTodoCategoriesDto) { return this.service.reorderTodoCategories(u.sub, dto.ids); }
+  @Patch("todo-categories/:id") updateTodoCategory(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateTodoCategoryDto) { return this.service.updateTodoCategory(u.sub, id, dto); }
   @Get("notifications") notifications(@CurrentUser() u: JwtUser, @Query() page: PageDto) { return this.service.notifications(u.sub, page); }
   @Get("notifications/unread-count") unreadCount(@CurrentUser() u: JwtUser) { return this.service.unreadNotificationCount(u.sub); }
   @Post("notifications/read") read(@CurrentUser() u: JwtUser) { return this.service.readNotifications(u.sub); }

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 
-const routes = ["today", "explore", "explore/search", "todos", "todos/import", "challenges", "me", "notifications", "settings"];
+const routes = ["today", "explore", "explore/search", "todos", "todos/import", "todos/routines", "todos/categories", "challenges", "me", "notifications", "settings"];
 
 test("상용 MVP 핵심 화면이 독립 라우트로 존재한다", async () => {
   await Promise.all(routes.map((route) => access(new URL(`../app/(product)/${route}/page.tsx`, import.meta.url))));
@@ -72,6 +72,7 @@ test("TODO 작성과 편집에서 기존 루틴 묶음을 지정하거나 해제
 
 test("오늘과 TODO 화면은 루틴을 접을 수 있는 스레드형 그룹으로 표시한다", async () => {
   const group = await readFile(new URL("../components/todo-group-list.tsx", import.meta.url), "utf8");
+  const routineComposer = await readFile(new URL("../components/routine-composer.tsx", import.meta.url), "utf8");
   const today = await readFile(new URL("../app/(product)/today/page.tsx", import.meta.url), "utf8");
   const todos = await readFile(new URL("../app/(product)/todos/page.tsx", import.meta.url), "utf8");
   assert.match(group, /aria-expanded/);
@@ -79,7 +80,27 @@ test("오늘과 TODO 화면은 루틴을 접을 수 있는 스레드형 그룹�
   assert.match(group, /다음 \$\{next\.title\}/);
   assert.match(today, /TodoGroupList/);
   assert.match(todos, /TodoGroupList/);
-  assert.match(todos, /다른 그룹에 포함됨/);
+  assert.match(routineComposer, /다른 그룹에 포함됨/);
+});
+
+test("TODO 일정·루틴·카테고리는 밀도 높은 별도 관리 화면을 사용한다", async () => {
+  const todos = await readFile(new URL("../app/(product)/todos/page.tsx", import.meta.url), "utf8");
+  const routines = await readFile(new URL("../app/(product)/todos/routines/page.tsx", import.meta.url), "utf8");
+  const categories = await readFile(new URL("../app/(product)/todos/categories/page.tsx", import.meta.url), "utf8");
+  const nav = await readFile(new URL("../components/todo-section-nav.tsx", import.meta.url), "utf8");
+  const schema = await readFile(new URL("../../api/prisma/schema.prisma", import.meta.url), "utf8");
+  const service = await readFile(new URL("../../api/src/mungsil.service.ts", import.meta.url), "utf8");
+  assert.match(todos, /compact-week-card/);
+  assert.doesNotMatch(todos, /calendar-switch|루틴 보관함/);
+  for (const label of ["일정", "루틴", "카테고리"]) assert.match(nav, new RegExp(label));
+  assert.match(routines, /RoutineComposer/);
+  assert.match(categories, /base-category-options/);
+  assert.match(categories, /todo-categories\/reorder/);
+  assert.doesNotMatch(categories, /<select|type=["']date["']|window\.confirm/);
+  assert.match(schema, /model TodoCategory/);
+  assert.match(schema, /categoryId\s+String\?/);
+  assert.match(service, /resolveTodoCategory/);
+  assert.match(service, /최대 12개/);
 });
 
 test("루틴 복제 API는 반복 유지·제거·항목별 설정을 구분한다", async () => {

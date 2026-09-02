@@ -1,9 +1,11 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Check, Layers3 } from "lucide-react";
 import { Sheet } from "./sheet";
-import type { TodoDto, TodoListDto } from "@/lib/types";
+import type { TodoCategoryDto, TodoDto, TodoListDto } from "@/lib/types";
+import { apiFetch } from "@/lib/api";
 import { localDateKey } from "@/lib/date";
 import { CategoryPicker, RepeatPicker, TodoSchedulePicker } from "./todo-form-controls";
 import { toRepeatPreset, type RepeatPreset } from "@/lib/todo-options";
@@ -12,6 +14,7 @@ export type TodoDraft = {
   title: string;
   notes?: string | null;
   category: string;
+  categoryId?: string | null;
   dueDate: string;
   repeatRule?: string | null;
   recurrenceScope?: "THIS" | "FUTURE";
@@ -46,6 +49,8 @@ export function TodoComposer({
   const [title, setTitle] = useState(todo?.title ?? "");
   const [notes, setNotes] = useState(todo?.notes ?? "");
   const [category, setCategory] = useState(todo?.category ?? "생활");
+  const [categoryId, setCategoryId] = useState(todo?.categoryId ?? "");
+  const categories = useQuery({ queryKey: ["todo-categories"], queryFn: () => apiFetch<TodoCategoryDto[]>("/me/todo-categories") });
   const [day, setDay] = useState(localDateKey(due));
   const [time, setTime] = useState(
     `${String(due.getHours()).padStart(2, "0")}:${String(due.getMinutes()).padStart(2, "0")}`,
@@ -54,6 +59,9 @@ export function TodoComposer({
   const [recurrenceScope, setRecurrenceScope] = useState<"THIS" | "FUTURE">("THIS");
   const [todoListId, setTodoListId] = useState(currentTodoListId(todo, lists));
 
+  const categoryOptions = todo?.categoryRef && !categories.data?.some((item) => item.id === todo.categoryRef?.id) ? [todo.categoryRef, ...(categories.data ?? [])] : categories.data;
+  const selectedCategoryId = categoryId || categoryOptions?.find((item) => item.name === category || item.baseCategory === category)?.id || "";
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!title.trim()) return;
@@ -61,6 +69,7 @@ export function TodoComposer({
       title: title.trim(),
       notes: notes.trim() || null,
       category,
+      categoryId: selectedCategoryId || null,
       dueDate: new Date(`${day}T${time}:00`).toISOString(),
       repeatRule: repeatRule || (todo?.seriesId ? null : undefined),
       recurrenceScope: todo?.seriesId ? recurrenceScope : undefined,
@@ -87,7 +96,7 @@ export function TodoComposer({
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} placeholder="실천에 필요한 내용을 적어두세요." />
         </label>
         <TodoSchedulePicker day={day} time={time} onDayChange={setDay} onTimeChange={setTime} />
-        <CategoryPicker value={category} onChange={setCategory} />
+        <CategoryPicker value={category} categoryId={selectedCategoryId} categories={categoryOptions} onChange={setCategory} onCategoryChange={setCategoryId} />
         <RepeatPicker value={repeatRule} onChange={setRepeatRule} />
         <fieldset className="todo-list-selector">
           <legend><Layers3 />루틴 묶음 <small>선택</small></legend>

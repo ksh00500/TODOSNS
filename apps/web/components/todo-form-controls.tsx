@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { localDateKey } from "@/lib/date";
 import { REPEAT_OPTIONS, TODO_CATEGORIES, type RepeatPreset } from "@/lib/todo-options";
+import type { TodoCategoryDto } from "@/lib/types";
 
 const categoryIcons = {
   생활: House,
@@ -190,8 +191,11 @@ export function TodoSchedulePicker({
   );
 }
 
-export function CategoryPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return <fieldset className="category-picker"><legend>카테고리</legend><div className="category-grid">{TODO_CATEGORIES.map((item, index) => { const Icon = categoryIcons[item]; return <button type="button" key={item} className={`category-option tone-${index + 1} ${value === item ? "selected" : ""}`} aria-pressed={value === item} onClick={() => onChange(item)}><Icon aria-hidden /><span>{item}</span></button>; })}</div></fieldset>;
+export function CategoryPicker({ value, categoryId, categories, onChange, onCategoryChange }: { value: string; categoryId?: string; categories?: TodoCategoryDto[]; onChange: (value: string) => void; onCategoryChange?: (id: string) => void }) {
+  const tones = ["aqua", "blush", "aqua", "butter", "aqua", "blush", "aqua", "butter"];
+  const managed = categories !== undefined;
+  const options = managed ? categories : TODO_CATEGORIES.map((name, index) => ({ id: name, name, baseCategory: name, icon: "tag", color: tones[index], position: index, isDefault: true } satisfies TodoCategoryDto));
+  return <fieldset className="category-picker"><legend>카테고리</legend><div className="category-grid">{options.map((item, index) => { const Icon = categoryIcons[item.baseCategory as keyof typeof categoryIcons] ?? categoryIcons.생활; const selected = categoryId ? categoryId === item.id : value === item.name || value === item.baseCategory; return <button type="button" key={item.id} className={`category-option tone-${index % 8 + 1} category-tone-${item.color} ${selected ? "selected" : ""}`} aria-pressed={selected} onClick={() => { onChange(item.baseCategory); onCategoryChange?.(managed ? item.id : ""); }}><Icon aria-hidden /><span>{item.name}</span>{item.name !== item.baseCategory && <small>{item.baseCategory}</small>}</button>; })}</div>{managed && options.length === 0 && <p className="form-error">카테고리 관리에서 사용할 항목을 하나 이상 켜주세요.</p>}</fieldset>;
 }
 
 export function RepeatPicker({ value, onChange }: { value: RepeatPreset; onChange: (value: RepeatPreset) => void }) {
