@@ -95,7 +95,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-    command: ["/bin/sh", "-c", "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/src/main.js"]
+    command: ["/bin/sh", "-c", "apps/api/node_modules/.bin/prisma migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/src/main.js"]
 
   web:
     build:
