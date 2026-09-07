@@ -55,8 +55,14 @@ export function DatePicker({ label, value, onChange, min }: { label: string; val
   const selected = new Date(`${value}T12:00:00`);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1, 12));
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const days = useMemo(() => calendarDays(view), [view]);
   const today = localDateKey();
+  const chooseDate = (next: string) => {
+    onChange(next);
+    setOpen(false);
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  };
   const moveCalendarFocus = (event: KeyboardEvent<HTMLButtonElement>) => {
     const offsets: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
     const offset = offsets[event.key];
@@ -67,12 +73,12 @@ export function DatePicker({ label, value, onChange, min }: { label: string; val
     candidates[Math.min(candidates.length - 1, Math.max(0, current + offset))]?.focus();
   };
   return <fieldset className="date-field-picker"><legend>{label}</legend>
-    <button type="button" className={open ? "active" : ""} aria-expanded={open} onClick={() => setOpen(!open)}><CalendarDays aria-hidden /><span>{value === today ? "오늘" : value}</span></button>
+    <button ref={triggerRef} type="button" className={open ? "active" : ""} aria-expanded={open} onClick={() => setOpen(!open)}><CalendarDays aria-hidden /><span>{value === today ? "오늘" : value}</span></button>
     {open && <div className="picker-panel calendar-picker" aria-label={`${label} 선택`}>
       <header><button type="button" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1, 12))} aria-label="이전 달"><ChevronLeft /></button><strong>{view.getFullYear()}년 {view.getMonth() + 1}월</strong><button type="button" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1, 12))} aria-label="다음 달"><ChevronRight /></button></header>
       <div className="calendar-weekdays" aria-hidden>{weekdays.map((item) => <span key={item}>{item}</span>)}</div>
-      <div className="calendar-grid">{days.map((item) => { const key = localDateKey(item); const disabled = Boolean(min && key < min); return <button type="button" key={key} disabled={disabled} className={`${monthKey(item) !== monthKey(view) ? "outside" : ""} ${key === value ? "selected" : ""} ${key === today ? "today" : ""}`} aria-label={item.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })} aria-pressed={key === value} onKeyDown={moveCalendarFocus} onClick={() => { onChange(key); setOpen(false); }}>{item.getDate()}</button>; })}</div>
-      {!min || today >= min ? <button type="button" className="calendar-today" onClick={() => { const now = new Date(); setView(new Date(now.getFullYear(), now.getMonth(), 1, 12)); onChange(today); setOpen(false); }}>오늘로 이동</button> : null}
+      <div className="calendar-grid">{days.map((item) => { const key = localDateKey(item); const disabled = Boolean(min && key < min); return <button type="button" key={key} disabled={disabled} className={`${monthKey(item) !== monthKey(view) ? "outside" : ""} ${key === value ? "selected" : ""} ${key === today ? "today" : ""}`} aria-label={item.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })} aria-pressed={key === value} onKeyDown={moveCalendarFocus} onClick={() => chooseDate(key)}>{item.getDate()}</button>; })}</div>
+      {!min || today >= min ? <button type="button" className="calendar-today" onClick={() => { const now = new Date(); setView(new Date(now.getFullYear(), now.getMonth(), 1, 12)); chooseDate(today); }}>오늘로 이동</button> : null}
     </div>}
   </fieldset>;
 }
@@ -136,8 +142,32 @@ export function TodoSchedulePicker({
   const [draftHour, draftMinute = "00"] = time.split(":");
   const [hour, setHour] = useState(draftHour);
   const [minute, setMinute] = useState(minutes.includes(draftMinute) ? draftMinute : "00");
+  const dateTriggerRef = useRef<HTMLButtonElement>(null);
+  const timeTriggerRef = useRef<HTMLButtonElement>(null);
+  const selectedHourRef = useRef<HTMLButtonElement>(null);
+  const selectedMinuteRef = useRef<HTMLButtonElement>(null);
   const days = useMemo(() => calendarDays(view), [view]);
   const today = localDateKey();
+
+  useEffect(() => {
+    if (open !== "time") return;
+    requestAnimationFrame(() => {
+      selectedHourRef.current?.scrollIntoView({ block: "center" });
+      selectedMinuteRef.current?.scrollIntoView({ block: "center" });
+    });
+  }, [open]);
+
+  const closePicker = (trigger: React.RefObject<HTMLButtonElement | null>) => {
+    setOpen(null);
+    requestAnimationFrame(() => trigger.current?.focus());
+  };
+  const toggleTimePicker = () => {
+    if (open === "time") return setOpen(null);
+    const [nextHour, nextMinute = "00"] = time.split(":");
+    setHour(nextHour);
+    setMinute(minutes.includes(nextMinute) ? nextMinute : "00");
+    setOpen("time");
+  };
 
   const moveOption = (event: KeyboardEvent<HTMLButtonElement>, values: string[], current: string, apply: (value: string) => void) => {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
@@ -160,10 +190,10 @@ export function TodoSchedulePicker({
     <fieldset className="schedule-picker">
       <legend>언제 할까요?</legend>
       <div className="schedule-triggers">
-        <button type="button" className={open === "date" ? "active" : ""} aria-expanded={open === "date"} onClick={() => setOpen(open === "date" ? null : "date")}>
+        <button ref={dateTriggerRef} type="button" className={open === "date" ? "active" : ""} aria-expanded={open === "date"} onClick={() => setOpen(open === "date" ? null : "date")}>
           <span><CalendarDays aria-hidden /> 날짜</span><b>{day === today ? "오늘" : day}</b>
         </button>
-        <button type="button" className={open === "time" ? "active" : ""} aria-expanded={open === "time"} onClick={() => setOpen(open === "time" ? null : "time")}>
+        <button ref={timeTriggerRef} type="button" className={open === "time" ? "active" : ""} aria-expanded={open === "time"} onClick={toggleTimePicker}>
           <span><Clock3 aria-hidden /> 시간</span><b>{time}</b>
         </button>
       </div>
@@ -174,17 +204,17 @@ export function TodoSchedulePicker({
           <div className="calendar-grid">
             {days.map((item, index) => {
               const key = localDateKey(item);
-              return <button type="button" key={key} className={`${monthKey(item) !== monthKey(view) ? "outside" : ""} ${key === day ? "selected" : ""} ${key === today ? "today" : ""}`} aria-label={item.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })} aria-pressed={key === day} onKeyDown={(event) => moveCalendarFocus(event, index)} onClick={() => { onDayChange(key); setOpen(null); }}>{item.getDate()}</button>;
+              return <button type="button" key={key} className={`${monthKey(item) !== monthKey(view) ? "outside" : ""} ${key === day ? "selected" : ""} ${key === today ? "today" : ""}`} aria-label={item.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" })} aria-pressed={key === day} onKeyDown={(event) => moveCalendarFocus(event, index)} onClick={() => { onDayChange(key); closePicker(dateTriggerRef); }}>{item.getDate()}</button>;
             })}
           </div>
-          <button type="button" className="calendar-today" onClick={() => { const now = new Date(); setView(new Date(now.getFullYear(), now.getMonth(), 1, 12)); onDayChange(today); setOpen(null); }}>오늘로 이동</button>
+          <button type="button" className="calendar-today" onClick={() => { const now = new Date(); setView(new Date(now.getFullYear(), now.getMonth(), 1, 12)); onDayChange(today); closePicker(dateTriggerRef); }}>오늘로 이동</button>
         </div>
       )}
       {open === "time" && (
         <div className="picker-panel time-picker" aria-label="시간 선택">
-          <div><span>시</span><div className="time-column" role="listbox" aria-label="시 선택">{hours.map((item) => <button type="button" role="option" aria-selected={hour === item} className={hour === item ? "selected" : ""} key={item} onKeyDown={(event) => moveOption(event, hours, item, setHour)} onClick={() => setHour(item)}>{item}시</button>)}</div></div>
-          <div><span>분</span><div className="time-column" role="listbox" aria-label="분 선택">{minutes.map((item) => <button type="button" role="option" aria-selected={minute === item} className={minute === item ? "selected" : ""} key={item} onKeyDown={(event) => moveOption(event, minutes, item, setMinute)} onClick={() => setMinute(item)}>{item}분</button>)}</div></div>
-          <button type="button" className="button full" onClick={() => { onTimeChange(`${hour}:${minute}`); setOpen(null); }}>시간 적용</button>
+          <div><span>시</span><div className="time-column" role="listbox" aria-label="시 선택">{hours.map((item) => <button ref={hour === item ? selectedHourRef : undefined} type="button" role="option" aria-selected={hour === item} className={hour === item ? "selected" : ""} key={item} onKeyDown={(event) => moveOption(event, hours, item, setHour)} onClick={() => setHour(item)}>{item}시</button>)}</div></div>
+          <div><span>분</span><div className="time-column" role="listbox" aria-label="분 선택">{minutes.map((item) => <button ref={minute === item ? selectedMinuteRef : undefined} type="button" role="option" aria-selected={minute === item} className={minute === item ? "selected" : ""} key={item} onKeyDown={(event) => moveOption(event, minutes, item, setMinute)} onClick={() => setMinute(item)}>{item}분</button>)}</div></div>
+          <button type="button" className="button full" onClick={() => { onTimeChange(`${hour}:${minute}`); closePicker(timeTriggerRef); }}>시간 적용</button>
         </div>
       )}
     </fieldset>

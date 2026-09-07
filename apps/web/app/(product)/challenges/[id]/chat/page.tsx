@@ -11,7 +11,7 @@ import { ConfirmSheet } from "@/components/confirm-sheet";
 import { ReportSheet } from "@/components/report-sheet";
 import { Sheet } from "@/components/sheet";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/states";
-import { apiFetch, getSocketAccessToken, isDemoMode, uploadImage } from "@/lib/api";
+import { apiFetch, getSocketAccessToken, isDemoMode, uploadImage, userErrorMessage } from "@/lib/api";
 import type { ChallengeChatMessage, ChallengeChatPage, ChatMember, ChatNotificationLevel, ChatReactionType } from "@/lib/types";
 
 const reactions: Array<{ type: ChatReactionType; emoji: string; label: string }> = [
@@ -21,6 +21,9 @@ const reactions: Array<{ type: ChatReactionType; emoji: string; label: string }>
   { type: "EMPATHY", emoji: "🤝", label: "공감해요" },
   { type: "SEEN", emoji: "✅", label: "확인했어요" },
 ];
+
+type ChallengeChatDraft = { body?: string; files: File[]; replyToId?: string; version: number };
+type ChallengeEditDraft = { messageId: string; body: string; version: number };
 
 export default function ChallengeChatPage() {
   const { id } = useParams<{ id: string }>();
@@ -41,9 +44,13 @@ export default function ChallengeChatPage() {
   const [moderating, setModerating] = useState<ChallengeChatMessage | null>(null);
   const [viewingMedia, setViewingMedia] = useState<string | null>(null);
   const [revealedBlocked, setRevealedBlocked] = useState<Set<string>>(new Set());
-  const [incoming, setIncoming] = useState(0);
+  const [incomingState, setIncomingState] = useState({ roomId: id, count: 0 });
+  const incoming = incomingState.roomId === id ? incomingState.count : 0;
   const [notice, setNotice] = useState("");
-  const initialized = useRef(false);
+  const roomKeyRef = useRef<string | null>(null);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const nearBottomRef = useRef(true);
+  const draftVersionRef = useRef(0);
 
   const query = useInfiniteQuery({
     queryKey: ["challenge-chat", id],
@@ -56,27 +63,28 @@ export default function ChallengeChatPage() {
 
   const refresh = () => client.invalidateQueries({ queryKey: ["challenge-chat", id] });
   const send = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (draft: ChallengeChatDraft) => {
       const mediaIds: string[] = [];
-      setProgress(files.map(() => 0));
-      for (const [index, file] of files.entries()) mediaIds.push(await uploadImage(file, (value) => setProgress((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))));
-      return apiFetch(`/challenges/${id}/chat/messages`, { method: "POST", body: JSON.stringify({ body: body.trim() || undefined, mediaIds, replyToId: replying?.id }) });
+      setProgress(draft.files.map(() => 0));
+      for (const [index, file] of draft.files.entries()) mediaIds.push(await uploadImage(file, (value) => setProgress((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))));
+      return apiFetch(`/challenges/${id}/chat/messages`, { method: "POST", body: JSON.stringify({ body: draft.body, mediaIds, replyToId: draft.replyToId }) });
     },
-    onSuccess: async () => { setBody(""); setFiles([]); setProgress([]); setReplying(null); await refresh(); requestAnimationFrame(() => scrollToBottom()); },
-    onError: (cause) => setNotice(cause instanceof Error ? cause.message : "메시지를 보내지 못했어요."),
+    onSuccess: async (_, draft) => { if (draftVersionRef.current === draft.version) { setBody(""); setFiles([]); setReplying(null); } setProgress([]); await refresh(); requestAnimationFrame(() => scrollToBottom()); },
+    onError: (cause) => setNotice(userErrorMessage(cause, "메시지를 보내지 못했어요.")),
   });
-  const update = useMutation({ mutationFn: () => apiFetch(`/challenges/${id}/chat/messages/${editing!.id}`, { method: "PATCH", body: JSON.stringify({ body: body.trim() }) }), onSuccess: async () => { setEditing(null); setBody(""); await refresh(); } });
+  const update = useMutation({ mutationFn: (draft: ChallengeEditDraft) => apiFetch(`/challenges/${id}/chat/messages/${draft.messageId}`, { method: "PATCH", body: JSON.stringify({ body: draft.body }) }), onSuccess: async (_, draft) => { if (draftVersionRef.current === draft.version) { setEditing(null); setBody(""); } await refresh(); }, onError: (cause) => setNotice(userErrorMessage(cause, "메시지를 수정하지 못했어요.")) });
   const remove = useMutation({ mutationFn: (messageId: string) => apiFetch(`/challenges/${id}/chat/messages/${messageId}`, { method: "DELETE" }), onSuccess: async () => { setDeleting(null); setMenuFor(null); await refresh(); } });
-  const react = useMutation({ mutationFn: ({ messageId, type }: { messageId: string; type: ChatReactionType }) => apiFetch(`/challenges/${id}/chat/messages/${messageId}/reactions`, { method: "POST", body: JSON.stringify({ type }) }), onSuccess: async () => { setReactionFor(null); await refresh(); } });
-  const read = useMutation({ mutationFn: (messageId: string) => apiFetch(`/challenges/${id}/chat/read`, { method: "POST", body: JSON.stringify({ messageId }) }) });
+  const react = useMutation({ mutationFn: ({ messageId, type }: { messageId: string; type: ChatReactionType }) => apiFetch(`/challenges/${id}/chat/messages/${messageId}/reactions`, { method: "POST", body: JSON.stringify({ type }) }), onSuccess: async () => { setReactionFor(null); await refresh(); }, onError: (cause) => setNotice(userErrorMessage(cause, "반응을 저장하지 못했어요.")) });
+  const read = useMutation({ mutationFn: (messageId: string) => apiFetch(`/challenges/${id}/chat/read`, { method: "POST", body: JSON.stringify({ messageId }) }), onSuccess: () => { void client.invalidateQueries({ queryKey: ["chat-inbox"] }); void client.invalidateQueries({ queryKey: ["shell-challenge-unread"] }); void client.invalidateQueries({ queryKey: ["challenges"] }); } });
   const markRead = read.mutate;
   const scrollToBottom = useCallback(() => {
     const scroll = document.querySelector<HTMLElement>(".app-scroll");
     scroll?.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
-    setIncoming(0);
+    nearBottomRef.current = true;
+    setIncomingState({ roomId: id, count: 0 });
     const latest = items.at(-1);
     if (latest) markRead(latest.id);
-  }, [items, markRead]);
+  }, [id, items, markRead]);
 
   useEffect(() => {
     if (!room?.conversationId || isDemoMode()) return;
@@ -95,26 +103,38 @@ export default function ChallengeChatPage() {
         socket.auth = { token: renewed };
         socket.connect();
       });
-      ["message.created", "message.updated", "message.deleted", "reaction.updated", "room.closed"].forEach((event) => socket?.on(event, () => {
-        const scroll = document.querySelector<HTMLElement>(".app-scroll");
-        const nearBottom = scroll ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 140 : true;
-        if (!nearBottom && event === "message.created") setIncoming((value) => value + 1);
-        void refresh();
-      }));
+      ["message.created", "message.updated", "message.deleted", "reaction.updated", "room.closed"].forEach((event) => socket?.on(event, () => { void refresh(); }));
     });
     return () => { disposed = true; socket?.disconnect(); };
   }, [room?.conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { const timer = window.setInterval(() => void query.refetch(), 15_000); return () => window.clearInterval(timer); }, [query]);
+  useEffect(() => { roomKeyRef.current = null; lastMessageIdRef.current = null; nearBottomRef.current = true; }, [id]);
+  useEffect(() => { const scroll = document.querySelector<HTMLElement>(".app-scroll"); if (!scroll) return; const updatePosition = () => { nearBottomRef.current = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 140; }; updatePosition(); scroll.addEventListener("scroll", updatePosition, { passive: true }); return () => scroll.removeEventListener("scroll", updatePosition); }, [id]);
   useEffect(() => {
-    if (!items.length || initialized.current) return;
-    initialized.current = true;
-    requestAnimationFrame(scrollToBottom);
-  }, [items, markRead, scrollToBottom]);
+    const latest = items.at(-1);
+    if (!latest || !room) return;
+    if (roomKeyRef.current !== room.conversationId) {
+      roomKeyRef.current = room.conversationId;
+      lastMessageIdRef.current = latest.id;
+      requestAnimationFrame(scrollToBottom);
+      return;
+    }
+    const previousId = lastMessageIdRef.current;
+    if (!previousId || previousId === latest.id) return;
+    const previousIndex = items.findIndex((item) => item.id === previousId);
+    lastMessageIdRef.current = latest.id;
+    const newCount = previousIndex < 0 ? 0 : items.length - previousIndex - 1;
+    if (!newCount) return;
+    if (nearBottomRef.current) requestAnimationFrame(scrollToBottom);
+    else requestAnimationFrame(() => setIncomingState((current) => ({ roomId: id, count: (current.roomId === id ? current.count : 0) + newCount })));
+  }, [id, items, room, scrollToBottom]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (editing) update.mutate(); else send.mutate();
+    const version = draftVersionRef.current;
+    if (editing) update.mutate({ messageId: editing.id, body: body.trim(), version });
+    else send.mutate({ body: body.trim() || undefined, files: [...files], replyToId: replying?.id, version });
   }
 
   function chooseFiles(list: FileList | null) {
@@ -122,7 +142,9 @@ export default function ChallengeChatPage() {
     if (selected.length > 4) return setNotice("사진은 메시지마다 최대 4장까지 올릴 수 있어요.");
     const next = selected.slice(0, 4);
     if (next.some((file) => file.size > 10_000_000)) return setNotice("사진은 한 장당 10MB 이하여야 해요.");
+    draftVersionRef.current += 1;
     setFiles(next);
+    setProgress([]);
   }
 
   if (query.isLoading) return <main className="chat-page"><ListSkeleton count={6} /></main>;
@@ -132,23 +154,23 @@ export default function ChallengeChatPage() {
     <header className="chat-header"><Link href={`/challenges/${id}`} className="icon-button" aria-label="챌린지로 돌아가기"><ArrowLeft /></Link><button type="button" className="chat-title" onClick={() => setMembersOpen(true)}><b>{room.title}</b><small><UsersRound /> 참여자 {room.participantCount.toLocaleString()}명</small></button><button type="button" className="icon-button" aria-label="대화방 알림 설정" onClick={() => setSettingsOpen(true)}><Settings2 /></button></header>
     {notice && <button className="notice chat-notice" onClick={() => setNotice("")}>{notice}</button>}
     {query.hasNextPage && <button className="chat-load-older" disabled={query.isFetchingNextPage} onClick={() => query.fetchNextPage()}><ChevronDown /> {query.isFetchingNextPage ? "불러오는 중…" : "이전 대화 더 보기"}</button>}
-    <section className="chat-messages" aria-live="polite">
-      {!items.length ? <EmptyState title="첫 대화를 시작해보세요" body="챌린지에 도움이 된 방법이나 조심할 점을 나눠보세요." /> : items.map((message) => <ChatBubble key={message.id} message={message} revealed={revealedBlocked.has(message.id)} onReveal={() => setRevealedBlocked((current) => new Set(current).add(message.id))} onReply={() => { setReplying(message); setEditing(null); }} onMenu={() => setMenuFor(message.id)} onReact={() => setReactionFor(message.id)} onHistory={() => setHistoryFor(message.id)} onMedia={setViewingMedia} />)}
+    <section className="chat-messages">
+      {!items.length ? <EmptyState title="첫 대화를 시작해보세요" body="챌린지에 도움이 된 방법이나 조심할 점을 나눠보세요." /> : items.map((message) => <ChatBubble key={message.id} message={message} revealed={revealedBlocked.has(message.id)} onReveal={() => setRevealedBlocked((current) => new Set(current).add(message.id))} onReply={() => { draftVersionRef.current += 1; setReplying(message); setEditing(null); }} onMenu={() => setMenuFor(message.id)} onReact={() => setReactionFor(message.id)} onHistory={() => setHistoryFor(message.id)} onMedia={setViewingMedia} />)}
     </section>
-    {incoming > 0 && <button className="new-chat-messages" onClick={scrollToBottom}>새 메시지 {incoming}개 <ChevronDown /></button>}
+    {incoming > 0 && <button className="new-chat-messages" onClick={scrollToBottom}><span aria-live="polite">새 메시지 {incoming}개</span> <ChevronDown /></button>}
     {room.readOnly ? <div className="chat-readonly"><Check /><span><b>종료된 챌린지예요</b><small>{room.purgeAt ? `${new Date(room.purgeAt).toLocaleDateString("ko-KR")}까지 대화를 볼 수 있어요.` : "대화를 읽기만 할 수 있어요."}</small></span></div> : room.mutedUntil ? <div className="chat-readonly"><BellOff /><span><b>채팅이 잠시 제한됐어요</b><small>{new Date(room.mutedUntil).toLocaleString("ko-KR")}까지 읽기만 할 수 있어요.</small></span></div> : <form className="chat-composer" onSubmit={submit}>
-      {(replying || editing) && <div className="chat-compose-context"><span>{editing ? <Pencil /> : <MessageCircleReply />}</span><div><b>{editing ? "메시지 수정" : `${replying?.sender?.nickname ?? "메시지"}에게 답장`}</b><small>{editing?.body || replying?.body || "사진 메시지"}</small></div><button type="button" aria-label="답장 또는 수정 취소" onClick={() => { setReplying(null); setEditing(null); setBody(""); }}><X /></button></div>}
-      {files.length > 0 && <div className="chat-photo-drafts">{files.map((file, index) => <ChatPhotoDraft file={file} index={index} progress={progress[index]} key={`${file.name}-${file.lastModified}-${index}`} onRemove={() => setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</div>}
-      <div className="chat-compose-row"><label className="chat-photo-button" aria-label="사진 첨부"><input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple onChange={(event) => chooseFiles(event.target.files)} /><ImagePlus /></label><label className="sr-only" htmlFor="chat-message">대화 메시지</label><textarea id="chat-message" rows={1} value={body} onChange={(event) => setBody(event.target.value)} maxLength={2000} placeholder="팁이나 경험을 나눠보세요" /><button className="chat-send-button" aria-label={editing ? "메시지 수정 저장" : "메시지 보내기"} disabled={send.isPending || update.isPending || (!body.trim() && !files.length)}>{send.isPending || update.isPending ? <LoaderCircle className="spin" /> : <Send />}</button></div>
+      {(replying || editing) && <div className="chat-compose-context"><span>{editing ? <Pencil /> : <MessageCircleReply />}</span><div><b>{editing ? "메시지 수정" : `${replying?.sender?.nickname ?? "메시지"}에게 답장`}</b><small>{editing?.body || replying?.body || "사진 메시지"}</small></div><button type="button" aria-label="답장 또는 수정 취소" onClick={() => { draftVersionRef.current += 1; setReplying(null); setEditing(null); setBody(""); }}><X /></button></div>}
+      {files.length > 0 && <div className="chat-photo-drafts">{files.map((file, index) => <ChatPhotoDraft file={file} index={index} progress={progress[index]} key={`${file.name}-${file.lastModified}-${index}`} onRemove={() => { draftVersionRef.current += 1; setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</div>}
+      <div className="chat-compose-row"><label className="chat-photo-button" aria-label="사진 첨부"><input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple onChange={(event) => chooseFiles(event.target.files)} /><ImagePlus /></label><label className="sr-only" htmlFor="chat-message">대화 메시지</label><textarea id="chat-message" rows={1} value={body} onChange={(event) => { draftVersionRef.current += 1; setBody(event.target.value); }} maxLength={2000} placeholder="팁이나 경험을 나눠보세요" /><button className="chat-send-button" aria-label={editing ? "메시지 수정 저장" : "메시지 보내기"} disabled={send.isPending || update.isPending || (!body.trim() && !files.length)}>{send.isPending || update.isPending ? <LoaderCircle className="spin" /> : <Send />}</button></div>
     </form>}
 
     {reactionFor && <ReactionSheet message={items.find((item) => item.id === reactionFor)!} onClose={() => setReactionFor(null)} onSelect={(type) => react.mutate({ messageId: reactionFor, type })} onUsers={(type, label) => { setReactionUsersFor({ messageId: reactionFor, type, label }); setReactionFor(null); }} busy={react.isPending} />}
     {reactionUsersFor && <ReactionUsersSheet challengeId={id} value={reactionUsersFor} onClose={() => setReactionUsersFor(null)} />}
-    {menuFor && <MessageMenu message={items.find((item) => item.id === menuFor)!} onClose={() => setMenuFor(null)} onReply={() => { const item = items.find((candidate) => candidate.id === menuFor)!; setReplying(item); setEditing(null); setMenuFor(null); }} onEdit={() => { const item = items.find((candidate) => candidate.id === menuFor)!; setEditing(item); setReplying(null); setBody(item.body ?? ""); setMenuFor(null); }} onDelete={() => setDeleting(menuFor)} onHistory={() => { setHistoryFor(menuFor); setMenuFor(null); }} onReport={() => { setReporting(menuFor); setMenuFor(null); }} onModerate={() => { setModerating(items.find((item) => item.id === menuFor)!); setMenuFor(null); }} />}
+    {menuFor && <MessageMenu message={items.find((item) => item.id === menuFor)!} onClose={() => setMenuFor(null)} onReply={() => { const item = items.find((candidate) => candidate.id === menuFor)!; draftVersionRef.current += 1; setReplying(item); setEditing(null); setMenuFor(null); }} onEdit={() => { const item = items.find((candidate) => candidate.id === menuFor)!; draftVersionRef.current += 1; setEditing(item); setReplying(null); setBody(item.body ?? ""); setMenuFor(null); }} onDelete={() => { setDeleting(menuFor); setMenuFor(null); }} onHistory={() => { setHistoryFor(menuFor); setMenuFor(null); }} onReport={() => { setReporting(menuFor); setMenuFor(null); }} onModerate={() => { setModerating(items.find((item) => item.id === menuFor)!); setMenuFor(null); }} />}
     {settingsOpen && <ChatSettings challengeId={id} value={room.notificationLevel} onClose={() => setSettingsOpen(false)} onSaved={refresh} />}
     {membersOpen && <MembersSheet challengeId={id} canManage={room.canManage} onClose={() => setMembersOpen(false)} />}
     {historyFor && <HistorySheet challengeId={id} messageId={historyFor} onClose={() => setHistoryFor(null)} />}
-    {deleting && <ConfirmSheet title="메시지를 삭제할까요?" body="대화에는 삭제된 메시지라는 표시만 남아요." confirmLabel="메시지 삭제" danger busy={remove.isPending} onClose={() => setDeleting(null)} onConfirm={() => remove.mutate(deleting)} />}
+    {deleting && <ConfirmSheet title="메시지를 삭제할까요?" body="대화에는 삭제된 메시지라는 표시만 남아요." confirmLabel="메시지 삭제" danger busy={remove.isPending} error={remove.isError ? userErrorMessage(remove.error, "메시지를 삭제하지 못했어요.") : ""} onClose={() => setDeleting(null)} onConfirm={() => remove.mutate(deleting)} />}
     {reporting && <ReportSheet targetType="MESSAGE" targetId={reporting} onClose={() => setReporting(null)} onReported={() => { setReporting(null); setNotice("메시지 신고가 접수됐어요."); }} />}
     {moderating && <ModerationSheet challengeId={id} message={moderating} onClose={() => setModerating(null)} onDone={async () => { setModerating(null); await refresh(); }} />}
     {viewingMedia && <Sheet title="대화 사진" onClose={() => setViewingMedia(null)}><div className="chat-media-view"><Image src={viewingMedia} alt="대화에 첨부된 사진 크게 보기" width={800} height={800} unoptimized /></div></Sheet>}

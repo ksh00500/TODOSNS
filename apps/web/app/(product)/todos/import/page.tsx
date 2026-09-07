@@ -11,7 +11,7 @@ import type { FeedPost, TodoDto, TodoListDto } from "@/lib/types";
 import { useSession } from "@/components/app-providers";
 import { AuthGate, ErrorState, ListSkeleton } from "@/components/states";
 import { CategoryPicker, RepeatPicker, TodoSchedulePicker } from "@/components/todo-form-controls";
-import { REPEAT_OPTIONS, toRepeatPreset, type RepeatPreset } from "@/lib/todo-options";
+import { isPresetRepeatRule, REPEAT_OPTIONS, toRepeatPreset, type RepeatPreset } from "@/lib/todo-options";
 
 interface ListItemDraft {
   sourceTodoId: string;
@@ -20,6 +20,8 @@ interface ListItemDraft {
   time: string;
   category: string;
   repeatRule: RepeatPreset;
+  originalRepeatRule?: string | null;
+  repeatEdited: boolean;
 }
 
 function listItemDrafts(list: TodoListDto | null | undefined, day: string, time: string): ListItemDraft[] {
@@ -35,11 +37,14 @@ function listItemDrafts(list: TodoListDto | null | undefined, day: string, time:
       time: `${String(shifted.getHours()).padStart(2, "0")}:${String(shifted.getMinutes()).padStart(2, "0")}`,
       category: item.todo.category,
       repeatRule: toRepeatPreset(item.todo.repeatRule),
+      originalRepeatRule: item.todo.repeatRule,
+      repeatEdited: false,
     };
   });
 }
 
 function repeatLabel(rule?: string | null) {
+  if (!isPresetRepeatRule(rule)) return "원본 반복 유지";
   const preset = toRepeatPreset(rule);
   return REPEAT_OPTIONS.find((option) => option.value === preset)?.label ?? "반복 안 함";
 }
@@ -81,9 +86,12 @@ function ImportForm({ post, onClose }: { post: FeedPost; onClose: () => void }) 
   const chooseListRepeatMode = (mode: CloneTodoListRepeatMode) => {
     setListRepeatMode(mode);
     if (mode === "CUSTOM") {
-      setItemDrafts(listItemDrafts(sourceList, day, time));
       setExpandedItem((current) => current ?? sourceList?.items[0]?.todo.id ?? null);
     }
+  };
+  const resetItemDrafts = () => {
+    setItemDrafts(listItemDrafts(sourceList, day, time));
+    setError("");
   };
   const updateItem = (sourceTodoId: string, changes: Partial<ListItemDraft>) => setItemDrafts((current) => current.map((item) => item.sourceTodoId === sourceTodoId ? { ...item, ...changes } : item));
   const save = useMutation({
@@ -93,7 +101,7 @@ function ImportForm({ post, onClose }: { post: FeedPost; onClose: () => void }) 
         title: title.trim(),
         dueDate,
         repeatMode: listRepeatMode,
-        items: listRepeatMode === "CUSTOM" ? itemDrafts.map((item) => ({ sourceTodoId: item.sourceTodoId, title: item.title.trim(), dueDate: new Date(`${item.day}T${item.time}:00`).toISOString(), category: item.category, repeatRule: item.repeatRule || null })) : undefined,
+        items: listRepeatMode === "CUSTOM" ? itemDrafts.map((item) => ({ sourceTodoId: item.sourceTodoId, title: item.title.trim(), dueDate: new Date(`${item.day}T${item.time}:00`).toISOString(), category: item.category, repeatRule: item.repeatEdited ? item.repeatRule || null : item.originalRepeatRule })) : undefined,
       }) });
       if (!sourceTodo) throw new Error("가져올 TODO를 찾지 못했어요.");
       return apiFetch<TodoDto>(`/todos/${sourceTodo.id}/clone`, { method: "POST", body: JSON.stringify({ title: title.trim(), dueDate, category, repeatRule: repeatRule || undefined, keepRepeat: Boolean(repeatRule), visibility: "PRIVATE" }) });
@@ -120,7 +128,7 @@ function ImportForm({ post, onClose }: { post: FeedPost; onClose: () => void }) 
         <button type="button" className={listRepeatMode === "CUSTOM" ? "selected" : ""} aria-pressed={listRepeatMode === "CUSTOM"} onClick={() => chooseListRepeatMode("CUSTOM")}><Settings2 /><span><b>항목별 설정</b><small>시간과 반복을 하나씩 조정해요</small></span></button>
       </div></fieldset>}
       {sourceList && listRepeatMode === "KEEP" && <div className="import-repeat-summary"><span>원본 반복 요약</span><div>{sourceList.items.map((item) => <small key={item.todo.id}>{item.todo.title}<b>{repeatLabel(item.todo.repeatRule)}</b></small>)}</div></div>}
-      {sourceList && listRepeatMode === "CUSTOM" && <section className="import-item-settings" aria-label="루틴 항목별 설정"><header><div><span>항목별 설정</span><p>TODO를 열어 시작 시각과 반복을 확인하세요.</p></div><b>{itemDrafts.length}개</b></header>{itemDrafts.map((item, index) => { const open = expandedItem === item.sourceTodoId; return <article className={open ? "open" : ""} key={item.sourceTodoId}><button type="button" className="import-item-toggle" aria-expanded={open} onClick={() => setExpandedItem(open ? null : item.sourceTodoId)}><span>{index + 1}</span><div><b>{item.title}</b><small>{item.day} · {item.time} · {repeatLabel(item.repeatRule)}</small></div>{open ? <ChevronDown /> : <ChevronRight />}</button>{open && <div className="import-item-body"><label className="field"><span>TODO 이름</span><input value={item.title} onChange={(event) => updateItem(item.sourceTodoId, { title: event.target.value })} maxLength={120} required /></label><TodoSchedulePicker day={item.day} time={item.time} onDayChange={(value) => updateItem(item.sourceTodoId, { day: value })} onTimeChange={(value) => updateItem(item.sourceTodoId, { time: value })} /><RepeatPicker value={item.repeatRule} onChange={(value) => updateItem(item.sourceTodoId, { repeatRule: value })} /></div>}</article>; })}</section>}
+      {sourceList && listRepeatMode === "CUSTOM" && <section className="import-item-settings" aria-label="루틴 항목별 설정"><header><div><span>항목별 설정</span><p>모드를 바꿔도 이곳에서 편집한 내용은 유지돼요.</p></div><div className="import-item-summary"><b>{itemDrafts.length}개</b><button type="button" onClick={resetItemDrafts}>원본으로 초기화</button></div></header>{itemDrafts.map((item, index) => { const open = expandedItem === item.sourceTodoId; const repeatSummary = item.repeatEdited ? repeatLabel(item.repeatRule) : repeatLabel(item.originalRepeatRule); return <article className={open ? "open" : ""} key={item.sourceTodoId}><button type="button" className="import-item-toggle" aria-expanded={open} onClick={() => setExpandedItem(open ? null : item.sourceTodoId)}><span>{index + 1}</span><div><b>{item.title}</b><small>{item.day} · {item.time} · {repeatSummary}</small></div>{open ? <ChevronDown /> : <ChevronRight />}</button>{open && <div className="import-item-body"><label className="field"><span>TODO 이름</span><input value={item.title} onChange={(event) => updateItem(item.sourceTodoId, { title: event.target.value })} maxLength={120} required /></label><TodoSchedulePicker day={item.day} time={item.time} onDayChange={(value) => updateItem(item.sourceTodoId, { day: value })} onTimeChange={(value) => updateItem(item.sourceTodoId, { time: value })} />{!item.repeatEdited && !isPresetRepeatRule(item.originalRepeatRule) && <p className="form-help">이 항목의 원래 반복 규칙을 그대로 유지해요. 아래에서 다른 반복을 고르면 새 설정으로 바뀌어요.</p>}<RepeatPicker value={item.repeatRule} onChange={(value) => updateItem(item.sourceTodoId, { repeatRule: value, repeatEdited: true })} /></div>}</article>; })}</section>}
       {error && <p className="form-error">{error}</p>}
       <div className="import-submit"><button className="button full" disabled={save.isPending}><CheckCircle2 />{save.isPending ? "저장 중…" : sourceList ? "내 루틴에 저장" : "내 TODO에 저장"}</button></div>
     </form>

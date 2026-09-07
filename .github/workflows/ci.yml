@@ -53,3 +53,5 @@ jobs:
       - run: npm run test
       - run: npm run build
       - run: npm audit --omit=dev
+      - run: bash -n infra/backup.sh
+      - run: docker compose --env-file .env.example -f infra/docker-compose.yml config --quiet

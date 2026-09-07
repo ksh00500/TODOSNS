@@ -5,7 +5,7 @@ import Link from "next/link";
 import { InfiniteData, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Brain, BriefcaseBusiness, Check, Clock3, Dumbbell, GraduationCap, Grid2X2, HeartPulse, House, Palette, Search, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, userErrorMessage } from "@/lib/api";
 import type { FeedPage, FeedPost } from "@/lib/types";
 import { TODO_CATEGORIES } from "@/lib/todo-options";
 import { useSession } from "@/components/app-providers";
@@ -29,16 +29,18 @@ export function ExploreFeed() {
   const mode = params.get("mode") === "mix" ? "mix" : "recent";
   const endpoint = status === "authenticated" ? "/feed" : "/public/feed";
   const [filterOpen, setFilterOpen] = useState(false);
+  const [actionError, setActionError] = useState("");
   const activeFilterCount = Number(category !== "전체") + Number(mode !== "recent");
   const filterSummary = [category !== "전체" ? category : null, mode === "mix" ? "추천순" : null].filter(Boolean).join(" · ");
 
   const feed = useInfiniteQuery({ queryKey: ["feed", endpoint, category, mode], initialPageParam: "", queryFn: ({ pageParam }) => apiFetch<FeedPage>(`${endpoint}?limit=10&mode=${mode}&category=${encodeURIComponent(category)}${pageParam ? `&cursor=${pageParam}` : ""}`), getNextPageParam: (last) => last.nextCursor ?? undefined });
   const requireLogin = () => { router.push(`/start?returnTo=${encodeURIComponent(`/explore${params.size ? `?${params}` : ""}`)}`); };
-  const cheer = useMutation({ mutationFn: (post: FeedPost) => apiFetch(`/feed/posts/${post.id}/cheer`, { method: "POST" }), onMutate: async (post) => { if (status !== "authenticated") { requireLogin(); throw new Error("LOGIN_REQUIRED"); } await queryClient.cancelQueries({ queryKey: ["feed"] }); const snapshots = queryClient.getQueriesData<InfiniteData<FeedPage>>({ queryKey: ["feed"] }); queryClient.setQueriesData<InfiniteData<FeedPage>>({ queryKey: ["feed"] }, (data) => data ? { ...data, pages: data.pages.map((page) => ({ ...page, items: page.items.map((item) => item.id === post.id ? { ...item, cheered: !item.cheered, cheerCount: item.cheerCount + (item.cheered ? -1 : 1) } : item) })) } : data); return { snapshots }; }, onError: (error, _post, context) => { if (error instanceof Error && error.message === "LOGIN_REQUIRED") return; context?.snapshots.forEach(([key, data]) => queryClient.setQueryData(key, data)); } });
+  const cheer = useMutation({ mutationFn: (post: FeedPost) => apiFetch(`/feed/posts/${post.id}/cheer`, { method: "POST" }), onMutate: async (post) => { setActionError(""); if (status !== "authenticated") { requireLogin(); throw new Error("LOGIN_REQUIRED"); } await queryClient.cancelQueries({ queryKey: ["feed"] }); const snapshots = queryClient.getQueriesData<InfiniteData<FeedPage>>({ queryKey: ["feed"] }); queryClient.setQueriesData<InfiniteData<FeedPage>>({ queryKey: ["feed"] }, (data) => data ? { ...data, pages: data.pages.map((page) => ({ ...page, items: page.items.map((item) => item.id === post.id ? { ...item, cheered: !item.cheered, cheerCount: item.cheerCount + (item.cheered ? -1 : 1) } : item) })) } : data); return { snapshots }; }, onError: (error, _post, context) => { if (error instanceof Error && error.message === "LOGIN_REQUIRED") return; context?.snapshots.forEach(([key, data]) => queryClient.setQueryData(key, data)); setActionError(userErrorMessage(error, "응원을 저장하지 못했어요.")); }, onSettled: () => void queryClient.invalidateQueries({ queryKey: ["feed"] }) });
   const posts = feed.data?.pages.flatMap((page) => page.items) ?? [];
   const openImport = (post: FeedPost) => { if (status !== "authenticated") { requireLogin(); return; } router.push(`/todos/import?postId=${post.id}`); };
 
   const applyFilter = (nextCategory: string, nextMode: "recent" | "mix") => {
+    if (nextMode === "mix" && status !== "authenticated") { setFilterOpen(false); requireLogin(); return; }
     const next = new URLSearchParams();
     if (nextCategory !== "전체") next.set("category", nextCategory);
     if (nextMode !== "recent") next.set("mode", nextMode);
@@ -47,6 +49,7 @@ export function ExploreFeed() {
   };
 
   return <main className="app-page explore-page"><header className="explore-minimal-header"><div><span>좋은 실천을 가볍게 둘러보세요</span><h1>탐색</h1>{filterSummary && <small><SlidersHorizontal aria-hidden />{filterSummary}</small>}</div><div className="explore-header-actions"><button className="explore-tool-button" aria-label={`피드 필터${activeFilterCount ? ` ${activeFilterCount}개 적용됨` : ""}`} onClick={() => setFilterOpen(true)}><SlidersHorizontal aria-hidden />{activeFilterCount > 0 && <i aria-hidden>{activeFilterCount}</i>}</button><Link href="/explore/search" className="explore-tool-button" aria-label="검색 화면 열기"><Search aria-hidden /></Link></div></header>
+    {actionError && <div className="inline-action-error" role="alert"><span>{actionError}</span><button onClick={() => setActionError("")}>닫기</button></div>}
     {feed.isLoading ? <ListSkeleton /> : feed.isError ? <ErrorState onRetry={() => void feed.refetch()} /> : posts.length === 0 ? <EmptyState title="조건에 맞는 실천이 없어요" body={activeFilterCount ? "필터를 바꾸면 다른 실천을 만날 수 있어요." : "첫 번째 실천이 올라오면 여기에서 만날 수 있어요."} /> : <div className="feed-stack explore-feed-stack" aria-label="공개 실천 피드">{posts.map((post) => <FeedCard key={post.id} post={post} pending={cheer.isPending} onCheer={() => cheer.mutate(post)} onCopy={() => openImport(post)} />)}{feed.hasNextPage && <button className="load-more" onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>{feed.isFetchingNextPage ? "불러오는 중…" : "실천 더 보기"}</button>}</div>}
     {filterOpen && <FeedFilterSheet category={category} mode={mode} onClose={() => setFilterOpen(false)} onApply={applyFilter} />}
   </main>;

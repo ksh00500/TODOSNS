@@ -32,6 +32,8 @@ import {
   TokenDto,
 } from "./auth.dto";
 import { EmailService } from "./email.service";
+import { ChatEvents } from "./chat.events";
+import { Throttle } from "@nestjs/throttler";
 
 type JwtUser = { sub: string; role: string; email: string; sid: string };
 type RefreshUser = JwtUser & { fid: string; jti: string };
@@ -52,7 +54,7 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) throw new UnauthorizedException("로그인이 필요해요.");
     try {
       request.user = this.jwt.verify<JwtUser>(token, { secret: process.env.JWT_ACCESS_SECRET });
-      const active = await this.prisma.session.count({ where: { id: request.user.sid, userId: request.user.sub, revokedAt: null, expiresAt: { gt: new Date() } } });
+      const active = await this.prisma.session.count({ where: { id: request.user.sid, userId: request.user.sub, revokedAt: null, expiresAt: { gt: new Date() }, user: { suspendedAt: null, deletionRequestedAt: null } } });
       if (!active) throw new Error("revoked");
       return true;
     } catch {
@@ -71,7 +73,7 @@ export class OptionalJwtAuthGuard implements CanActivate {
     if (token) {
       try {
         const user = this.jwt.verify<JwtUser>(token, { secret: process.env.JWT_ACCESS_SECRET });
-        const active = await this.prisma.session.count({ where: { id: user.sid, userId: user.sub, revokedAt: null, expiresAt: { gt: new Date() } } });
+        const active = await this.prisma.session.count({ where: { id: user.sid, userId: user.sub, revokedAt: null, expiresAt: { gt: new Date() }, user: { suspendedAt: null, deletionRequestedAt: null } } });
         request.user = active ? user : undefined;
       } catch {
         request.user = undefined;
@@ -90,6 +92,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly email: EmailService,
+    private readonly events: ChatEvents,
   ) {}
 
   private assertAdult(date: Date) {
@@ -150,17 +153,17 @@ export class AuthService {
   }
 
   async googleLogin(dto: GoogleLoginDto, context: RequestContext) {
-    if (!process.env.GOOGLE_CLIENT_ID) throw new BadRequestException("Google 로그인이 아직 설정되지 않았어요.");
+    if (process.env.GOOGLE_AUTH_ENABLED !== "true" || !process.env.GOOGLE_CLIENT_ID) throw new BadRequestException("Google 로그인이 아직 설정되지 않았어요.");
     const ticket = await this.google.verifyIdToken({
       idToken: dto.idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
     const profile = ticket.getPayload();
-    if (!profile?.email || !profile.sub) throw new UnauthorizedException("Google 계정을 확인하지 못했어요.");
-    let user = await this.prisma.user.findFirst({
-      where: { OR: [{ googleId: profile.sub }, { email: profile.email.toLowerCase() }] },
-    });
+    if (!profile?.email || !profile.sub || profile.email_verified !== true) throw new UnauthorizedException("Google 계정을 확인하지 못했어요.");
+    let user = await this.prisma.user.findUnique({ where: { googleId: profile.sub } });
     if (!user) {
+      const existingEmail = await this.prisma.user.findUnique({ where: { email: profile.email.toLowerCase() } });
+      if (existingEmail) throw new ConflictException("같은 이메일 계정이 있어요. 비밀번호로 로그인한 뒤 계정 연결을 진행해주세요.");
       if (!dto.birthDate) throw new BadRequestException("최초 가입에는 생년월일이 필요해요.");
       const birthDate = new Date(dto.birthDate);
       this.assertAdult(birthDate);
@@ -178,12 +181,10 @@ export class AuthService {
           },
         });
       });
-    } else if (!user.googleId) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { googleId: profile.sub, emailVerifiedAt: user.emailVerifiedAt ?? new Date() },
-      });
+    } else if (user.email.toLowerCase() !== profile.email.toLowerCase()) {
+      throw new UnauthorizedException("연결된 Google 계정을 확인하지 못했어요.");
     }
+    this.assertActiveUser(user);
     return { user: this.safeUser(user), ...(await this.createSession(user, context)) };
   }
 
@@ -201,6 +202,7 @@ export class AuthService {
     ) {
       throw new BadRequestException("인증 링크가 만료됐거나 이미 사용됐어요.");
     }
+    this.assertActiveUser(row.user);
     const user = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.verificationToken.updateMany({ where: { id: row.id, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } });
       if (claimed.count !== 1) throw new BadRequestException("인증 링크가 만료됐거나 이미 사용됐어요.");
@@ -270,6 +272,9 @@ export class AuthService {
       throw new UnauthorizedException("다시 로그인해주세요.");
     }
     if (!this.safeDigestEqual(session.tokenHash, this.digest(refreshToken))) {
+      if (Date.now() - session.lastUsedAt.getTime() < 5_000) {
+        throw new UnauthorizedException("다른 탭에서 세션을 갱신했어요. 잠시 후 다시 시도해주세요.");
+      }
       await this.prisma.session.updateMany({
         where: { familyId: session.familyId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -291,6 +296,18 @@ export class AuthService {
       where: { id: sessionId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    this.events.revoke({ kind: "session", sessionId });
+    return { ok: true };
+  }
+
+  async logoutToken(accessToken?: string, refreshToken?: string) {
+    for (const [token, secret] of [[accessToken, process.env.JWT_ACCESS_SECRET], [refreshToken, process.env.JWT_REFRESH_SECRET]] as const) {
+      if (!token || !secret) continue;
+      try {
+        const payload = this.jwt.verify<JwtUser>(token, { secret, ignoreExpiration: true });
+        if (payload.sid) return this.logout(payload.sid);
+      } catch { /* Invalid credentials still result in a cleared browser cookie. */ }
+    }
     return { ok: true };
   }
 
@@ -299,6 +316,7 @@ export class AuthService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    this.events.revoke({ kind: "user", userId });
     return { ok: true };
   }
 
@@ -318,6 +336,7 @@ export class AuthService {
         data: { revokedAt: new Date() },
       }),
     ]);
+    this.events.revoke({ kind: "user", userId });
     return { ok: true, purgeWithinDays: 7 };
   }
 
@@ -325,7 +344,13 @@ export class AuthService {
     user: { id: string; email: string; role: string },
     context: RequestContext,
   ) {
+    const active = await this.prisma.user.count({ where: { id: user.id, suspendedAt: null, deletionRequestedAt: null, emailVerifiedAt: { not: null } } });
+    if (active !== 1) throw new UnauthorizedException("이 계정으로 로그인할 수 없어요.");
     return this.rotateSession(user, randomUUID(), randomUUID(), context, true);
+  }
+
+  private assertActiveUser(user: { suspendedAt?: Date | null; deletionRequestedAt?: Date | null }) {
+    if (user.suspendedAt || user.deletionRequestedAt) throw new UnauthorizedException("이 계정으로 로그인할 수 없어요.");
   }
 
   private async rotateSession(
@@ -524,12 +549,23 @@ export class AuthController {
       : process.env.COOKIE_SECURE === "true";
   }
 
+  @Get("config")
+  config() {
+    return {
+      inviteRequired: process.env.INVITE_REQUIRED === "true",
+      googleAuthEnabled:
+        process.env.GOOGLE_AUTH_ENABLED === "true" && Boolean(process.env.GOOGLE_CLIENT_ID),
+    };
+  }
+
   @Post("signup")
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   signup(@Body() dto: SignupDto) {
     return this.auth.signup(dto);
   }
 
   @Post("login")
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async login(
     @Body() dto: LoginDto,
     @Req() request: Request,
@@ -541,6 +577,7 @@ export class AuthController {
   }
 
   @Post("google")
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async google(
     @Body() dto: GoogleLoginDto,
     @Req() request: Request,
@@ -563,11 +600,13 @@ export class AuthController {
   }
 
   @Post("resend-verification")
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   resendVerification(@Body() dto: EmailDto) {
     return this.auth.resendVerification(dto.email);
   }
 
   @Post("forgot-password")
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   forgotPassword(@Body() dto: EmailDto) {
     return this.auth.forgotPassword(dto.email);
   }
@@ -591,13 +630,13 @@ export class AuthController {
     return { user: result.user, accessToken: result.accessToken };
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post("logout")
   async logout(
-    @CurrentUser() user: JwtUser,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.auth.logout(user.sid);
+    const accessToken = request.headers.authorization?.replace(/^Bearer\s+/i, "");
+    const result = await this.auth.logoutToken(accessToken, request.cookies?.mungsil_refresh);
     this.clearCookie(response);
     return result;
   }

@@ -48,15 +48,17 @@ test("두 사용자의 생성 → 완료 → 공유 → 응원·댓글 → 가�
 
   try {
     await prisma.user.deleteMany({ where: { email: { startsWith: prefix } } });
-    const [userA, userB, userCap] = await Promise.all([
+    const [userA, userB, userCap, userConcurrent] = await Promise.all([
       createVerifiedUser("a"),
       createVerifiedUser("b"),
       createVerifiedUser("cap"),
+      createVerifiedUser("concurrent"),
     ]);
-    const [sessionA, sessionB, sessionCap] = await Promise.all([
+    const [sessionA, sessionB, sessionCap, sessionConcurrent] = await Promise.all([
       login(server, userA.email),
       login(server, userB.email),
       login(server, userCap.email),
+      login(server, userConcurrent.email),
     ]);
 
     const routine = await request(server)
@@ -138,10 +140,26 @@ test("두 사용자의 생성 → 완료 → 공유 → 응원·댓글 → 가�
     const capped = await prisma.user.findUniqueOrThrow({ where: { id: userCap.id } });
     assert.equal(capped.lifetimePower, 50);
 
+    await prisma.pointLedger.createMany({ data: Array.from({ length: 4 }, (_, index) => ({ userId: userConcurrent.id, amount: 10, reason: "TODO_COMPLETE", referenceId: `seed-${index}` })) });
+    const concurrentTodos = await Promise.all([0, 1].map((index) => request(server).post("/api/v1/todos").set(auth(sessionConcurrent.token)).send({ title: `동시 완료 ${index}`, category: "생활", dueDate: new Date(Date.now() + index * 1000).toISOString(), visibility: "PRIVATE" }).expect(201)));
+    await Promise.all(concurrentTodos.map((todo) => request(server).post(`/api/v1/todos/${todo.body.id}/complete`).set(auth(sessionConcurrent.token)).send({ share: false }).expect(201)));
+    assert.equal(await prisma.pointLedger.count({ where: { userId: userConcurrent.id, reason: "TODO_COMPLETE" } }), 5);
+
     const firstRefresh = await request(server).post("/api/v1/auth/refresh").set("Cookie", sessionCap.cookie).send({}).expect(201);
     const rotatedCookie = firstRefresh.headers["set-cookie"][0];
     await request(server).post("/api/v1/auth/refresh").set("Cookie", sessionCap.cookie).send({}).expect(401);
-    await request(server).post("/api/v1/auth/refresh").set("Cookie", rotatedCookie).send({}).expect(401);
+    await request(server).post("/api/v1/auth/refresh").set("Cookie", rotatedCookie).send({}).expect(201);
+
+    const sharedChallenge = await prisma.challenge.create({ data: { creatorId: userA.id, title: "탈퇴 후 보존", description: "다른 참여자의 기록을 보존하는 실제 DB 검증", kind: "COMMUNITY", verificationMode: "CHECK", startsAt: new Date(Date.now() - 60_000), endsAt: new Date(Date.now() + 86_400_000), participants: { create: { userId: userB.id } }, chat: { create: { kind: "CHALLENGE", members: { create: { userId: userB.id } } } } } });
+    const audit = await prisma.adminAuditLog.create({ data: { adminId: userA.id, action: "TEST_AUDIT", targetType: "USER", targetId: userA.id } });
+    await prisma.user.delete({ where: { id: userA.id } });
+    const preserved = await prisma.challenge.findUniqueOrThrow({ where: { id: sharedChallenge.id }, include: { participants: true, chat: { include: { members: true } } } });
+    assert.equal(preserved.creatorId, null);
+    assert.equal(preserved.participants.some((item) => item.userId === userB.id), true);
+    assert.equal(preserved.chat.members.some((item) => item.userId === userB.id), true);
+    assert.equal((await prisma.adminAuditLog.findUniqueOrThrow({ where: { id: audit.id } })).adminId, null);
+    await prisma.challenge.delete({ where: { id: sharedChallenge.id } });
+    await prisma.adminAuditLog.delete({ where: { id: audit.id } });
 
     process.env.INVITE_REQUIRED = "true";
     const inviteCode = "ONE-TIME-BETA";

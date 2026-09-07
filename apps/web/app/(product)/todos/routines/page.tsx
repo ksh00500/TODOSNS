@@ -77,7 +77,7 @@ export default function TodoGroupsPage() {
       )}
       {creating && <RoutineComposer todos={allTodos} lists={lists.data ?? []} onClose={() => setCreating(false)} onSaved={() => refresh("새 TODO 그룹을 만들었어요.")} />}
       {editing && <RoutineComposer todos={allTodos} lists={lists.data ?? []} list={editing} onClose={() => setEditing(null)} onSaved={() => refresh("TODO 그룹을 정리했어요.")} />}
-      {publishing && <PublishSheet list={publishing} busy={publish.isPending} onClose={() => setPublishing(null)} onPublish={(data) => publish.mutate(data)} />}
+      {publishing && <PublishSheet list={publishing} busy={publish.isPending} onClose={() => setPublishing(null)} onPublish={(data) => publish.mutateAsync(data)} />}
     </main>
   );
 }

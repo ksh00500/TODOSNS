@@ -23,4 +23,4 @@
 
 ## 온프레미스 배포
 
-`infra/docker-compose.yml`은 80/443만 외부에 공개합니다. PostgreSQL, Redis, MinIO 관리 포트는 내부 Docker 네트워크에서만 접근합니다. 실제 배포 전 `APP_DOMAIN`, `API_DOMAIN`, Google OAuth, SMTP, 외부 백업 위치를 설정하세요.
+`infra/docker-compose.yml`은 AWS 운영용으로 80/443만 외부에 공개하고, 사진은 비공개 S3 버킷과 EC2 IAM Role을 사용합니다. PostgreSQL과 Redis는 내부 Docker 네트워크에서만 접근합니다. MinIO가 필요한 로컬·학교 서버 환경은 `infra/docker-compose.dev.yml`과 `infra/docker-compose.staging.yml`을 사용합니다. 실제 배포 전 `APP_DOMAIN`, `STORAGE_BUCKET`, Google OAuth, SMTP, 외부 백업 위치를 설정하세요.

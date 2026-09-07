@@ -15,6 +15,7 @@ type LocalParts = {
   hour: number;
   minute: number;
   second: number;
+  millisecond: number;
 };
 
 @Injectable()
@@ -57,7 +58,7 @@ export class RecurrenceService {
         startAt: new Date(dto.dueDate),
       },
     });
-    await this.materialize(tx, series, new Date(Date.now() + HORIZON_DAYS * DAY_MS));
+    await this.materialize(tx, series, this.horizonFor(series.startAt));
     const first = await tx.todo.findFirstOrThrow({
       where: { seriesId: series.id, deletedAt: null },
       orderBy: { dueDate: "asc" },
@@ -111,7 +112,7 @@ export class RecurrenceService {
           active: true,
         },
       });
-      await this.materialize(tx, series, new Date(Date.now() + HORIZON_DAYS * DAY_MS));
+      await this.materialize(tx, series, this.horizonFor(series.startAt));
       return tx.todo.findFirstOrThrow({
         where: { seriesId: series.id, dueDate: { gte: series.startAt }, deletedAt: null },
         orderBy: { dueDate: "asc" },
@@ -169,16 +170,21 @@ export class RecurrenceService {
   @Cron("0 10 0 * * *", { timeZone: "UTC" })
   async extendActiveSeries() {
     const target = new Date(Date.now() + HORIZON_DAYS * DAY_MS);
-    const series = await this.prisma.todoSeries.findMany({
-      where: {
-        active: true,
-        OR: [{ generatedThrough: null }, { generatedThrough: { lt: target } }],
-      },
-      take: 500,
-    });
-    for (const item of series) {
-      await this.prisma.$transaction((tx) => this.materialize(tx, item, target));
-    }
+    let cursor: string | undefined;
+    do {
+      const series = await this.prisma.todoSeries.findMany({
+        where: { active: true, OR: [{ generatedThrough: null }, { generatedThrough: { lt: target } }] },
+        orderBy: { id: "asc" },
+        take: 200,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      });
+      for (const item of series) await this.prisma.$transaction((tx) => this.materialize(tx, item, this.horizonFor(item.startAt)));
+      cursor = series.length === 200 ? series.at(-1)?.id : undefined;
+    } while (cursor);
+  }
+
+  private horizonFor(startAt: Date) {
+    return new Date(Math.max(Date.now(), startAt.getTime()) + HORIZON_DAYS * DAY_MS);
   }
 
   private async materialize(
@@ -188,7 +194,9 @@ export class RecurrenceService {
   ) {
     const until = series.endsAt && series.endsAt < target ? series.endsAt : target;
     const start = this.partsInZone(series.startAt, series.timezone);
-    const cursor = new Date(Date.UTC(start.year, start.month - 1, start.day));
+    const cursorStart = series.generatedThrough ? this.partsInZone(series.generatedThrough, series.timezone) : start;
+    const cursor = new Date(Date.UTC(cursorStart.year, cursorStart.month - 1, cursorStart.day));
+    if (series.generatedThrough) cursor.setUTCDate(cursor.getUTCDate() + 1);
     const endParts = this.partsInZone(until, series.timezone);
     const endCursor = new Date(Date.UTC(endParts.year, endParts.month - 1, endParts.day));
     const rule = this.parseRule(series.repeatRule, series.startAt, series.timezone);
@@ -207,6 +215,7 @@ export class RecurrenceService {
           start.hour,
           start.minute,
           start.second,
+          start.millisecond,
           series.timezone,
         );
         if (dueDate >= series.startAt && dueDate <= until) {
@@ -259,6 +268,7 @@ export class RecurrenceService {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
+      fractionalSecondDigits: 3,
       hourCycle: "h23",
     }).formatToParts(date);
     const value = (type: Intl.DateTimeFormatPartTypes) =>
@@ -270,6 +280,7 @@ export class RecurrenceService {
       hour: value("hour"),
       minute: value("minute"),
       second: value("second"),
+      millisecond: value("fractionalSecond"),
     };
   }
 
@@ -280,9 +291,12 @@ export class RecurrenceService {
     hour: number,
     minute: number,
     second: number,
-    timezone: string,
+    millisecondOrTimezone: number | string,
+    optionalTimezone?: string,
   ) {
-    const desiredUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+    const millisecond = typeof millisecondOrTimezone === "number" ? millisecondOrTimezone : 0;
+    const timezone = typeof millisecondOrTimezone === "string" ? millisecondOrTimezone : optionalTimezone!;
+    const desiredUtc = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
     let candidate = new Date(desiredUtc);
     for (let index = 0; index < 2; index += 1) {
       const actual = this.partsInZone(candidate, timezone);
@@ -293,6 +307,7 @@ export class RecurrenceService {
         actual.hour,
         actual.minute,
         actual.second,
+        actual.millisecond,
       );
       candidate = new Date(candidate.getTime() + desiredUtc - actualUtc);
     }

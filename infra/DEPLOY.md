@@ -12,10 +12,12 @@
 
 ## 도메인 운영 배포
 
-1. `APP_DOMAIN`과 `MEDIA_DOMAIN`의 DNS를 서버로 연결하고 80/443을 엽니다.
-2. SMTP와 모든 비밀값을 채운 뒤 `npm run compose:up`을 실행합니다.
-3. API 컨테이너가 시작할 때 Prisma 마이그레이션을 먼저 적용하며, 실패하면 API가 열리지 않습니다.
-4. `https://APP_DOMAIN/api/v1/ready`가 200인지 확인한 뒤 초대 코드를 배포합니다.
+1. `APP_DOMAIN`의 DNS를 서버의 Elastic IP로 연결하고 80/443을 엽니다.
+2. 비공개 S3 버킷을 만들고 CORS에 `https://APP_DOMAIN`을 허용합니다. EC2에는 해당 버킷만 읽고 쓸 수 있는 IAM Role을 연결합니다.
+3. `.env`의 `STORAGE_BUCKET`, `STORAGE_REGION`, SMTP와 모든 비밀값을 채웁니다. AWS S3에서는 `STORAGE_ENDPOINT`와 장기 Access Key를 설정하지 않습니다.
+4. `npm run compose:up`을 실행합니다. 운영 Compose는 MinIO를 실행하지 않고 EC2 IAM Role의 임시 자격 증명으로 S3를 사용합니다.
+5. API 컨테이너가 시작할 때 Prisma 마이그레이션을 먼저 적용하며, 실패하면 API가 열리지 않습니다.
+6. `https://APP_DOMAIN/api/v1/ready`가 200인지 확인한 뒤 초대 코드를 배포합니다.
 
 ## 백업과 복원 점검
 
@@ -25,7 +27,13 @@
 sh infra/backup.sh /absolute/backup/path infra/docker-compose.staging.yml
 ```
 
-DB와 MinIO 파일을 함께 저장하고 14일보다 오래된 백업을 정리합니다. 최소 주 1회 최근 DB 백업을 임시 데이터베이스에 복원해 확인합니다.
+스테이징에서는 DB와 MinIO 파일을 함께 저장합니다. AWS 운영에서는 로컬 MinIO가 없으므로 IAM Role로 DB 덤프를 S3에 직접 전송합니다.
+
+```sh
+sh infra/backup-to-s3.sh "$STORAGE_BUCKET" infra/docker-compose.yml
+```
+
+최소 주 1회 최근 DB 백업을 임시 데이터베이스에 복원해 확인합니다.
 
 ```sh
 sh infra/restore-check.sh /absolute/backup/path/mungsil-YYYYMMDD-HHMMSS.sql.gz infra/docker-compose.staging.yml

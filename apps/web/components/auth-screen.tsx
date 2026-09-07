@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, LoaderCircle } from "lucide-react";
 import { apiFetch, setAccessToken } from "@/lib/api";
@@ -12,6 +12,7 @@ import { BirthDatePicker } from "./todo-form-controls";
 import type { SignupResultDto } from "@mungsil/contracts";
 
 type LoginResult = { accessToken: string; user: { nickname: string } };
+type AuthConfig = { inviteRequired: boolean; googleAuthEnabled: boolean };
 
 export function AuthScreen() {
   const router = useRouter();
@@ -21,6 +22,22 @@ export function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [authConfig, setAuthConfig] = useState<AuthConfig>({
+    inviteRequired: true,
+    googleAuthEnabled: false,
+  });
+
+  useEffect(() => {
+    let active = true;
+    apiFetch<AuthConfig>("/auth/config")
+      .then((config) => {
+        if (active) setAuthConfig(config);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -122,7 +139,7 @@ export function AuthScreen() {
               </div>
             )}
             {signup && <BirthDatePicker value={birthDate} onChange={setBirthDate} />}
-            {signup && (
+            {signup && authConfig.inviteRequired && (
               <label className="field">
                 <span>초대 코드</span>
                 <input
@@ -190,7 +207,8 @@ export function AuthScreen() {
           </div>
           <DemoEntryButton className="demo-entry full" />
           <button className="google-button" type="button" disabled>
-            <b>G</b> Google로 계속하기 <small>베타 이후</small>
+            <b>G</b> Google로 계속하기{" "}
+            <small>{authConfig.googleAuthEnabled ? "베타 이후" : "현재 사용할 수 없음"}</small>
           </button>
           <p className="auth-switch">
             {signup ? "이미 계정이 있나요?" : "초대 코드를 받았나요?"}

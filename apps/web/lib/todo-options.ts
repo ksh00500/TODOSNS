@@ -19,3 +19,18 @@ export function toRepeatPreset(rule?: string | null): RepeatPreset {
   if (normalized.includes("FREQ=DAILY")) return "DAILY";
   return "WEEKLY";
 }
+
+export function isPresetRepeatRule(rule?: string | null) {
+  if (!rule) return true;
+  const normalized = rule.toUpperCase();
+  return [
+    "DAILY",
+    "WEEKDAYS",
+    "WEEKENDS",
+    "WEEKLY",
+    "FREQ=DAILY",
+    "FREQ=WEEKLY",
+    "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+    "FREQ=WEEKLY;BYDAY=SA,SU",
+  ].includes(normalized);
+}

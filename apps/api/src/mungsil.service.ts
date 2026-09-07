@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { ChallengeKind, CheckInStatus, ConversationKind, NotificationType, Prisma, ReportTarget, RequestStatus, RewardStatus, VerificationMode, VerificationVoteVerdict, Visibility } from "@prisma/client";
 import { PrismaService } from "./prisma.service";
 import { MediaService } from "./media.service";
-import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CloneTodoListRepeatMode, CompleteTodoDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, PageDto, SearchDto, SendMessageDto, UpdateChallengeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
+import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CloneTodoListRepeatMode, CompleteTodoDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, FeedQueryDto, PageDto, SearchDto, SendMessageDto, UpdateChallengeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
 import { RecurrenceService } from "./recurrence.service";
 import { challengeLeaderboard, challengeTotalDays, PEER_VERIFICATION, peerVerificationDecision, peerVoteVerdict } from "./challenge-policy";
 import { ChallengeChatService } from "./challenge-chat.service";
@@ -55,21 +55,25 @@ export class MungsilService {
   constructor(private readonly prisma: PrismaService, private readonly media: MediaService, private readonly recurrence: RecurrenceService, private readonly chat: ChallengeChatService) {}
 
   private async reward(userId: string, amount: number, reason: string, referenceId: string, dailyCap?: number) {
-    if (dailyCap) {
-      const { start, end } = await this.userDayWindow(userId);
-      const count = await this.prisma.pointLedger.count({ where: { userId, reason, createdAt: { gte: start, lt: end } } });
-      if (count >= dailyCap) return false;
+    const dayWindow = dailyCap ? await this.userDayWindow(userId) : null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          if (dailyCap && dayWindow) {
+            const count = await tx.pointLedger.count({ where: { userId, reason, createdAt: { gte: dayWindow.start, lt: dayWindow.end } } });
+            if (count >= dailyCap) return false;
+          }
+          await tx.pointLedger.create({ data: { userId, amount, reason, referenceId } });
+          await tx.user.update({ where: { id: userId }, data: { availablePoints: { increment: amount }, lifetimePower: { increment: Math.max(amount, 0) }, recentVitality: { increment: Math.max(amount, 0) } } });
+          return true;
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt < 2) continue;
+        throw error;
+      }
     }
-    try {
-      await this.prisma.$transaction([
-        this.prisma.pointLedger.create({ data: { userId, amount, reason, referenceId } }),
-        this.prisma.user.update({ where: { id: userId }, data: { availablePoints: { increment: amount }, lifetimePower: { increment: Math.max(amount, 0) }, recentVitality: { increment: Math.max(amount, 0) } } }),
-      ]);
-      return true;
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
-      throw error;
-    }
+    return false;
   }
 
   async profile(userId: string) {
@@ -78,7 +82,7 @@ export class MungsilService {
       this.prisma.todo.count({ where: { userId, completedAt: { not: null }, deletedAt: null } }),
       this.prisma.cheer.count({ where: { post: { authorId: userId, hiddenAt: null } } }),
       this.prisma.todo.count({ where: { sourceTodo: { userId }, deletedAt: null } }),
-      this.prisma.challengeParticipant.findMany({ where: { userId, titleAwarded: { not: null } }, orderBy: { completedAt: "desc" }, take: 12, select: { titleAwarded: true, finalRank: true, challenge: { select: { id: true, title: true } } } }),
+      this.prisma.challengeParticipant.findMany({ where: { userId, titleAwarded: { not: null } }, orderBy: { completedAt: "desc" }, take: 12, select: { titleAwarded: true, finalRank: true, challenge: { select: { id: true, title: true, description: true, kind: true, creator: { select: { nickname: true, handle: true } } } } } }),
     ]);
     const avatarUrl = user.avatarMedia ? await this.media.viewUrl(user.avatarMedia.thumbnailKey ?? user.avatarMedia.objectKey) : user.avatarUrl;
     return { ...user, avatarMedia: undefined, avatarUrl, passwordHash: undefined, rank: rankOf(user.lifetimePower), stats: { completedCount, receivedCheers, copiedCount }, earnedTitles };
@@ -319,8 +323,24 @@ export class MungsilService {
   async endTodoSeries(userId: string, todoId: string) { return this.recurrence.endSeries(userId, todoId); }
 
   async completeTodo(userId: string, todoId: string, dto: CompleteTodoDto) {
-    const todo = await this.ownTodo(userId, todoId);
-    if (!todo.completedAt) { await this.prisma.todo.update({ where: { id: todoId }, data: { completedAt: new Date() } }); await this.reward(userId, 10, "TODO_COMPLETE", todoId, 5); }
+    await this.ownTodo(userId, todoId);
+    const dayWindow = await this.userDayWindow(userId);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const claimed = await tx.todo.updateMany({ where: { id: todoId, userId, completedAt: null, deletedAt: null }, data: { completedAt: new Date() } });
+          if (claimed.count !== 1) return;
+          const count = await tx.pointLedger.count({ where: { userId, reason: "TODO_COMPLETE", createdAt: { gte: dayWindow.start, lt: dayWindow.end } } });
+          if (count >= 5) return;
+          await tx.pointLedger.create({ data: { userId, amount: 10, reason: "TODO_COMPLETE", referenceId: todoId } });
+          await tx.user.update({ where: { id: userId }, data: { availablePoints: { increment: 10 }, lifetimePower: { increment: 10 }, recentVitality: { increment: 10 } } });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        break;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt < 2) continue;
+        throw error;
+      }
+    }
     const post = dto.share ? await this.createPost(userId, { todoId, caption: dto.caption, mediaId: dto.mediaId, hashtags: dto.hashtags, visibility: dto.visibility }) : null;
     return { todo: await this.prisma.todo.findUniqueOrThrow({ where: { id: todoId } }), post, sharePrompt: !dto.share };
   }
@@ -388,12 +408,19 @@ export class MungsilService {
     return this.serializePost(post);
   }
 
-  async feed(userId: string | null, page: PageDto, _mode = "mix", category = "전체") {
+  async feed(userId: string | null, page: FeedQueryDto) {
+    const { category, mode } = page;
     const blocked = userId ? await this.prisma.block.findMany({ where: { OR: [{ blockerId: userId }, { blockedId: userId }] } }) : [];
     const hiddenIds = blocked.map((b) => b.blockerId === userId ? b.blockedId : b.blockerId);
     const visibility: Prisma.PostWhereInput[] = [{ visibility: Visibility.PUBLIC }];
     if (userId) visibility.push({ authorId: userId }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } });
-    const categoryFilter: Prisma.PostWhereInput | undefined = category && category !== "전체" ? { OR: [{ todos: { some: { todo: { category } } } }, { todoList: { items: { some: { todo: { category } } } } }] } : undefined;
+    let recommendedCategories: string[] = [];
+    if (mode === "mix" && userId && category === "전체") {
+      const viewer = await this.prisma.user.findUnique({ where: { id: userId }, select: { interests: true } });
+      recommendedCategories = (viewer?.interests ?? []).filter((item) => TODO_BASE_CATEGORIES.has(item as typeof TODO_CATEGORY_DEFAULTS[number]["baseCategory"]));
+    }
+    const selectedCategories = category !== "전체" ? [category] : recommendedCategories;
+    const categoryFilter: Prisma.PostWhereInput | undefined = selectedCategories.length ? { OR: [{ todos: { some: { todo: { category: { in: selectedCategories } } } } }, { todoList: { items: { some: { todo: { category: { in: selectedCategories } } } } } }] } : undefined;
     const cursor = this.decodeCursor(page.cursor);
     const cursorFilter: Prisma.PostWhereInput | undefined = cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : undefined;
     const filters = [categoryFilter, cursorFilter].filter(Boolean) as Prisma.PostWhereInput[];
@@ -474,12 +501,14 @@ export class MungsilService {
     const challengeWhere: Prisma.ChallengeWhereInput = {
       hiddenAt: null,
       endsAt: { gte: new Date() },
-      creatorId: { notIn: hiddenIds },
-      creator: { suspendedAt: null, deletionRequestedAt: null },
-      OR: [
-        { title: { contains: text, mode: "insensitive" } },
-        { description: { contains: text, mode: "insensitive" } },
-        { rewardLabel: { contains: text, mode: "insensitive" } },
+      AND: [
+        { OR: [{ creatorId: null }, { creatorId: { notIn: hiddenIds } }] },
+        { OR: [{ creator: null }, { creator: { suspendedAt: null, deletionRequestedAt: null } }] },
+        { OR: [
+          { title: { contains: text, mode: "insensitive" } },
+          { description: { contains: text, mode: "insensitive" } },
+          { rewardLabel: { contains: text, mode: "insensitive" } },
+        ] },
       ],
     };
     const singlePostWhere: Prisma.PostWhereInput = { AND: [publicPostWhere, postSearch], todoListId: null };
@@ -542,7 +571,7 @@ export class MungsilService {
 
   async publicChallenges(viewerId: string | null) {
     const hiddenIds = await this.blockedUserIds(viewerId);
-    const rows = await this.prisma.challenge.findMany({ where: { hiddenAt: null, endedAt: null, endsAt: { gte: new Date() }, creatorId: { notIn: hiddenIds }, creator: { suspendedAt: null, deletionRequestedAt: null } }, orderBy: [{ kind: "asc" }, { startsAt: "asc" }], include: { creator: { select: { id: true, nickname: true, handle: true } }, _count: { select: { participants: true, checkIns: true } } } });
+    const rows = await this.prisma.challenge.findMany({ where: { hiddenAt: null, endedAt: null, endsAt: { gte: new Date() }, AND: [{ OR: [{ creatorId: null }, { creatorId: { notIn: hiddenIds } }] }, { OR: [{ creator: null }, { creator: { suspendedAt: null, deletionRequestedAt: null } }] }] }, orderBy: [{ kind: "asc" }, { startsAt: "asc" }], include: { creator: { select: { id: true, nickname: true, handle: true } }, _count: { select: { participants: true, checkIns: true } } } });
     return rows.map((challenge) => ({ ...challenge, joined: false, todayCheckedIn: false, myCheckInCount: 0, successRate: 0 }));
   }
 
@@ -580,7 +609,7 @@ export class MungsilService {
   async listChallenges(userId: string) {
     const hiddenIds = await this.blockedUserIds(userId);
     const rows = await this.prisma.challenge.findMany({
-      where: { hiddenAt: null, endedAt: null, endsAt: { gte: new Date() }, creatorId: { notIn: hiddenIds }, creator: { suspendedAt: null, deletionRequestedAt: null } },
+      where: { hiddenAt: null, endedAt: null, endsAt: { gte: new Date() }, AND: [{ OR: [{ creatorId: null }, { creatorId: { notIn: hiddenIds } }] }, { OR: [{ creator: null }, { creator: { suspendedAt: null, deletionRequestedAt: null } }] }] },
       orderBy: [{ kind: "asc" }, { startsAt: "asc" }],
       include: {
         creator: { select: { id: true, nickname: true, handle: true } },
@@ -619,11 +648,11 @@ export class MungsilService {
 
   async challengeDetail(challengeId: string, userId: string | null) {
     const challenge = await this.prisma.challenge.findFirst({
-      where: { id: challengeId, hiddenAt: null, creator: { suspendedAt: null, deletionRequestedAt: null } },
+      where: { id: challengeId, hiddenAt: null, OR: [{ creator: null }, { creator: { suspendedAt: null, deletionRequestedAt: null } }] },
       include: { creator: { select: { id: true, nickname: true, handle: true } }, _count: { select: { participants: true, checkIns: true } } },
     });
     if (!challenge) throw new NotFoundException("챌린지를 찾을 수 없어요.");
-    if (userId) await this.assertNotBlocked(userId, challenge.creator.id);
+    if (userId) await this.assertNotBlocked(userId, challenge.creatorId);
     const [participant, checkIns] = userId ? await Promise.all([
       this.prisma.challengeParticipant.findUnique({ where: { challengeId_userId: { challengeId, userId } }, select: { joinedAt: true, rewardStatus: true, finalRank: true, titleAwarded: true, completedAt: true } }),
       this.prisma.challengeCheckIn.findMany({ where: { challengeId, userId }, orderBy: { checkInDate: "desc" }, include: { media: { where: { status: "READY" }, take: 1 } } }),
@@ -710,7 +739,7 @@ export class MungsilService {
   }
 
   async joinChallenge(userId: string, challengeId: string) {
-    const challenge = await this.prisma.challenge.findFirst({ where: { id: challengeId, hiddenAt: null, endedAt: null, startsAt: { lte: new Date() }, endsAt: { gte: new Date() }, creator: { suspendedAt: null, deletionRequestedAt: null } }, select: { id: true, creatorId: true, startsAt: true, chat: { select: { id: true } } } });
+    const challenge = await this.prisma.challenge.findFirst({ where: { id: challengeId, hiddenAt: null, endedAt: null, startsAt: { lte: new Date() }, endsAt: { gte: new Date() }, OR: [{ creator: null }, { creator: { suspendedAt: null, deletionRequestedAt: null } }] }, select: { id: true, creatorId: true, startsAt: true, chat: { select: { id: true } } } });
     if (!challenge) throw new BadRequestException("현재 참여할 수 없는 챌린지예요.");
     await this.assertNotBlocked(userId, challenge.creatorId);
     const participant = await this.prisma.$transaction(async (tx) => {
@@ -728,11 +757,12 @@ export class MungsilService {
     const checkIns = await this.prisma.challengeCheckIn.findMany({ where: { challengeId, userId }, select: { id: true } });
     const room = await this.prisma.conversation.findUnique({ where: { challengeId }, select: { id: true } });
     await this.prisma.$transaction([this.prisma.media.updateMany({ where: { checkInId: { in: checkIns.map((item) => item.id) } }, data: { checkInId: null } }), this.prisma.challengeCheckIn.deleteMany({ where: { challengeId, userId } }), ...(room ? [this.prisma.conversationMember.deleteMany({ where: { conversationId: room.id, userId } })] : []), this.prisma.challengeParticipant.delete({ where: { challengeId_userId: { challengeId, userId } } })]);
+    if (room) this.chat.revokeMember(room.id, userId);
     return { joined: false };
   }
 
   async checkIn(userId: string, challengeId: string, dto: CheckInDto) {
-    const challenge = await this.prisma.challenge.findFirst({ where: { id: challengeId, hiddenAt: null, endedAt: null, creator: { suspendedAt: null, deletionRequestedAt: null } } });
+    const challenge = await this.prisma.challenge.findFirst({ where: { id: challengeId, hiddenAt: null, endedAt: null, OR: [{ creator: null }, { creator: { suspendedAt: null, deletionRequestedAt: null } }] } });
     if (!challenge) throw new NotFoundException("챌린지를 찾을 수 없어요.");
     await this.assertNotBlocked(userId, challenge.creatorId);
     const now = new Date();
@@ -891,7 +921,7 @@ export class MungsilService {
   }
 
   async challengeLeaderboard(challengeId: string, viewerId: string | null) {
-    const challenge = await this.prisma.challenge.findFirst({ where: { id: challengeId, hiddenAt: null, creator: { suspendedAt: null, deletionRequestedAt: null } }, select: { id: true, startsAt: true, endsAt: true, completionThreshold: true, firstPlaceTitle: true, secondPlaceTitle: true, thirdPlaceTitle: true, creatorId: true } });
+    const challenge = await this.prisma.challenge.findFirst({ where: { id: challengeId, hiddenAt: null, OR: [{ creator: null }, { creator: { suspendedAt: null, deletionRequestedAt: null } }] }, select: { id: true, startsAt: true, endsAt: true, completionThreshold: true, firstPlaceTitle: true, secondPlaceTitle: true, thirdPlaceTitle: true, creatorId: true } });
     if (!challenge) throw new NotFoundException("챌린지를 찾을 수 없어요.");
     if (viewerId) await this.assertNotBlocked(viewerId, challenge.creatorId);
     const [participants, counts] = await Promise.all([
@@ -917,13 +947,14 @@ export class MungsilService {
     return participant;
   }
 
-  async adminChallengeParticipants(challengeId: string) {
+  async adminChallengeParticipants(challengeId: string, page: PageDto) {
     await this.settleChallenge(challengeId);
     const challenge = await this.prisma.challenge.findUnique({ where: { id: challengeId }, select: { id: true, title: true, kind: true, rewardLabel: true, rewardTerms: true, completionThreshold: true } });
     if (!challenge || challenge.kind !== ChallengeKind.OFFICIAL) throw new BadRequestException("공식 챌린지를 선택해주세요.");
-    const participants = await this.prisma.challengeParticipant.findMany({ where: { challengeId }, orderBy: [{ finalRank: "asc" }, { joinedAt: "asc" }], take: 500, include: { user: { select: { id: true, nickname: true, handle: true, email: true } } } });
-    const counts = await this.prisma.challengeCheckIn.groupBy({ by: ["userId", "status"], where: { challengeId }, _count: { _all: true } });
-    return { challenge, items: participants.map((item) => ({ ...item, checkInCount: counts.find((count) => count.userId === item.userId && count.status === CheckInStatus.APPROVED)?._count._all ?? 0, pendingCheckInCount: counts.find((count) => count.userId === item.userId && count.status === CheckInStatus.PENDING)?._count._all ?? 0 })) };
+    const participants = await this.prisma.challengeParticipant.findMany({ where: { challengeId }, orderBy: [{ finalRank: "asc" }, { joinedAt: "asc" }, { userId: "asc" }], take: page.limit + 1, ...(page.cursor ? { cursor: { challengeId_userId: { challengeId, userId: page.cursor } }, skip: 1 } : {}), include: { user: { select: { id: true, nickname: true, handle: true, email: true } } } });
+    const items = participants.slice(0, page.limit);
+    const counts = await this.prisma.challengeCheckIn.groupBy({ by: ["userId", "status"], where: { challengeId, userId: { in: items.map((item) => item.userId) } }, _count: { _all: true } });
+    return { challenge, items: items.map((item) => ({ ...item, checkInCount: counts.find((count) => count.userId === item.userId && count.status === CheckInStatus.APPROVED)?._count._all ?? 0, pendingCheckInCount: counts.find((count) => count.userId === item.userId && count.status === CheckInStatus.PENDING)?._count._all ?? 0 })), nextCursor: participants.length > page.limit ? items.at(-1)?.userId ?? null : null };
   }
 
   async adminChallengeVerificationOverview() {
@@ -1120,14 +1151,18 @@ export class MungsilService {
 
   async adminUsers(query: AdminUserQueryDto) {
     const text = query.query?.trim();
+    const cursor = this.decodeCursor(query.cursor);
     const rows = await this.prisma.user.findMany({
       where: {
         deletionRequestedAt: null,
         ...(query.status === "ACTIVE" ? { suspendedAt: null } : query.status === "SUSPENDED" ? { suspendedAt: { not: null } } : {}),
-        ...(text ? { OR: [{ nickname: { contains: text, mode: "insensitive" } }, { handle: { contains: text.toLowerCase(), mode: "insensitive" } }, { email: { contains: text.toLowerCase(), mode: "insensitive" } }] } : {}),
+        AND: [
+          ...(text ? [{ OR: [{ nickname: { contains: text, mode: "insensitive" as const } }, { handle: { contains: text.toLowerCase(), mode: "insensitive" as const } }, { email: { contains: text.toLowerCase(), mode: "insensitive" as const } }] }] : []),
+          ...(cursor ? [{ OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] }] : []),
+        ],
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: query.limit,
+      take: query.limit + 1,
       select: {
         id: true,
         email: true,
@@ -1141,7 +1176,9 @@ export class MungsilService {
         _count: { select: { todos: true, posts: true, sessions: { where: { revokedAt: null, expiresAt: { gt: new Date() } } } } },
       },
     });
-    return { items: rows, nextCursor: null };
+    const items = rows.slice(0, query.limit);
+    const last = items.at(-1);
+    return { items, nextCursor: rows.length > query.limit && last ? this.encodeCursor(last.createdAt, last.id) : null };
   }
 
   async updateUserSuspension(adminId: string, userId: string, suspended: boolean, reason?: string) {
@@ -1158,18 +1195,24 @@ export class MungsilService {
       return user;
     });
     if (suspended) await this.notify(userId, NotificationType.SYSTEM, "계정 이용이 일시 중지됐어요", reason!.trim(), userId, "SETTINGS", undefined).catch(() => undefined);
+    if (suspended) this.chat.revokeUser(userId);
     return updated;
   }
 
   async adminContent(query: AdminContentQueryDto) {
     const text = query.query?.trim();
+    const cursor = this.decodeCursor(query.cursor);
     const hiddenFilter = query.status === "VISIBLE" ? { hiddenAt: null } : query.status === "HIDDEN" ? { hiddenAt: { not: null } } : {};
     if (query.type === "COMMENT") {
-      const items = await this.prisma.comment.findMany({ where: { ...hiddenFilter, ...(text ? { OR: [{ body: { contains: text, mode: "insensitive" } }, { author: { handle: { contains: text.toLowerCase(), mode: "insensitive" } } }] } : {}) }, orderBy: { createdAt: "desc" }, take: query.limit, include: { author: { select: { id: true, nickname: true, handle: true } }, post: { select: { id: true, caption: true } }, _count: { select: { reports: true } } } });
-      return { items: items.map((item) => ({ id: item.id, type: "COMMENT", preview: item.body, contextId: item.post.id, context: item.post.caption, author: item.author, hiddenAt: item.hiddenAt, createdAt: item.createdAt, reportCount: item._count.reports })), nextCursor: null };
+      const rows = await this.prisma.comment.findMany({ where: { ...hiddenFilter, AND: [...(text ? [{ OR: [{ body: { contains: text, mode: "insensitive" as const } }, { author: { handle: { contains: text.toLowerCase(), mode: "insensitive" as const } } }] }] : []), ...(cursor ? [{ OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] }] : [])] }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: query.limit + 1, include: { author: { select: { id: true, nickname: true, handle: true } }, post: { select: { id: true, caption: true } }, _count: { select: { reports: true } } } });
+      const items = rows.slice(0, query.limit);
+      const last = items.at(-1);
+      return { items: items.map((item) => ({ id: item.id, type: "COMMENT", preview: item.body, contextId: item.post.id, context: item.post.caption, author: item.author, hiddenAt: item.hiddenAt, createdAt: item.createdAt, reportCount: item._count.reports })), nextCursor: rows.length > query.limit && last ? this.encodeCursor(last.createdAt, last.id) : null };
     }
-    const items = await this.prisma.post.findMany({ where: { ...hiddenFilter, ...(text ? { OR: [{ caption: { contains: text, mode: "insensitive" } }, { author: { handle: { contains: text.toLowerCase(), mode: "insensitive" } } }, { todos: { some: { todo: { title: { contains: text, mode: "insensitive" } } } } }] } : {}) }, orderBy: { createdAt: "desc" }, take: query.limit, include: { author: { select: { id: true, nickname: true, handle: true } }, todos: { include: { todo: { select: { title: true } } }, take: 1 }, _count: { select: { reports: true, comments: true, cheers: true } } } });
-    return { items: items.map((item) => ({ id: item.id, type: "POST", preview: item.caption || item.todos[0]?.todo.title || "본문 없는 게시물", contextId: item.id, context: `${item._count.cheers}개 응원 · ${item._count.comments}개 댓글`, author: item.author, hiddenAt: item.hiddenAt, createdAt: item.createdAt, reportCount: item._count.reports })), nextCursor: null };
+    const rows = await this.prisma.post.findMany({ where: { ...hiddenFilter, AND: [...(text ? [{ OR: [{ caption: { contains: text, mode: "insensitive" as const } }, { author: { handle: { contains: text.toLowerCase(), mode: "insensitive" as const } } }, { todos: { some: { todo: { title: { contains: text, mode: "insensitive" as const } } } } }] }] : []), ...(cursor ? [{ OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] }] : [])] }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: query.limit + 1, include: { author: { select: { id: true, nickname: true, handle: true } }, todos: { include: { todo: { select: { title: true } } }, take: 1 }, _count: { select: { reports: true, comments: true, cheers: true } } } });
+    const items = rows.slice(0, query.limit);
+    const last = items.at(-1);
+    return { items: items.map((item) => ({ id: item.id, type: "POST", preview: item.caption || item.todos[0]?.todo.title || "본문 없는 게시물", contextId: item.id, context: `${item._count.cheers}개 응원 · ${item._count.comments}개 댓글`, author: item.author, hiddenAt: item.hiddenAt, createdAt: item.createdAt, reportCount: item._count.reports })), nextCursor: rows.length > query.limit && last ? this.encodeCursor(last.createdAt, last.id) : null };
   }
 
   async updateAdminContentVisibility(adminId: string, rawType: string, id: string, hidden: boolean, reason?: string) {
@@ -1191,13 +1234,19 @@ export class MungsilService {
   }
 
   async adminAuditLogs(page: PageDto) {
-    const items = await this.prisma.adminAuditLog.findMany({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: page.limit, include: { admin: { select: { id: true, nickname: true, handle: true } } } });
-    return { items, nextCursor: null };
+    const cursor = this.decodeCursor(page.cursor);
+    const rows = await this.prisma.adminAuditLog.findMany({ where: cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : undefined, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: page.limit + 1, include: { admin: { select: { id: true, nickname: true, handle: true } } } });
+    const items = rows.slice(0, page.limit);
+    const last = items.at(-1);
+    return { items, nextCursor: rows.length > page.limit && last ? this.encodeCursor(last.createdAt, last.id) : null };
   }
 
-  async adminReports() {
-    const items = await this.prisma.report.findMany({ orderBy: { createdAt: "desc" }, take: 200, include: { reporter: { select: { id: true, nickname: true, handle: true } }, post: { select: { caption: true, hiddenAt: true } }, comment: { select: { body: true, hiddenAt: true } }, message: { select: { body: true, hiddenAt: true, media: { where: { status: "READY" }, take: 1 }, conversation: { select: { challenge: { select: { title: true } } } } } }, challenge: { select: { title: true, hiddenAt: true } }, challengeCheckIn: { select: { hiddenAt: true, challenge: { select: { title: true } }, media: { where: { status: "READY" }, take: 1 } } } } });
-    return { items: await Promise.all(items.map(async (item) => { const media = item.message?.media[0] ?? item.challengeCheckIn?.media[0]; return { ...item, targetPreview: item.post?.caption || item.comment?.body || item.message?.body || item.challenge?.title || (item.message ? `${item.message.conversation.challenge?.title ?? "챌린지"} 대화 메시지` : null) || (item.challengeCheckIn ? `${item.challengeCheckIn.challenge.title} 사진 인증` : null), targetMediaUrl: media ? await this.media.viewUrl(media.thumbnailKey ?? media.objectKey) : null, targetHidden: Boolean(item.post?.hiddenAt || item.comment?.hiddenAt || item.message?.hiddenAt || item.challenge?.hiddenAt || item.challengeCheckIn?.hiddenAt) }; })) };
+  async adminReports(page: PageDto) {
+    const cursor = this.decodeCursor(page.cursor);
+    const rows = await this.prisma.report.findMany({ where: cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : undefined, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: page.limit + 1, include: { reporter: { select: { id: true, nickname: true, handle: true } }, post: { select: { caption: true, hiddenAt: true } }, comment: { select: { body: true, hiddenAt: true } }, message: { select: { body: true, hiddenAt: true, media: { where: { status: "READY" }, take: 1 }, conversation: { select: { challenge: { select: { title: true } } } } } }, challenge: { select: { title: true, hiddenAt: true } }, challengeCheckIn: { select: { hiddenAt: true, challenge: { select: { title: true } }, media: { where: { status: "READY" }, take: 1 } } } } });
+    const items = rows.slice(0, page.limit);
+    const last = items.at(-1);
+    return { items: await Promise.all(items.map(async (item) => { const media = item.message?.media[0] ?? item.challengeCheckIn?.media[0]; return { ...item, targetPreview: item.post?.caption || item.comment?.body || item.message?.body || item.challenge?.title || (item.message ? `${item.message.conversation.challenge?.title ?? "챌린지"} 대화 메시지` : null) || (item.challengeCheckIn ? `${item.challengeCheckIn.challenge.title} 사진 인증` : null), targetMediaUrl: media ? await this.media.viewUrl(media.thumbnailKey ?? media.objectKey) : null, targetHidden: Boolean(item.post?.hiddenAt || item.comment?.hiddenAt || item.message?.hiddenAt || item.challenge?.hiddenAt || item.challengeCheckIn?.hiddenAt) }; })), nextCursor: rows.length > page.limit && last ? this.encodeCursor(last.createdAt, last.id) : null };
   }
 
   async updateChallengeCheckInVisibility(adminId: string, checkInId: string, hidden: boolean, reason?: string) {
@@ -1228,10 +1277,14 @@ export class MungsilService {
   private async followList(viewerId: string, userId: string, direction: "followers" | "following", page: PageDto) {
     const blocked = await this.prisma.block.count({ where: { OR: [{ blockerId: viewerId, blockedId: userId }, { blockerId: userId, blockedId: viewerId }] } });
     if (blocked) throw new ForbiddenException("사용자 목록을 볼 수 없어요.");
+    const cursor = this.decodeCursor(page.cursor);
     const rows = direction === "followers"
-      ? await this.prisma.follow.findMany({ where: { followingId: userId }, orderBy: { createdAt: "desc" }, take: page.limit, include: { follower: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } } })
-      : await this.prisma.follow.findMany({ where: { followerId: userId }, orderBy: { createdAt: "desc" }, take: page.limit, include: { following: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } } });
-    const users = rows.map((row) => direction === "followers" && "follower" in row ? row.follower : "following" in row ? row.following : null).filter(Boolean);
+      ? await this.prisma.follow.findMany({ where: { followingId: userId, ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, followerId: { lt: cursor.id } }] } : {}) }, orderBy: [{ createdAt: "desc" }, { followerId: "desc" }], take: page.limit + 1, include: { follower: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } } })
+      : await this.prisma.follow.findMany({ where: { followerId: userId, ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, followingId: { lt: cursor.id } }] } : {}) }, orderBy: [{ createdAt: "desc" }, { followingId: "desc" }], take: page.limit + 1, include: { following: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } } });
+    const visible = rows.slice(0, page.limit);
+    const users = visible.map((row) => direction === "followers" && "follower" in row ? row.follower : "following" in row ? row.following : null).filter(Boolean);
+    const last = visible.at(-1);
+    const lastUserId = last ? direction === "followers" ? last.followerId : last.followingId : null;
     return {
       items: await Promise.all(users.map(async (user) => ({
         id: user!.id,
@@ -1241,7 +1294,7 @@ export class MungsilService {
         cloudRank: rankOf(user!.lifetimePower),
         avatarUrl: user!.avatarMedia ? await this.media.viewUrl(user!.avatarMedia.thumbnailKey ?? user!.avatarMedia.objectKey) : user!.avatarUrl,
       }))),
-      nextCursor: null,
+      nextCursor: rows.length > page.limit && last && lastUserId ? this.encodeCursor(last.createdAt, lastUserId) : null,
     };
   }
 
@@ -1408,7 +1461,8 @@ export class MungsilService {
     const rows = await this.prisma.block.findMany({ where: { OR: [{ blockerId: viewerId }, { blockedId: viewerId }] }, select: { blockerId: true, blockedId: true } });
     return rows.map((row) => row.blockerId === viewerId ? row.blockedId : row.blockerId);
   }
-  private async assertNotBlocked(viewerId: string, targetId: string) {
+  private async assertNotBlocked(viewerId: string, targetId: string | null) {
+    if (!targetId) return;
     if (viewerId === targetId) return;
     const blocked = await this.prisma.block.count({ where: { OR: [{ blockerId: viewerId, blockedId: targetId }, { blockerId: targetId, blockedId: viewerId }] } });
     if (blocked) throw new NotFoundException("내용을 찾을 수 없어요.");
@@ -1426,14 +1480,17 @@ export class MungsilService {
       mediaUrl: postMedia ? await this.media.viewUrl(postMedia.objectKey) : post.mediaKey ? await this.media.viewUrl(post.mediaKey) : null,
       thumbnailUrl: postMedia?.thumbnailKey ? await this.media.viewUrl(postMedia.thumbnailKey) : null,
       hashtags: post.tags.map(({ tag }) => tag.name),
-      todos: post.todos.map(({ todo }) => ({ id: todo.id, title: todo.title, notes: todo.notes, category: todo.category, categoryId: todo.categoryId, categoryRef: todo.categoryRef, dueDate: todo.dueDate, completedAt: todo.completedAt, visibility: todo.visibility, repeatRule: todo.repeatRule, sourceTodoId: todo.sourceTodoId, seriesId: todo.seriesId, occurrenceKey: todo.occurrenceKey })),
-      todoList: post.todoList ? { id: post.todoList.id, title: post.todoList.title, description: post.todoList.description, visibility: post.todoList.visibility, sourceTodoListId: post.todoList.sourceTodoListId, items: post.todoList.items.map((item) => ({ order: item.order, todo: item.todo })) } : null,
+      todos: post.todos.filter(({ todo }) => !todo.deletedAt).map(({ todo }) => this.publicTodo(todo)),
+      todoList: post.todoList ? { id: post.todoList.id, title: post.todoList.title, description: post.todoList.description, items: post.todoList.items.filter((item) => !item.todo.deletedAt).map((item) => ({ order: item.order, todo: this.publicTodo(item.todo) })) } : null,
       cheerCount: post._count.cheers,
       commentCount: post._count.comments,
       copyCount: post.todoList?._count.copies ?? post.todos.reduce((sum, link) => sum + link.todo._count.copies, 0),
       createdAt: post.createdAt,
       cheered: post.cheers.length > 0,
     };
+  }
+  private publicTodo(todo: { id: string; title: string; notes: string | null; category: string; dueDate: Date; completedAt: Date | null; repeatRule: string | null; seriesId: string | null }) {
+    return { id: todo.id, title: todo.title, notes: todo.notes, category: todo.category, dueDate: todo.dueDate, completedAt: todo.completedAt, repeatRule: todo.repeatRule, seriesId: todo.seriesId };
   }
   private async serializeUserSummary(user: { id: string; nickname: string; handle: string; avatarUrl: string | null; avatarMedia: { objectKey: string; thumbnailKey: string | null } | null; lifetimePower: number }) {
     return {

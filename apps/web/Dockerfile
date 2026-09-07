@@ -10,7 +10,13 @@ FROM deps AS prod-deps
 RUN npm prune --omit=dev
 
 FROM deps AS build
-COPY . .
+COPY apps/web/next.config.ts apps/web/next-env.d.ts apps/web/postcss.config.mjs apps/web/tsconfig.json ./apps/web/
+COPY apps/web/app ./apps/web/app
+COPY apps/web/components ./apps/web/components
+COPY apps/web/lib ./apps/web/lib
+COPY apps/web/public ./apps/web/public
+COPY packages/contracts/tsconfig.json ./packages/contracts/tsconfig.json
+COPY packages/contracts/src ./packages/contracts/src
 ARG NEXT_PUBLIC_API_URL=/api/v1
 ARG NEXT_PUBLIC_SOCKET_URL=/
 ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000

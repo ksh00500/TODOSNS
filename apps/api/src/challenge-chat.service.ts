@@ -23,6 +23,9 @@ const isPrivileged = (role: JwtRole) => role === Role.ADMIN || role === Role.MOD
 export class ChallengeChatService {
   constructor(private readonly prisma: PrismaService, private readonly media: MediaService, private readonly events: ChatEvents) {}
 
+  revokeMember(conversationId: string, userId: string) { this.events.revoke({ kind: "membership", conversationId, userId }); }
+  revokeUser(userId: string) { this.events.revoke({ kind: "user", userId }); }
+
   async chat(userId: string, role: JwtRole, challengeId: string, page: PageDto) {
     const context = await this.context(userId, challengeId);
     const cursor = this.decodeCursor(page.cursor);
@@ -64,8 +67,8 @@ export class ChallengeChatService {
     await this.prisma.conversation.update({ where: { id: context.room.id }, data: { updatedAt: new Date() } });
     const fresh = await this.prisma.message.findUniqueOrThrow({ where: { id: message.id }, include: messageInclude });
     const serialized = await this.serialize(fresh, userId, role, context, new Set());
-    await this.notifyMembers(context, fresh, replyTo?.senderId ?? null);
-    this.events.publish({ conversationId: context.room.id, type: "message.created", payload: serialized });
+    await this.notifyMembers(context, fresh, replyTo?.senderId ?? null).catch(() => undefined);
+    this.events.publish({ conversationId: context.room.id, type: "message.created", payload: { id: fresh.id } });
     return serialized;
   }
 
@@ -83,7 +86,7 @@ export class ChallengeChatService {
     ]);
     const fresh = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId }, include: messageInclude });
     const serialized = await this.serialize(fresh, userId, role, context, new Set());
-    this.events.publish({ conversationId: context.room.id, type: "message.updated", payload: serialized });
+    this.events.publish({ conversationId: context.room.id, type: "message.updated", payload: { id: fresh.id } });
     return serialized;
   }
 
@@ -116,7 +119,7 @@ export class ChallengeChatService {
     else await this.prisma.messageReaction.create({ data: { messageId, userId, type } });
     const fresh = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId }, include: messageInclude });
     const serialized = await this.serialize(fresh, userId, role, context, new Set());
-    this.events.publish({ conversationId: message.conversationId, type: "reaction.updated", payload: serialized });
+    this.events.publish({ conversationId: message.conversationId, type: "reaction.updated", payload: { id: messageId } });
     return serialized.reactions;
   }
 
@@ -146,10 +149,21 @@ export class ChallengeChatService {
 
   async members(userId: string, challengeId: string, page: PageDto) {
     const context = await this.context(userId, challengeId);
-    const rows = await this.prisma.conversationMember.findMany({ where: { conversationId: context.room.id }, orderBy: [{ joinedAt: "asc" }, { userId: "asc" }], take: page.limit, include: { user: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } } });
+    const cursor = this.decodeCursor(page.cursor);
+    const rows = await this.prisma.conversationMember.findMany({
+      where: {
+        conversationId: context.room.id,
+        ...(cursor ? { OR: [{ joinedAt: { gt: cursor.createdAt } }, { joinedAt: cursor.createdAt, userId: { gt: cursor.id } }] } : {}),
+      },
+      orderBy: [{ joinedAt: "asc" }, { userId: "asc" }],
+      take: page.limit + 1,
+      include: { user: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } },
+    });
+    const visible = rows.slice(0, page.limit);
     const now = new Date();
-    const mutes = await this.prisma.conversationMute.findMany({ where: { conversationId: context.room.id, userId: { in: rows.map((row) => row.userId) }, revokedAt: null, expiresAt: { gt: now } }, orderBy: { createdAt: "desc" } });
-    return { items: await Promise.all(rows.map(async (row) => ({ user: await this.userSummary(row.user), joinedAt: row.joinedAt, mutedUntil: mutes.find((mute) => mute.userId === row.userId)?.expiresAt ?? null, canModerate: context.challenge.kind === ChallengeKind.COMMUNITY && context.challenge.creatorId === userId && row.userId !== userId }))), nextCursor: null };
+    const mutes = await this.prisma.conversationMute.findMany({ where: { conversationId: context.room.id, userId: { in: visible.map((row) => row.userId) }, revokedAt: null, expiresAt: { gt: now } }, orderBy: { createdAt: "desc" } });
+    const last = visible.at(-1);
+    return { items: await Promise.all(visible.map(async (row) => ({ user: await this.userSummary(row.user), joinedAt: row.joinedAt, mutedUntil: mutes.find((mute) => mute.userId === row.userId)?.expiresAt ?? null, canModerate: context.challenge.kind === ChallengeKind.COMMUNITY && context.challenge.creatorId === userId && row.userId !== userId }))), nextCursor: rows.length > page.limit && last ? this.encodeCursor(last.joinedAt, last.userId) : null };
   }
 
   async setHidden(actorId: string, role: JwtRole, messageId: string, hidden: boolean, reason: string) {
@@ -197,12 +211,13 @@ export class ChallengeChatService {
     return { ok: true };
   }
 
-  async adminReportedContext(reportId: string) {
+  async adminReportedContext(adminId: string, reportId: string) {
     const report = await this.prisma.report.findFirst({ where: { id: reportId, targetType: "MESSAGE" }, include: { message: { include: messageInclude } } });
     if (!report?.message) throw new NotFoundException("신고된 메시지를 찾을 수 없어요.");
     const before = await this.prisma.message.findMany({ where: { conversationId: report.message.conversationId, createdAt: { lt: report.message.createdAt } }, orderBy: { createdAt: "desc" }, take: 3, include: messageInclude });
     const after = await this.prisma.message.findMany({ where: { conversationId: report.message.conversationId, createdAt: { gt: report.message.createdAt } }, orderBy: { createdAt: "asc" }, take: 3, include: messageInclude });
     const revisions = await this.prisma.messageRevision.findMany({ where: { messageId: report.message.id }, orderBy: { createdAt: "asc" } });
+    await this.prisma.adminAuditLog.create({ data: { adminId, action: "REPORTED_MESSAGE_CONTEXT_VIEWED", targetType: "REPORT", targetId: reportId, summary: "신고된 메시지와 앞뒤 문맥을 열람함", metadata: { messageId: report.message.id, conversationId: report.message.conversationId } } });
     const items = await Promise.all([...before.reverse(), report.message, ...after].map(async (item) => ({
       id: item.id,
       body: item.body,
@@ -226,7 +241,7 @@ export class ChallengeChatService {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return null;
       throw error;
     });
-    if (result) this.events.publish({ conversationId: room.id, type: "message.created", payload: { id: result.id, kind: result.kind, body: result.body, createdAt: result.createdAt } });
+    if (result) this.events.publish({ conversationId: room.id, type: "message.created", payload: { id: result.id } });
   }
 
   async closeRoom(challengeId: string, endedAt: Date) {
@@ -299,7 +314,7 @@ export class ChallengeChatService {
     return message;
   }
 
-  private assertModerator(actorId: string, role: JwtRole, challenge: { kind: ChallengeKind; creatorId: string }) {
+  private assertModerator(actorId: string, role: JwtRole, challenge: { kind: ChallengeKind; creatorId: string | null }) {
     if (isPrivileged(role)) return;
     if (challenge.kind !== ChallengeKind.COMMUNITY || challenge.creatorId !== actorId) throw new ForbiddenException("이 대화방을 관리할 권한이 없어요.");
   }

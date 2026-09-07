@@ -1,9 +1,8 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
-  S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Cron } from "@nestjs/schedule";
@@ -12,30 +11,39 @@ import { randomUUID } from "node:crypto";
 import * as sharp from "sharp";
 import { CompleteMediaDto, PresignDto } from "./dtos";
 import { PrismaService } from "./prisma.service";
+import { createStorageClients } from "./storage";
 
 const MAX_IMAGE_BYTES = 10_000_000;
+const DEFAULT_ACCOUNT_MEDIA_BYTES = 500_000_000;
+const DEFAULT_PROCESSING_CONCURRENCY = 2;
+const DEFAULT_PROCESSING_TIMEOUT_MS = 30_000;
 
 @Injectable()
 export class MediaService {
-  private readonly bucket = process.env.MINIO_BUCKET ?? "mungsil";
-  private readonly s3 = new S3Client({
-    endpoint: process.env.MINIO_ENDPOINT ?? "http://localhost:9000",
-    region: "us-east-1",
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: process.env.MINIO_ACCESS_KEY ?? "mungsil",
-      secretAccessKey: process.env.MINIO_SECRET_KEY ?? "change-me",
-    },
-  });
-  private readonly publicS3 = new S3Client({
-    endpoint: process.env.MINIO_PUBLIC_ENDPOINT ?? process.env.MINIO_ENDPOINT ?? "http://localhost:9000",
-    region: "us-east-1",
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: process.env.MINIO_ACCESS_KEY ?? "mungsil",
-      secretAccessKey: process.env.MINIO_SECRET_KEY ?? "change-me",
-    },
-  });
+  private readonly logger = new Logger(MediaService.name);
+  private readonly storage = createStorageClients();
+  private readonly bucket = this.storage.bucket;
+  private readonly s3 = this.storage.internal;
+  private readonly publicS3 = this.storage.public;
+  private readonly accountMediaBytes = this.numberSetting(
+    "MEDIA_MAX_BYTES_PER_USER",
+    DEFAULT_ACCOUNT_MEDIA_BYTES,
+    MAX_IMAGE_BYTES,
+    10_000_000_000,
+  );
+  private readonly processingConcurrency = this.numberSetting(
+    "MEDIA_PROCESS_CONCURRENCY",
+    DEFAULT_PROCESSING_CONCURRENCY,
+    1,
+    16,
+  );
+  private readonly processingTimeoutMs = this.numberSetting(
+    "MEDIA_PROCESS_TIMEOUT_MS",
+    DEFAULT_PROCESSING_TIMEOUT_MS,
+    5_000,
+    120_000,
+  );
+  private activeProcessing = 0;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -44,6 +52,13 @@ export class MediaService {
       throw new BadRequestException("지원하지 않는 이미지 형식이에요.");
     }
     if (dto.size > MAX_IMAGE_BYTES) throw new BadRequestException("이미지는 10MB 이하여야 해요.");
+    const stored = await this.prisma.media.aggregate({
+      where: { ownerId: userId },
+      _sum: { size: true },
+    });
+    if ((stored._sum.size ?? 0) + dto.size > this.accountMediaBytes) {
+      throw new BadRequestException("저장 공간이 부족해요. 사용하지 않는 사진을 정리한 뒤 다시 시도해주세요.");
+    }
     const extension = this.extension(dto.mimeType);
     const key = `uploads/${userId}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extension}`;
     const media = await this.prisma.media.create({
@@ -76,12 +91,23 @@ export class MediaService {
     if (!media) throw new NotFoundException("업로드 정보를 찾지 못했어요.");
     if (media.status === MediaStatus.READY) return this.serialize(media);
     if (media.status === MediaStatus.FAILED) throw new BadRequestException("다시 업로드해주세요.");
+    if (this.activeProcessing >= this.processingConcurrency) {
+      throw new ServiceUnavailableException("사진 처리 요청이 많아요. 잠시 후 다시 시도해주세요.");
+    }
+    this.activeProcessing += 1;
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), this.processingTimeoutMs);
+    const sharpTimeoutSeconds = Math.max(1, Math.ceil(this.processingTimeoutMs / 1000));
 
     try {
       const source = await this.s3.send(
         new GetObjectCommand({ Bucket: this.bucket, Key: media.objectKey }),
+        { abortSignal: abort.signal },
       );
       if (!source.Body) throw new BadRequestException("업로드한 파일을 찾지 못했어요.");
+      if ((source.ContentLength ?? media.size) > MAX_IMAGE_BYTES) {
+        throw new BadRequestException("이미지는 10MB 이하여야 해요.");
+      }
       const bytes = Buffer.from(await source.Body.transformToByteArray());
       if (!bytes.length || bytes.length > MAX_IMAGE_BYTES || bytes.length !== media.size) {
         throw new BadRequestException("이미지는 10MB 이하여야 해요.");
@@ -92,11 +118,13 @@ export class MediaService {
       }
 
       const full = await sharp(bytes, { limitInputPixels: 40_000_000 })
+        .timeout({ seconds: sharpTimeoutSeconds })
         .rotate()
         .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 82 })
         .toBuffer({ resolveWithObject: true });
       const thumbnail = await sharp(bytes, { limitInputPixels: 40_000_000 })
+        .timeout({ seconds: sharpTimeoutSeconds })
         .rotate()
         .resize({ width: 480, height: 480, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 76 })
@@ -112,6 +140,7 @@ export class MediaService {
             ContentType: "image/webp",
             CacheControl: "private, max-age=31536000, immutable",
           }),
+          { abortSignal: abort.signal },
         ),
         this.s3.send(
           new PutObjectCommand({
@@ -121,10 +150,12 @@ export class MediaService {
             ContentType: "image/webp",
             CacheControl: "private, max-age=31536000, immutable",
           }),
+          { abortSignal: abort.signal },
         ),
       ]);
       await this.s3.send(
         new DeleteObjectCommand({ Bucket: this.bucket, Key: media.objectKey }),
+        { abortSignal: abort.signal },
       ).catch(() => undefined);
       const ready = await this.prisma.media.update({
         where: { id: media.id },
@@ -147,6 +178,9 @@ export class MediaService {
       });
       if (error instanceof BadRequestException) throw error;
       throw new BadRequestException("이미지를 처리하지 못했어요. 다른 사진으로 다시 시도해주세요.");
+    } finally {
+      clearTimeout(timeout);
+      this.activeProcessing -= 1;
     }
   }
 
@@ -224,7 +258,7 @@ export class MediaService {
   async purgeMessageMedia(conversationId: string) {
     const media = await this.prisma.media.findMany({ where: { message: { conversationId } }, select: { id: true, objectKey: true, thumbnailKey: true } });
     for (const item of media) {
-      await Promise.all([item.objectKey, item.thumbnailKey].filter((key): key is string => Boolean(key)).map((key) => this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })).catch(() => undefined)));
+      await this.deleteObjects([item.objectKey, item.thumbnailKey]);
     }
     if (media.length) await this.prisma.media.deleteMany({ where: { id: { in: media.map((item) => item.id) } } });
   }
@@ -233,19 +267,22 @@ export class MediaService {
   async cleanupIncompleteUploads() {
     const expired = await this.prisma.media.findMany({
       where: {
-        status: { in: [MediaStatus.UPLOADING, MediaStatus.FAILED] },
+        status: { in: [MediaStatus.UPLOADING, MediaStatus.FAILED, MediaStatus.READY] },
         createdAt: { lt: new Date(Date.now() - 24 * 3600_000) },
         postId: null,
         checkInId: null,
         messageId: null,
+        avatarFor: { is: null },
       },
       take: 200,
     });
     for (const media of expired) {
-      await this.s3.send(
-        new DeleteObjectCommand({ Bucket: this.bucket, Key: media.objectKey }),
-      ).catch(() => undefined);
-      await this.prisma.media.delete({ where: { id: media.id } }).catch(() => undefined);
+      try {
+        await this.deleteObjects([media.objectKey, media.thumbnailKey]);
+        await this.prisma.media.delete({ where: { id: media.id } });
+      } catch (error) {
+        this.logger.error(JSON.stringify({ event: "media_cleanup_failed", mediaId: media.id, message: error instanceof Error ? error.message : "unknown" }));
+      }
     }
   }
 
@@ -255,11 +292,16 @@ export class MediaService {
       select: { id: true, objectKey: true, thumbnailKey: true },
     });
     for (const item of media) {
-      const keys = [item.objectKey, item.thumbnailKey].filter((key): key is string => Boolean(key));
-      await Promise.all(keys.map((key) => this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })).catch(() => undefined)));
+      await this.deleteObjects([item.objectKey, item.thumbnailKey]);
     }
     await this.prisma.user.updateMany({ where: { id: userId }, data: { avatarMediaId: null } });
     await this.prisma.media.deleteMany({ where: { ownerId: userId } });
+  }
+
+  private async deleteObjects(keys: Array<string | null>) {
+    for (const key of keys.filter((value): value is string => Boolean(value))) {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    }
   }
 
   private async serialize(media: Media) {
@@ -283,5 +325,12 @@ export class MediaService {
       "image/heic": ".heic",
       "image/heif": ".heif",
     }[mimeType] ?? ".img";
+  }
+
+  private numberSetting(name: string, fallback: number, minimum: number, maximum: number) {
+    const raw = process.env[name];
+    if (!raw) return fallback;
+    const value = Number(raw);
+    return Number.isInteger(value) && value >= minimum && value <= maximum ? value : fallback;
   }
 }

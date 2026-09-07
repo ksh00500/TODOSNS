@@ -7,7 +7,13 @@ export type ChatRealtimeEvent = {
   payload: unknown;
 };
 
+export type ChatAccessRevocation =
+  | { kind: "session"; sessionId: string }
+  | { kind: "user"; userId: string }
+  | { kind: "membership"; userId: string; conversationId: string };
+
 @Injectable()
 export class ChatEvents extends EventEmitter {
   publish(event: ChatRealtimeEvent) { this.emit("room-event", event); }
+  revoke(event: ChatAccessRevocation) { this.emit("access-revoked", event); }
 }

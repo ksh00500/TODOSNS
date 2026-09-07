@@ -12,6 +12,11 @@ export class PageDto {
   @IsOptional() @IsString() cursor?: string;
 }
 
+export class FeedQueryDto extends PageDto {
+  @IsOptional() @IsIn(["recent", "mix"]) mode: "recent" | "mix" = "recent";
+  @IsOptional() @IsIn(["전체", "생활", "건강", "운동", "공부", "독서", "마음", "커리어", "취미"]) category = "전체";
+}
+
 export class SearchDto extends PageDto {
   @IsString() @Length(1, 60) query!: string;
 }

@@ -1,11 +1,12 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtAuthGuard, OptionalJwtAuthGuard } from "./auth";
-import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeChatMessageDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, MessageRequestDto, ModerateChatMessageDto, MuteChatMemberDto, PageDto, PresignDto, ReadChallengeChatDto, ReorderTodoCategoriesDto, ResolveReportDto, SearchDto, ToggleChatReactionDto, UpdateChallengeChatMessageDto, UpdateChallengeDto, UpdateChallengeRewardDto, UpdateChatSettingsDto, UpdateContentVisibilityDto, UpdateInviteCodeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, UpdateUserSuspensionDto, UserTargetDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
+import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeChatMessageDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, FeedQueryDto, MessageRequestDto, ModerateChatMessageDto, MuteChatMemberDto, PageDto, PresignDto, ReadChallengeChatDto, ReorderTodoCategoriesDto, ResolveReportDto, SearchDto, ToggleChatReactionDto, UpdateChallengeChatMessageDto, UpdateChallengeDto, UpdateChallengeRewardDto, UpdateChatSettingsDto, UpdateContentVisibilityDto, UpdateInviteCodeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, UpdateUserSuspensionDto, UserTargetDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
 import { MediaService } from "./media.service";
 import { MungsilService } from "./mungsil.service";
 import { ChallengeChatService } from "./challenge-chat.service";
 import { DirectChatService } from "./direct-chat.service";
 import { ChatReactionType } from "@prisma/client";
+import { Throttle } from "@nestjs/throttler";
 
 type JwtUser = { sub: string; role: string; email: string };
 
@@ -39,7 +40,7 @@ export class TodoListController {
 @Controller("feed")
 export class FeedController {
   constructor(private readonly service: MungsilService) {}
-  @Get() feed(@CurrentUser() u: JwtUser, @Query() page: PageDto, @Query("mode") mode?: string, @Query("category") category?: string) { return this.service.feed(u.sub, page, mode, category); }
+  @Get() feed(@CurrentUser() u: JwtUser, @Query() query: FeedQueryDto) { return this.service.feed(u.sub, query); }
   @Get("posts/:id") detail(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.postDetail(id, u.sub); }
   @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.postComments(id, u.sub); }
   @Post("posts") post(@CurrentUser() u: JwtUser, @Body() dto: CreatePostDto) { return this.service.createPost(u.sub, dto); }
@@ -53,7 +54,7 @@ export class FeedController {
 @Controller("public")
 export class PublicController {
   constructor(private readonly service: MungsilService) {}
-  @Get("feed") feed(@CurrentUser() u: JwtUser | undefined, @Query() page: PageDto, @Query("mode") mode?: string, @Query("category") category?: string) { return this.service.feed(u?.sub ?? null, page, mode, category); }
+  @Get("feed") feed(@CurrentUser() u: JwtUser | undefined, @Query() query: FeedQueryDto) { return this.service.feed(u?.sub ?? null, query); }
   @Get("posts/:id") post(@CurrentUser() u: JwtUser | undefined, @Param("id") id: string) { return this.service.postDetail(id, u?.sub ?? null); }
   @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser | undefined, @Param("id") id: string) { return this.service.postComments(id, u?.sub ?? null); }
   @Get("users/:handle") user(@CurrentUser() u: JwtUser | undefined, @Param("handle") handle: string) { return this.service.publicProfile(handle, u?.sub ?? null); }
@@ -156,8 +157,8 @@ export class MeController {
   @Get("notifications") notifications(@CurrentUser() u: JwtUser, @Query() page: PageDto) { return this.service.notifications(u.sub, page); }
   @Get("notifications/unread-count") unreadCount(@CurrentUser() u: JwtUser) { return this.service.unreadNotificationCount(u.sub); }
   @Post("notifications/read") read(@CurrentUser() u: JwtUser) { return this.service.readNotifications(u.sub); }
-  @Post("media/presign") presign(@CurrentUser() u: JwtUser, @Body() dto: PresignDto) { return this.media.presign(u.sub, dto); }
-  @Post("media/complete") completeMedia(@CurrentUser() u: JwtUser, @Body() dto: CompleteMediaDto) { return this.media.complete(u.sub, dto); }
+  @Post("media/presign") @Throttle({ default: { limit: 20, ttl: 60_000 } }) presign(@CurrentUser() u: JwtUser, @Body() dto: PresignDto) { return this.media.presign(u.sub, dto); }
+  @Post("media/complete") @Throttle({ default: { limit: 10, ttl: 60_000 } }) completeMedia(@CurrentUser() u: JwtUser, @Body() dto: CompleteMediaDto) { return this.media.complete(u.sub, dto); }
 }
 
 @UseGuards(JwtAuthGuard)
@@ -175,11 +176,11 @@ export class AdminController {
   @Get("content") content(@CurrentUser() u: JwtUser, @Query() query: AdminContentQueryDto) { this.allow(u); return this.service.adminContent(query); }
   @Patch("content/:type/:id/visibility") contentVisibility(@CurrentUser() u: JwtUser, @Param("type") type: string, @Param("id") id: string, @Body() dto: UpdateContentVisibilityDto) { this.allow(u); return this.service.updateAdminContentVisibility(u.sub, type, id, dto.hidden, dto.reason); }
   @Get("audit-logs") auditLogs(@CurrentUser() u: JwtUser, @Query() page: PageDto) { this.allowAdmin(u); return this.service.adminAuditLogs(page); }
-  @Get("reports") reports(@CurrentUser() u: JwtUser) { this.allow(u); return this.service.adminReports(); }
+  @Get("reports") reports(@CurrentUser() u: JwtUser, @Query() page: PageDto) { this.allow(u); return this.service.adminReports(page); }
   @Patch("reports/:id") resolve(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: ResolveReportDto) { this.allow(u); return this.service.resolveReport(u.sub, id, dto.status as "RESOLVED" | "DISMISSED" | "REVIEWING", dto.resolution); }
-  @Get("reports/:id/message-context") messageContext(@CurrentUser() u: JwtUser, @Param("id") id: string) { this.allow(u); return this.chat.adminReportedContext(id); }
+  @Get("reports/:id/message-context") messageContext(@CurrentUser() u: JwtUser, @Param("id") id: string) { this.allow(u); return this.chat.adminReportedContext(u.sub, id); }
   @Patch("chat/messages/:messageId/visibility") chatMessageVisibility(@CurrentUser() u: JwtUser, @Param("messageId") messageId: string, @Body() dto: UpdateContentVisibilityDto) { this.allow(u); return this.chat.setHidden(u.sub, u.role, messageId, dto.hidden, dto.reason ?? "운영 정책에 따른 조치예요."); }
-  @Get("challenges/:challengeId/participants") challengeParticipants(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string) { this.allow(u); return this.service.adminChallengeParticipants(challengeId); }
+  @Get("challenges/:challengeId/participants") challengeParticipants(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Query() page: PageDto) { this.allow(u); return this.service.adminChallengeParticipants(challengeId, page); }
   @Get("challenge-verifications") challengeVerifications(@CurrentUser() u: JwtUser) { this.allow(u); return this.service.adminChallengeVerificationOverview(); }
   @Patch("challenge-check-ins/:id/visibility") challengeCheckInVisibility(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateContentVisibilityDto) { this.allow(u); return this.service.updateChallengeCheckInVisibility(u.sub, id, dto.hidden, dto.reason); }
   @Patch("challenges/:challengeId/participants/:userId/reward") reward(@CurrentUser() u: JwtUser, @Param("challengeId") challengeId: string, @Param("userId") userId: string, @Body() dto: UpdateChallengeRewardDto) { this.allow(u); return this.service.updateChallengeReward(challengeId, userId, dto.status, u.sub); }

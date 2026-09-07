@@ -1,7 +1,8 @@
 import { Controller, Get, Injectable, OnModuleDestroy, ServiceUnavailableException } from "@nestjs/common";
-import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
+import { HeadBucketCommand } from "@aws-sdk/client-s3";
 import Redis from "ioredis";
 import { PrismaService } from "./prisma.service";
+import { createStorageClients } from "./storage";
 
 @Injectable()
 export class HealthService implements OnModuleDestroy {
@@ -11,15 +12,8 @@ export class HealthService implements OnModuleDestroy {
     maxRetriesPerRequest: 1,
   });
 
-  private readonly storage = new S3Client({
-    endpoint: process.env.MINIO_ENDPOINT ?? "http://localhost:9000",
-    region: "us-east-1",
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: process.env.MINIO_ACCESS_KEY ?? "mungsil",
-      secretAccessKey: process.env.MINIO_SECRET_KEY ?? "change-me",
-    },
-  });
+  private readonly storageClients = createStorageClients();
+  private readonly storage = this.storageClients.internal;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -63,7 +57,7 @@ export class HealthService implements OnModuleDestroy {
 
   private async checkStorage() {
     try {
-      await this.storage.send(new HeadBucketCommand({ Bucket: process.env.MINIO_BUCKET ?? "mungsil" }));
+      await this.storage.send(new HeadBucketCommand({ Bucket: this.storageClients.bucket }));
       return true;
     } catch {
       return false;

@@ -27,7 +27,18 @@ type Profile = SessionUser & {
   rank: string;
   _count: { followers: number; following: number; posts: number };
   stats: { completedCount: number; receivedCheers: number; copiedCount: number };
-  earnedTitles: Array<{ titleAwarded: string; finalRank?: number | null; challenge: { id: string; title: string } }>;
+  earnedTitles: Array<{ titleAwarded: string; finalRank?: number | null; challenge: { id: string; title: string; description?: string; kind?: "OFFICIAL" | "COMMUNITY"; creator?: { nickname: string; handle: string } | null } }>;
+};
+
+type BadgeInfo = {
+  id: string;
+  title: string;
+  description: string;
+  issuer: string;
+  condition: string;
+  unlocked: boolean;
+  icon: "award" | "trophy";
+  challenge?: { id: string; title: string; description?: string };
 };
 
 const interestOptions = ["운동", "공부", "독서", "식단", "수면", "마음 관리", "커리어", "일상 관리"];
@@ -36,6 +47,7 @@ export default function MePage() {
   const { status, refresh } = useSession();
   const client = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [selectedBadge, setSelectedBadge] = useState<BadgeInfo | null>(null);
   const [notice, setNotice] = useState("");
   const profile = useQuery({
     queryKey: ["me", "profile"],
@@ -73,6 +85,12 @@ export default function MePage() {
             ? 2000
             : 5000;
   const rankProgress = Math.min(100, Math.round((me.lifetimePower / nextRank) * 100));
+  const badges: BadgeInfo[] = [
+    { id: "first-post", title: "첫 게시", description: "완료한 실천을 뭉실에 처음 게시한 기록이에요.", issuer: "뭉실 운영팀", condition: "첫 번째 실천 게시", unlocked: me._count.posts > 0, icon: "award" },
+    { id: "routine-maker", title: "루틴 메이커", description: "여러 TODO를 나만의 그룹으로 묶어 꾸준함을 시작한 기록이에요.", issuer: "뭉실 운영팀", condition: "첫 번째 TODO 그룹 만들기", unlocked: (lists.data?.length ?? 0) > 0, icon: "trophy" },
+    { id: "rank-piece", title: "조각구름", description: "작은 실천을 쌓아 누적 뭉실력 100에 도착한 등급 배지예요.", issuer: "뭉실 운영팀", condition: "누적 뭉실력 100 달성", unlocked: me.lifetimePower >= 100, icon: "award" },
+    ...me.earnedTitles.map((item) => ({ id: `challenge-${item.challenge.id}-${item.titleAwarded}`, title: item.titleAwarded, description: item.challenge.description || `‘${item.challenge.title}’에서 꾸준히 실천해 받은 칭호예요.`, issuer: item.challenge.creator?.nickname || (item.challenge.kind === "OFFICIAL" ? "뭉실 운영팀" : "챌린지 방장"), condition: item.finalRank ? `${item.challenge.title} 최종 ${item.finalRank}위` : `${item.challenge.title} 완주`, unlocked: true, icon: "trophy" as const, challenge: { id: item.challenge.id, title: item.challenge.title, description: item.challenge.description } })),
+  ];
 
   return (
     <main className="app-page me-page">
@@ -106,7 +124,7 @@ export default function MePage() {
           <Link href={`/people/${me.handle}/connections?type=following`}><b>{me._count.following}</b><small>팔로잉</small></Link>
         </div>
       </section>
-      <section className="rank-card">
+      <Link href="/me/rank" className="rank-card" aria-label={`${me.rank} 등급 상세 보기`}>
         <span className="rank-cloud"><CloudMark /><Sparkles /></span>
         <div>
           <small>나의 뭉실 등급</small>
@@ -115,15 +133,15 @@ export default function MePage() {
           <p>다음 구름까지 {Math.max(0, nextRank - me.lifetimePower)} 뭉실</p>
         </div>
         <ChevronRight />
-      </section>
+      </Link>
       <div className="stat-grid three">
         <article><span className="blue"><Flame /></span><div><small>완료한 실천</small><b>{me.stats.completedCount}</b></div></article>
         <article><span className="pink"><HeartHandshake /></span><div><small>받은 응원</small><b>{me.stats.receivedCheers}</b></div></article>
         <article><span className="mint"><CopyPlus /></span><div><small>가져간 실천</small><b>{me.stats.copiedCount}</b></div></article>
       </div>
       <div className="section-heading spaced">
-        <div><h2>나의 루틴 보드</h2><span>{lists.data?.length ?? 0}개의 루틴</span></div>
-        <Link href="/todos" className="soft-button">전체보기 <ChevronRight /></Link>
+        <div><h2>나의 TODO 그룹</h2><span>{lists.data?.length ?? 0}개의 그룹</span></div>
+        <Link href="/todos/routines" className="soft-button">그룹 관리 <ChevronRight /></Link>
       </div>
       <div className="my-routines">
         {lists.data?.slice(0, 3).map((list, index) => (
@@ -135,7 +153,7 @@ export default function MePage() {
           </article>
         ))}
         {!lists.isLoading && !lists.data?.length && (
-          <div className="inline-empty">아직 만든 루틴이 없어요.</div>
+          <div className="inline-empty">아직 만든 TODO 그룹이 없어요.</div>
         )}
       </div>
       <section className="shared-records">
@@ -165,12 +183,10 @@ export default function MePage() {
       <section className="badge-section">
         <div className="section-heading"><div><h2>나의 배지</h2><span>실천으로 얻은 기록</span></div></div>
         <div className="badges">
-          <span className={me._count.posts > 0 ? "" : "locked"}><Award /><b>첫 게시</b></span>
-          <span className={(lists.data?.length ?? 0) > 0 ? "" : "locked"}><Trophy /><b>루틴 메이커</b></span>
-          <span className={me.lifetimePower >= 100 ? "" : "locked"}><Award /><b>조각구름</b></span>
-          {me.earnedTitles.map((item) => <Link key={`${item.challenge.id}-${item.titleAwarded}`} href={`/challenges/${item.challenge.id}`}><Trophy /><b>{item.titleAwarded}</b></Link>)}
+          {badges.map((badge) => <button type="button" key={badge.id} className={badge.unlocked ? "" : "locked"} title={`${badge.title}: ${badge.description}`} aria-label={`${badge.title} 배지 상세 보기${badge.unlocked ? "" : ", 아직 획득 전"}`} onClick={() => setSelectedBadge(badge)}>{badge.icon === "trophy" ? <Trophy aria-hidden /> : <Award aria-hidden />}<b>{badge.title}</b><small>{badge.unlocked ? "획득" : "도전 중"}</small></button>)}
         </div>
       </section>
+      {selectedBadge && <Sheet title="배지 이야기" onClose={() => setSelectedBadge(null)}><div className="badge-detail-sheet"><span className={selectedBadge.unlocked ? "earned" : "locked"}>{selectedBadge.icon === "trophy" ? <Trophy aria-hidden /> : <Award aria-hidden />}</span><small>{selectedBadge.unlocked ? "내가 얻은 배지" : "아직 도전 중인 배지"}</small><h3>{selectedBadge.title}</h3><p>{selectedBadge.description}</p><dl><div><dt>만든 곳</dt><dd>{selectedBadge.issuer}</dd></div><div><dt>{selectedBadge.unlocked ? "획득 기록" : "획득 조건"}</dt><dd>{selectedBadge.condition}</dd></div>{selectedBadge.challenge && <div><dt>관련 챌린지</dt><dd>{selectedBadge.challenge.title}</dd></div>}</dl>{selectedBadge.challenge && <Link className="secondary-button full" href={`/challenges/${selectedBadge.challenge.id}`} onClick={() => setSelectedBadge(null)}>챌린지 내용 보기 <ChevronRight aria-hidden /></Link>}</div></Sheet>}
       {editing && (
         <ProfileEditor
           profile={me}

@@ -95,7 +95,7 @@ function initialState(): DemoState {
   const challenges: Challenge[] = [
     { id: "demo-challenge-official", title: "매일 7천 보, 가벼운 한 달", description: "하루 7천 보를 채우며 생활 속 움직임을 되찾아요.", kind: "OFFICIAL", verificationMode: "PEER_PHOTO", verificationCriteria: ["사진에서 걸음 수 또는 산책 기록을 확인할 수 있나요?", "사진이 오늘의 걷기 실천과 맞나요?", "재사용하거나 조작한 흔적 없이 자연스러운 인증인가요?"], minimumParticipants: 8, startsAt: at(-8, 0), endsAt: at(22, 23, 59), completionThreshold: 80, rewardLabel: "완주 리워드", rewardTerms: "완주율 80% 이상 달성 후 순차 지급해요.", creator: { id: "demo-official-admin", nickname: "뭉실 운영팀", handle: "mungsil.official" }, joined: true, todayCheckedIn: false, myCheckInCount: 7, successRate: 88, myRewardStatus: "NOT_ELIGIBLE", checkIns: [{ id: "demo-checkin-1", checkInDate: at(-1, 0), note: "점심시간에 공원을 크게 한 바퀴 걸었어요.", mediaUrl: "/demo/stretch.jpg", status: "APPROVED" }], _count: { participants: 1842, checkIns: 12840 } },
     { id: "demo-challenge-book", title: "잠들기 전 10쪽", description: "화면을 내려놓고 책으로 하루를 마무리해요.", kind: "COMMUNITY", verificationMode: "CHECK", startsAt: at(-3, 0), endsAt: at(18, 23, 59), completionThreshold: 70, firstPlaceTitle: "새벽 독서 구름", secondPlaceTitle: "꾸준한 책 구름", thirdPlaceTitle: "오늘도 독서 구름", creator: { id: "demo-author-sol", nickname: "솔", handle: "slow.sol" }, joined: true, chatUnreadCount: 3, _count: { participants: 326, checkIns: 1840 } },
-    { id: "demo-challenge-water", title: "물 한 잔으로 시작하기", description: "아침 첫 커피 전에 물 한 잔을 마시는 작은 약속이에요.", kind: "COMMUNITY", verificationMode: "CHECK", startsAt: at(-12, 0), endsAt: at(12, 23, 59), completionThreshold: 80, firstPlaceTitle: "맑은 아침 구름", creator: { id: "demo-me", nickname: "몽글이", handle: "mongsil.day" }, joined: true, todayCheckedIn: true, myCheckInCount: 11, successRate: 85, checkIns: [{ id: "demo-checkin-water", checkInDate: at(0, 0), note: "눈 뜨자마자 시원하게 한 잔!", mediaUrl: null, status: "APPROVED" }], _count: { participants: 94, checkIns: 672 } },
+    { id: "demo-challenge-water", title: "물 한 잔으로 시작하기", description: "아침 첫 커피 전에 물 한 잔을 마시는 작은 약속이에요.", kind: "COMMUNITY", verificationMode: "CHECK", startsAt: at(-12, 0), endsAt: at(12, 23, 59), completionThreshold: 80, firstPlaceTitle: "맑은 아침 구름", creator: { id: "demo-me", nickname: "몽글이", handle: "mongsil.day" }, joined: true, todayCheckedIn: true, myCheckInCount: 11, successRate: 85, myRank: 1, titleAwarded: "맑은 아침 구름", checkIns: [{ id: "demo-checkin-water", checkInDate: at(0, 0), note: "눈 뜨자마자 시원하게 한 잔!", mediaUrl: null, status: "APPROVED" }], _count: { participants: 94, checkIns: 672 } },
   ];
   const notifications: DemoNotification[] = [
     { id: "demo-notice-1", type: "CHEER", title: "새로운 응원을 받았어요", body: "윤슬님이 ‘출근 전 20분 산책’을 응원했어요.", referenceId: "demo-post-walk", targetType: "POST", targetId: "demo-post-walk", href: "/posts/demo-post-walk", createdAt: at(0, 14, 2) },
@@ -158,6 +158,10 @@ function readState() {
   state.challenges.forEach((challenge) => {
     challenge.completionThreshold ??= 80;
     challenge.creator ??= challenge.kind === "OFFICIAL" ? { id: "demo-official-admin", nickname: "뭉실 운영팀", handle: "mungsil.official" } : { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle };
+    if (challenge.id === "demo-challenge-water") {
+      challenge.myRank ??= 1;
+      challenge.titleAwarded ??= "맑은 아침 구름";
+    }
     challenge.checkIns?.forEach((item) => { item.status ??= "APPROVED"; });
   });
   return state;
@@ -244,7 +248,7 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
   if (demoAdminPreview && pathname === "/admin/audit-logs" && method === "GET") return clone({ items: [{ id: "preview-audit", action: "INVITE_CODE_CREATED", targetType: "INVITE_CODE", targetId: "preview-invite", summary: "1차 내부 테스터 생성", createdAt: at(-1, 15), admin: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle } }], nextCursor: null }) as T;
   if (demoAdminPreview && /^\/admin\/challenges\/[^/]+\/(?:participants|check-ins)$/.test(pathname) && method === "GET") return clone({ items: [] }) as T;
   if (pathname === "/auth/logout" || pathname === "/auth/delete-account") return {} as T;
-  if (pathname === "/me" && method === "GET") return clone({ ...state.user, rank: "조각구름", _count: { followers: 48, following: 31, posts: state.feed.filter((post) => post.author.id === state.user.id).length }, stats: { completedCount: state.todos.filter((todo) => todo.completedAt).length, receivedCheers: 18, copiedCount: 9 }, earnedTitles: state.challenges.flatMap((challenge) => challenge.titleAwarded ? [{ titleAwarded: challenge.titleAwarded, finalRank: challenge.myRank, challenge: { id: challenge.id, title: challenge.title } }] : []) }) as T;
+  if (pathname === "/me" && method === "GET") return clone({ ...state.user, rank: "조각구름", _count: { followers: 48, following: 31, posts: state.feed.filter((post) => post.author.id === state.user.id).length }, stats: { completedCount: state.todos.filter((todo) => todo.completedAt).length, receivedCheers: 18, copiedCount: 9 }, earnedTitles: state.challenges.flatMap((challenge) => challenge.titleAwarded ? [{ titleAwarded: challenge.titleAwarded, finalRank: challenge.myRank, challenge: { id: challenge.id, title: challenge.title, description: challenge.description, kind: challenge.kind, creator: challenge.creator ? { nickname: challenge.creator.nickname, handle: challenge.creator.handle } : null } }] : []) }) as T;
   if (pathname === "/me" && method === "PATCH") {
     state.user = { ...state.user, ...body } as SessionUser;
     writeState(state);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Clock3, Plus, Repeat2, Send, Sparkles, X } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, userErrorMessage } from "@/lib/api";
 import { dayRange, koreanDate, localDateKey } from "@/lib/date";
 import type { TodoDto, TodoListDto } from "@/lib/types";
 import { useSession } from "@/components/app-providers";
@@ -23,8 +23,9 @@ function todoTime(todo: TodoDto) {
 export default function TodayPage() {
   const { status, user } = useSession();
   const queryClient = useQueryClient();
-  const date = localDateKey();
-  const range = dayRange(date);
+  const timezone = user?.timezone ?? "Asia/Seoul";
+  const date = localDateKey(new Date(), timezone);
+  const range = dayRange(date, timezone);
   const [composer, setComposer] = useState(false);
   const [editing, setEditing] = useState<TodoDto | null>(null);
   const [publishTodo, setPublishTodo] = useState<TodoDto | null>(null);
@@ -51,7 +52,6 @@ export default function TodayPage() {
       setComposer(false);
       setNotice("새 TODO를 오늘에 담았어요.");
     },
-    onError: () => setNotice("TODO를 추가하지 못했어요. 잠시 후 다시 시도해주세요."),
   });
 
   const update = useMutation({
@@ -65,7 +65,6 @@ export default function TodayPage() {
       void queryClient.invalidateQueries({ queryKey: ["todos"] });
       void queryClient.invalidateQueries({ queryKey: ["todo-lists"] });
     },
-    onError: () => setNotice("변경사항을 저장하지 못했어요."),
   });
 
   const remove = useMutation({
@@ -79,7 +78,6 @@ export default function TodayPage() {
       setNotice("TODO를 삭제했어요.");
       void queryClient.invalidateQueries({ queryKey: ["todos"] });
     },
-    onError: () => setNotice("TODO를 삭제하지 못했어요."),
   });
 
   const restore = useMutation({
@@ -102,7 +100,6 @@ export default function TodayPage() {
       setNotice("이 날짜 이후의 반복을 종료했어요.");
       void queryClient.invalidateQueries({ queryKey: ["todos"] });
     },
-    onError: () => setNotice("반복 일정을 종료하지 못했어요."),
   });
 
   const complete = useMutation({
@@ -165,7 +162,6 @@ export default function TodayPage() {
       setNotice("오늘의 실천을 게시했어요.");
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
     },
-    onError: () => setNotice("실천을 게시하지 못했어요. 다시 시도해주세요."),
   });
 
   if (status === "loading") return <main className="app-page"><ListSkeleton /></main>;
@@ -278,9 +274,9 @@ export default function TodayPage() {
         </>
       )}
 
-      {composer && <TodoComposer date={date} lists={lists.data ?? []} busy={create.isPending} onClose={() => setComposer(false)} onSave={(draft) => create.mutate(draft)} />}
-      {editing && <TodoComposer date={date} todo={editing} lists={lists.data ?? []} busy={update.isPending || remove.isPending || endSeries.isPending} onClose={() => setEditing(null)} onSave={(draft) => update.mutate(draft)} onDelete={() => remove.mutate()} onEndSeries={() => endSeries.mutate()} />}
-      {publishTodo && <PublishSheet todo={publishTodo} busy={publish.isPending} onClose={() => setPublishTodo(null)} onPublish={(data) => publish.mutate(data)} />}
+      {composer && <TodoComposer date={date} lists={lists.data ?? []} listsStatus={lists.isLoading ? "loading" : lists.isError ? "error" : "ready"} onRetryLists={() => void lists.refetch()} error={create.isError ? userErrorMessage(create.error, "TODO를 추가하지 못했어요.") : ""} busy={create.isPending} onClose={() => setComposer(false)} onSave={(draft) => create.mutate(draft)} />}
+      {editing && <TodoComposer date={date} todo={editing} lists={lists.data ?? []} listsStatus={lists.isLoading ? "loading" : lists.isError ? "error" : "ready"} onRetryLists={() => void lists.refetch()} error={update.isError ? userErrorMessage(update.error, "변경사항을 저장하지 못했어요.") : remove.isError ? userErrorMessage(remove.error, "TODO를 삭제하지 못했어요.") : endSeries.isError ? userErrorMessage(endSeries.error, "반복 일정을 종료하지 못했어요.") : ""} busy={update.isPending || remove.isPending || endSeries.isPending} onClose={() => setEditing(null)} onSave={(draft) => update.mutate(draft)} onDelete={() => remove.mutate()} onEndSeries={() => endSeries.mutate()} />}
+      {publishTodo && <PublishSheet todo={publishTodo} busy={publish.isPending} onClose={() => setPublishTodo(null)} onPublish={(data) => publish.mutateAsync(data)} />}
     </main>
   );
 }

@@ -10,6 +10,8 @@ import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: false });
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) app.getHttpAdapter().getInstance().set("trust proxy", trustProxyHops);
   app.setGlobalPrefix("api/v1");
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(cookieParser());
@@ -35,8 +37,10 @@ async function bootstrap() {
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
-  const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("뭉실 API").setVersion("1.0").addBearerAuth().build());
-  SwaggerModule.setup("api/docs", app, document);
+  if (process.env.SWAGGER_ENABLED === "true" || process.env.NODE_ENV !== "production") {
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("뭉실 API").setVersion("1.0").addBearerAuth().build());
+    SwaggerModule.setup("api/docs", app, document);
+  }
   await app.listen(Number(process.env.PORT ?? 4000), "0.0.0.0");
 }
 

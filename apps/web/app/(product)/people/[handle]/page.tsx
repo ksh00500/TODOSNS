@@ -6,7 +6,7 @@ import { Ban, Flag, HeartHandshake, MessageCircleMore, UserPlus } from "lucide-r
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, userErrorMessage } from "@/lib/api";
 import type { DirectMessageStart, FeedPage, FeedPost } from "@/lib/types";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/states";
 import { CloudMark } from "@/components/cloud-mark";
@@ -69,9 +69,11 @@ export default function PersonPage({ params }: { params: Promise<{ handle: strin
       });
     },
     onSuccess: () => {
+      setNotice("");
       void followState.refetch();
       void query.refetch();
     },
+    onError: (cause) => { if (!(cause instanceof Error && cause.message === "LOGIN_REQUIRED")) setNotice(userErrorMessage(cause, "팔로우 상태를 바꾸지 못했어요.")); },
   });
   const block = useMutation({
     mutationFn: () =>
@@ -87,6 +89,7 @@ export default function PersonPage({ params }: { params: Promise<{ handle: strin
       return apiFetch<DirectMessageStart>("/messages/requests", { method: "POST", body: JSON.stringify({ receiverId: query.data?.id }) });
     },
     onSuccess: (result) => result.kind === "CONVERSATION" ? router.push(`/messages/${result.conversationId}`) : setNotice("메시지 요청을 보냈어요. 상대방이 수락하면 대화를 시작할 수 있어요."),
+    onError: (cause) => { if (!(cause instanceof Error && cause.message === "LOGIN_REQUIRED")) setNotice(userErrorMessage(cause, "메시지 요청을 보내지 못했어요.")); },
   });
   const cheer = useMutation({
     mutationFn: (post: FeedPost) =>
@@ -183,7 +186,7 @@ export default function PersonPage({ params }: { params: Promise<{ handle: strin
           onReported={() => setNotice("신고를 접수했어요. 운영팀이 확인할게요.")}
         />
       )}
-      {confirmingBlock && <ConfirmSheet title={`${person.nickname}님을 차단할까요?`} body="서로 팔로우가 해제되고 더 이상 메시지를 주고받을 수 없어요." confirmLabel="차단하기" danger busy={block.isPending} onClose={() => setConfirmingBlock(false)} onConfirm={() => block.mutate()} />}
+      {confirmingBlock && <ConfirmSheet title={`${person.nickname}님을 차단할까요?`} body="서로 팔로우가 해제되고 더 이상 메시지를 주고받을 수 없어요." confirmLabel="차단하기" danger busy={block.isPending} error={block.isError ? userErrorMessage(block.error, "차단하지 못했어요.") : ""} onClose={() => setConfirmingBlock(false)} onConfirm={() => block.mutate()} />}
     </main>
   );
 }

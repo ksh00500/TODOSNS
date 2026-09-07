@@ -182,9 +182,9 @@ export class DirectChatService {
     catch (error) { await this.prisma.message.delete({ where: { id: created.id } }).catch(() => undefined); throw error; }
     await this.prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
     const fresh = await this.prisma.message.findUniqueOrThrow({ where: { id: created.id }, include: directMessageInclude });
-    await this.notify(context.other.userId, context.me.user.nickname, conversationId, fresh);
+    await this.notify(context.other.userId, context.me.user.nickname, conversationId, fresh).catch(() => undefined);
     const serialized = await this.serialize(fresh, userId, false);
-    this.events.publish({ conversationId, type: "message.created", payload: serialized });
+    this.events.publish({ conversationId, type: "message.created", payload: { id: fresh.id } });
     return serialized;
   }
 
@@ -208,7 +208,7 @@ export class DirectChatService {
     else await this.prisma.messageReaction.create({ data: { messageId, userId, type } });
     const fresh = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId }, include: directMessageInclude });
     const serialized = await this.serialize(fresh, userId, false);
-    this.events.publish({ conversationId, type: "reaction.updated", payload: serialized });
+    this.events.publish({ conversationId, type: "reaction.updated", payload: { id: messageId } });
     return serialized.reactions;
   }
 

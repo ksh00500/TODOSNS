@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Trophy, X } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, userErrorMessage } from "@/lib/api";
 import type { ChatInboxItem, DirectMessageRequest, DirectMessageStart } from "@/lib/types";
 import { AuthGate, EmptyState, ErrorState, ListSkeleton } from "@/components/states";
 import { useSession } from "@/components/app-providers";
@@ -15,21 +15,26 @@ export default function MessagesPage() {
   const { status, user } = useSession();
   const client = useQueryClient();
   const [requestsOpen, setRequestsOpen] = useState(false);
+  const [requestError, setRequestError] = useState("");
   const inbox = useQuery({ queryKey: ["chat-inbox"], queryFn: () => apiFetch<ChatInboxItem[]>("/messages/inbox"), enabled: status === "authenticated" });
   const requests = useQuery({ queryKey: ["direct-message-requests"], queryFn: () => apiFetch<DirectMessageRequest[]>("/messages/requests"), enabled: status === "authenticated" });
   const accept = useMutation({
     mutationFn: (id: string) => apiFetch<DirectMessageStart>(`/messages/requests/${id}/accept`, { method: "POST" }),
     onSuccess: async () => {
+      setRequestError("");
       await Promise.all([client.invalidateQueries({ queryKey: ["chat-inbox"] }), client.invalidateQueries({ queryKey: ["direct-message-requests"] })]);
       if ((requests.data?.length ?? 0) <= 1) setRequestsOpen(false);
     },
+    onError: (cause) => setRequestError(userErrorMessage(cause, "메시지 요청을 수락하지 못했어요.")),
   });
   const reject = useMutation({
     mutationFn: (id: string) => apiFetch(`/messages/requests/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
+      setRequestError("");
       await client.invalidateQueries({ queryKey: ["direct-message-requests"] });
       if ((requests.data?.length ?? 0) <= 1) setRequestsOpen(false);
     },
+    onError: (cause) => setRequestError(userErrorMessage(cause, "메시지 요청을 거절하지 못했어요.")),
   });
 
   if (status === "guest") return <main className="app-page"><AuthGate title="대화는 로그인 후 이용할 수 있어요" /></main>;
@@ -48,6 +53,7 @@ export default function MessagesPage() {
     </>}
     {requestsOpen && <Sheet title="메시지 요청" onClose={() => setRequestsOpen(false)}>
       <p className="message-request-sheet-copy">수락한 사람과만 대화가 시작돼요. 원하지 않는 요청은 조용히 거절할 수 있어요.</p>
+      {requestError && <p className="form-error" role="alert">{requestError}</p>}
       <div className="message-request-list">{requests.data?.map((request) => <article key={request.id}><Avatar user={request.sender} /><div><b>{request.sender.nickname}</b><small>@{request.sender.handle} · 대화를 요청했어요</small></div><button aria-label={`${request.sender.nickname}의 요청 수락`} className="accept" disabled={accept.isPending || reject.isPending} onClick={() => accept.mutate(request.id)}><Check /></button><button aria-label={`${request.sender.nickname}의 요청 거절`} disabled={accept.isPending || reject.isPending} onClick={() => reject.mutate(request.id)}><X /></button></article>)}</div>
     </Sheet>}
   </main>;

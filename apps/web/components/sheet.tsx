@@ -4,6 +4,70 @@ import { useEffect, useId, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
+type SheetLayer = {
+  id: symbol;
+  root: React.RefObject<HTMLElement | null>;
+};
+
+const sheetLayers: SheetLayer[] = [];
+let lockSnapshot: {
+  app: HTMLElement | null;
+  appScroll: HTMLElement | null;
+  appWasInert: boolean;
+  bodyOverflow: string;
+  appOverflow: string;
+} | null = null;
+let pageReturnFocus: HTMLElement | null = null;
+
+function isTopSheet(id: symbol) {
+  return sheetLayers.at(-1)?.id === id;
+}
+
+function lockApp() {
+  if (lockSnapshot) return;
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  if (active && active !== document.body && active.id !== "app-content" && !active.closest(".sheet")) {
+    pageReturnFocus = active;
+  }
+  const app = document.querySelector<HTMLElement>(".mobile-app");
+  const appScroll = document.getElementById("app-content");
+  lockSnapshot = {
+    app,
+    appScroll,
+    appWasInert: app?.hasAttribute("inert") ?? false,
+    bodyOverflow: document.body.style.overflow,
+    appOverflow: appScroll?.style.overflow ?? "",
+  };
+  app?.setAttribute("inert", "");
+  document.body.style.overflow = "hidden";
+  if (appScroll) appScroll.style.overflow = "hidden";
+}
+
+function unlockApp() {
+  if (!lockSnapshot) return;
+  const snapshot = lockSnapshot;
+  lockSnapshot = null;
+  if (!snapshot.appWasInert) snapshot.app?.removeAttribute("inert");
+  document.body.style.overflow = snapshot.bodyOverflow;
+  if (snapshot.appScroll) snapshot.appScroll.style.overflow = snapshot.appOverflow;
+}
+
+function focusFirst(root: HTMLElement | null) {
+  const first = root?.querySelector<HTMLElement>(
+    'button:not([disabled]),a[href],input:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+  );
+  (first ?? root)?.focus();
+}
+
+function isUsableReturnFocus(element: HTMLElement | null) {
+  return Boolean(
+    element?.isConnected &&
+      element !== document.body &&
+      element.id !== "app-content" &&
+      !element.closest(".sheet"),
+  );
+}
+
 export function Sheet({
   title,
   children,
@@ -15,6 +79,7 @@ export function Sheet({
 }) {
   const sheet = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
+  const layerId = useRef(Symbol("sheet-layer"));
   const titleId = useId();
   const mounted = useSyncExternalStore(() => () => undefined, () => true, () => false);
   useEffect(() => {
@@ -24,26 +89,25 @@ export function Sheet({
   useEffect(() => {
     if (!mounted) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const app = document.querySelector<HTMLElement>(".mobile-app");
-    const appScroll = document.getElementById("app-content");
-    const appWasInert = app?.hasAttribute("inert") ?? false;
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousAppOverflow = appScroll?.style.overflow ?? "";
+    const id = layerId.current;
+    sheetLayers.push({ id, root: sheet });
+    lockApp();
     const focusable = () =>
       Array.from(
         sheet.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+          'button:not([disabled]),a[href],input:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
         ) ?? [],
       );
 
-    app?.setAttribute("inert", "");
-    document.body.style.overflow = "hidden";
-    if (appScroll) appScroll.style.overflow = "hidden";
-    requestAnimationFrame(() => focusable()[0]?.focus());
+    requestAnimationFrame(() => {
+      if (isTopSheet(id)) focusFirst(sheet.current);
+    });
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isTopSheet(id)) return;
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopImmediatePropagation();
         onCloseRef.current();
         return;
       }
@@ -64,10 +128,26 @@ export function Sheet({
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      if (!appWasInert) app?.removeAttribute("inert");
-      document.body.style.overflow = previousBodyOverflow;
-      if (appScroll) appScroll.style.overflow = previousAppOverflow;
-      previous?.focus();
+      const index = sheetLayers.findIndex((layer) => layer.id === id);
+      const wasTop = index === sheetLayers.length - 1;
+      if (index >= 0) sheetLayers.splice(index, 1);
+      if (!sheetLayers.length) unlockApp();
+      requestAnimationFrame(() => {
+        if (!wasTop) return;
+        const nextTop = sheetLayers.at(-1)?.root.current ?? null;
+        if (nextTop) {
+          if (previous?.isConnected && nextTop.contains(previous)) previous.focus({ preventScroll: true });
+          else focusFirst(nextTop);
+        }
+        else {
+          const target = isUsableReturnFocus(previous)
+            ? previous
+            : isUsableReturnFocus(pageReturnFocus)
+              ? pageReturnFocus
+              : document.getElementById("app-content");
+          target?.focus({ preventScroll: true });
+        }
+      });
     };
   }, [mounted]);
 
@@ -78,13 +158,14 @@ export function Sheet({
       className="sheet-backdrop"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose();
+        if (event.currentTarget === event.target && isTopSheet(layerId.current)) onClose();
       }}
     >
       <section
         ref={sheet}
         className="sheet"
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
       >

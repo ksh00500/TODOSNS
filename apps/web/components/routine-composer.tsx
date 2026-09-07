@@ -2,9 +2,10 @@
 
 import { FormEvent, useState } from "react";
 import { CalendarClock, Check, Layers3, Repeat2 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, userErrorMessage } from "@/lib/api";
 import type { TodoDto, TodoListDto } from "@/lib/types";
 import { Sheet } from "./sheet";
+import { ConfirmSheet } from "./confirm-sheet";
 
 function todoSchedule(todo: TodoDto) {
   const date = new Date(todo.dueDate);
@@ -21,7 +22,10 @@ export function RoutineComposer({ todos, lists, list, busy, onClose, onSaved }: 
   const [selected, setSelected] = useState<string[]>(list?.items.map((item) => item.todo.id) ?? []);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const orderedTodos = [...availableTodos].sort((left, right) => Number(selected.includes(right.id)) - Number(selected.includes(left.id)) || new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime());
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const initialSelected = list?.items.map((item) => item.todo.id) ?? [];
+  const dirty = title !== (list?.title ?? "") || description !== (list?.description ?? "") || selected.join("|") !== initialSelected.join("|");
+  const orderedTodos = availableTodos;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -34,14 +38,14 @@ export function RoutineComposer({ todos, lists, list, busy, onClose, onSaved }: 
       await apiFetch(list ? `/todo-lists/${list.id}` : "/todo-lists", { method: list ? "PATCH" : "POST", body: JSON.stringify({ title, description, todoIds: selected, visibility: "PRIVATE" }) });
       onSaved();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "그룹을 저장하지 못했어요.");
+      setError(userErrorMessage(cause, "그룹을 저장하지 못했어요."));
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <Sheet title={list ? "TODO 그룹 편집" : "새 TODO 그룹"} onClose={onClose}>
+  return (<>
+    <Sheet title={list ? "TODO 그룹 편집" : "새 TODO 그룹"} onClose={() => dirty ? setDiscardOpen(true) : onClose()}>
       <form className="composer-form" onSubmit={submit}>
         <label className="field"><span>그룹 이름</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="예: 퇴근 후 회복" maxLength={100} required /></label>
         <label className="field"><span>짧은 설명 <small>선택</small></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={300} placeholder="어떤 TODO를 함께 묶었는지 적어보세요." /></label>
@@ -66,9 +70,10 @@ export function RoutineComposer({ todos, lists, list, busy, onClose, onSaved }: 
             })}
           </div>
         </fieldset>
-        {error && <p className="form-error">{error}</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
         <button className="button full" disabled={busy || saving}>{saving ? "저장 중…" : list ? "그룹 변경사항 저장" : "TODO 그룹 만들기"}</button>
       </form>
     </Sheet>
-  );
+    {discardOpen && <ConfirmSheet title="그룹 편집을 닫을까요?" body="저장하지 않은 그룹 이름과 TODO 선택은 사라져요." confirmLabel="변경사항 버리기" danger onClose={() => setDiscardOpen(false)} onConfirm={onClose} />}
+  </>);
 }
