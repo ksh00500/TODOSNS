@@ -33,6 +33,18 @@ sh infra/backup.sh /absolute/backup/path infra/docker-compose.staging.yml
 sh infra/backup-to-s3.sh "$STORAGE_BUCKET" infra/docker-compose.yml
 ```
 
+EC2에서는 저장소의 systemd 유닛을 설치하면 매일 03:30 UTC(한국 시간 12:30)에 최대 10분의 무작위 지연을 두고 실행됩니다. 덤프는 로컬 파일을 만들지 않고 `backups/database/` 접두사로 바로 전송됩니다.
+
+```sh
+sudo install -m 0644 infra/systemd/mungsil-backup.service /etc/systemd/system/
+sudo install -m 0644 infra/systemd/mungsil-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mungsil-backup.timer
+systemctl list-timers mungsil-backup.timer
+```
+
+S3 수명 주기 만료는 운영자가 보존 기간을 결정한 뒤 `backups/database/` 접두사에만 별도로 적용합니다.
+
 최소 주 1회 최근 DB 백업을 임시 데이터베이스에 복원해 확인합니다.
 
 ```sh

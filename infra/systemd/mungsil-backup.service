@@ -1,0 +1,19 @@
+[Unit]
+Description=Stream the Mungsil PostgreSQL backup to S3
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/srv/mungsil/app
+EnvironmentFile=/srv/mungsil/.env
+ExecStart=/bin/sh /srv/mungsil/app/infra/backup-to-s3.sh ${STORAGE_BUCKET} infra/docker-compose.yml
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=full
+UMask=0077
+
