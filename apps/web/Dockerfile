@@ -10,7 +10,7 @@ FROM deps AS prod-deps
 RUN npm prune --omit=dev
 
 FROM deps AS build
-COPY apps/web/next.config.ts apps/web/next-env.d.ts apps/web/postcss.config.mjs apps/web/tsconfig.json ./apps/web/
+COPY apps/web/next.config.ts apps/web/postcss.config.mjs apps/web/tsconfig.json ./apps/web/
 COPY apps/web/app ./apps/web/app
 COPY apps/web/components ./apps/web/components
 COPY apps/web/lib ./apps/web/lib
