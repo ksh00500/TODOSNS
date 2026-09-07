@@ -105,6 +105,7 @@ services:
         NEXT_PUBLIC_API_URL: /api/v1
         NEXT_PUBLIC_SOCKET_URL: /
         NEXT_PUBLIC_SITE_URL: https://${APP_DOMAIN}
+        NEXT_PUBLIC_ENABLE_DEMO: ${NEXT_PUBLIC_ENABLE_DEMO:-false}
     restart: unless-stopped
     stop_grace_period: 20s
     mem_limit: ${WEB_MEMORY_LIMIT:-384m}
