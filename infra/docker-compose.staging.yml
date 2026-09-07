@@ -94,6 +94,7 @@ services:
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD}
       SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD}
       SEED_INVITE_CODE: ${SEED_INVITE_CODE}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
     expose: ["4000"]
     command: ["/bin/sh", "-c", "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/src/main.js"]
 

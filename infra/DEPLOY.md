@@ -6,7 +6,7 @@
 2. 서버에서 `npm ci && npm run db:generate`를 실행합니다.
 3. `npm run compose:staging:up`으로 웹, API, PostgreSQL, Redis, MinIO를 시작합니다.
 4. `http://PUBLIC_HOST:PUBLIC_PORT/api/v1/health`와 `/api/v1/ready`가 각각 200인지 확인합니다.
-5. `docker compose --env-file .env -f infra/docker-compose.staging.yml exec api node apps/api/prisma/seed.cjs`로 운영자·데모 계정과 초대 코드를 생성합니다. 값은 `.env`의 `SEED_ADMIN_PASSWORD`, `SEED_DEMO_PASSWORD`, `SEED_INVITE_CODE`를 사용합니다.
+5. `docker compose --env-file .env -f infra/docker-compose.staging.yml exec api node apps/api/prisma/seed.cjs`로 운영자·데모 계정과 초대 코드를 생성합니다. 값은 `.env`의 `SEED_ADMIN_PASSWORD`, `SEED_DEMO_PASSWORD`, `SEED_INVITE_CODE`를 사용합니다. 데모 사용자와 예시 콘텐츠는 `SEED_DEMO_DATA=true`일 때만 생성합니다.
 
 스테이징 Caddy는 같은 포트에서 웹, `/api`, `/mungsil-media`를 경로로 나눕니다. PostgreSQL·Redis·MinIO 관리 포트는 호스트에 공개하지 않습니다. HTTP 환경에서는 로그인 쿠키를 위해 `COOKIE_SECURE=false`를 사용하지만, PWA 설치와 운영 전환에는 도메인과 HTTPS를 적용하고 `COOKIE_SECURE=true`로 바꿔야 합니다.
 
@@ -18,6 +18,12 @@
 4. `npm run compose:up`을 실행합니다. 운영 Compose는 MinIO를 실행하지 않고 EC2 IAM Role의 임시 자격 증명으로 S3를 사용합니다.
 5. API 컨테이너가 시작할 때 Prisma 마이그레이션을 먼저 적용하며, 실패하면 API가 열리지 않습니다.
 6. `https://APP_DOMAIN/api/v1/ready`가 200인지 확인한 뒤 초대 코드를 배포합니다.
+
+운영에서는 `SEED_DEMO_DATA=false`, `NEXT_PUBLIC_ENABLE_DEMO=false`를 유지합니다. 베타 검증 뒤 시드 데모 데이터를 제거할 때는 먼저 DB 백업을 만든 다음 아래의 범위가 제한된 스크립트를 한 번 실행합니다. 운영자 계정과 초대 코드는 보존됩니다.
+
+```sh
+sh infra/remove-seed-demo-data.sh infra/docker-compose.yml /srv/mungsil/.env
+```
 
 ## 백업과 복원 점검
 

@@ -18,8 +18,9 @@ function seedValue(name, developmentFallback) {
 
 async function main() {
   const adminPassword = seedValue("SEED_ADMIN_PASSWORD", "Mungsil!234");
-  const demoPassword = seedValue("SEED_DEMO_PASSWORD", "Mungsil!234");
   const inviteCode = seedValue("SEED_INVITE_CODE", "MUNGSIL-BETA");
+  const seedDemoData = process.env.SEED_DEMO_DATA === "true"
+    || (process.env.NODE_ENV !== "production" && process.env.SEED_DEMO_DATA !== "false");
   const normalizedInviteCode = inviteCode.trim().toUpperCase();
   const birthDate = new Date("1995-01-01");
 
@@ -42,6 +43,16 @@ async function main() {
       emailVerifiedAt: new Date(),
     },
   });
+  const betaCodeHash = createHash("sha256").update(normalizedInviteCode).digest("hex");
+  await prisma.inviteCode.upsert({
+    where: { codeHash: betaCodeHash },
+    update: { maxUses: 100, disabledAt: null },
+    create: { codeHash: betaCodeHash, label: "초대 베타", maxUses: 100 },
+  });
+
+  if (!seedDemoData) return;
+
+  const demoPassword = seedValue("SEED_DEMO_PASSWORD", "Mungsil!234");
   const demo = await prisma.user.upsert({
     where: { email: "demo@mungsil.local" },
     update: {
@@ -59,13 +70,6 @@ async function main() {
       recentVitality: 92,
       emailVerifiedAt: new Date(),
     },
-  });
-
-  const betaCodeHash = createHash("sha256").update(normalizedInviteCode).digest("hex");
-  await prisma.inviteCode.upsert({
-    where: { codeHash: betaCodeHash },
-    update: { maxUses: 100, disabledAt: null },
-    create: { codeHash: betaCodeHash, label: "초대 베타", maxUses: 100 },
   });
 
   const todo = await prisma.todo.upsert({
