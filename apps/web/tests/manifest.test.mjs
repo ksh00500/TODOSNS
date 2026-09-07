@@ -15,3 +15,25 @@ test("서비스 워커는 변경 요청을 캐시하거나 큐에 넣지 않는�
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
 });
+
+test("Android TWA는 운영 도메인과 필수 런타임 컴포넌트를 검증한다", async () => {
+  const assetLinks = JSON.parse(
+    await readFile(new URL("../public/.well-known/assetlinks.json", import.meta.url), "utf8"),
+  );
+  const androidManifest = await readFile(
+    new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url),
+    "utf8",
+  );
+  const androidBuild = await readFile(
+    new URL("../../android/app/build.gradle", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal(assetLinks[0].target.package_name, "kr.kro.mungsil");
+  assert.match(assetLinks[0].target.sha256_cert_fingerprints[0], /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+  assert.match(androidManifest, /android:manageSpaceActivity="com\.google\.androidbrowserhelper\.trusted\.ManageDataLauncherActivity"/);
+  assert.match(androidManifest, /android:name="com\.google\.androidbrowserhelper\.trusted\.LauncherActivity"/);
+  assert.match(androidManifest, /android:autoVerify="true"/);
+  assert.match(androidManifest, /android:host="mungsil\.kro\.kr"/);
+  assert.match(androidBuild, /targetSdk 36/);
+});
