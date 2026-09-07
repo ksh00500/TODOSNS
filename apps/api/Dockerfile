@@ -6,9 +6,6 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci
 
-FROM deps AS prod-deps
-RUN npm prune --omit=dev && node -e "require.resolve('nodemailer', { paths: ['/app/apps/api'] })"
-
 FROM deps AS build
 COPY apps/api/nest-cli.json apps/api/tsconfig.json apps/api/prisma.config.ts ./apps/api/
 COPY apps/api/prisma ./apps/api/prisma
@@ -16,6 +13,12 @@ COPY apps/api/src ./apps/api/src
 COPY packages/contracts/tsconfig.json ./packages/contracts/tsconfig.json
 COPY packages/contracts/src ./packages/contracts/src
 RUN npm run db:generate && npm run build -w @mungsil/api
+
+# Keep dependency pruning after the memory-intensive Nest build. On the small
+# production instance BuildKit would otherwise run both stages in parallel and
+# exhaust RAM + swap.
+FROM build AS prod-deps
+RUN npm prune --omit=dev && node -e "require.resolve('nodemailer', { paths: ['/app/apps/api'] })"
 
 FROM node:24-alpine AS runner
 WORKDIR /app
