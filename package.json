@@ -33,7 +33,10 @@
     "compose:dev:up": "docker compose -f infra/docker-compose.dev.yml up -d",
     "compose:dev:down": "docker compose -f infra/docker-compose.dev.yml down",
     "compose:staging:up": "docker compose --env-file .env -f infra/docker-compose.staging.yml up -d --build",
-    "compose:staging:down": "docker compose --env-file .env -f infra/docker-compose.staging.yml down"
+    "compose:staging:down": "docker compose --env-file .env -f infra/docker-compose.staging.yml down",
+    "android:debug": "cd apps/android && gradlew.bat assembleDebug",
+    "android:signing-report": "cd apps/android && gradlew.bat signingReport",
+    "android:bundle": "cd apps/android && gradlew.bat bundleRelease"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "kr.kro.mungsil",
+      "sha256_cert_fingerprints": [
+        "E0:D5:6B:F0:10:CF:16:E9:AF:CF:5F:13:FD:26:5C:B0:E9:E5:E8:B0:FC:E8:5E:63:B4:9A:EA:D7:AC:D9:DA:27"
+      ]
+    }
+  }
+]

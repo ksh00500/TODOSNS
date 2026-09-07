@@ -6,6 +6,7 @@
 
 - `apps/web`: Next.js 모바일 PWA
 - `apps/api`: NestJS REST/WebSocket API
+- `apps/android`: PWA를 전체 화면으로 실행하는 Android Trusted Web Activity
 - `packages/contracts`: 공용 API 타입
 - `infra`: Caddy, PostgreSQL, Redis, MinIO를 포함한 Docker Compose
 
@@ -20,6 +21,10 @@
 로컬 인프라를 종료할 때는 `npm run compose:dev:down`을 실행합니다.
 
 웹은 `http://localhost:3000`, API 문서는 `http://localhost:4000/api/docs`에서 확인할 수 있습니다.
+
+## Android 앱
+
+Android SDK 36과 JDK 17 이상을 준비한 뒤 `npm run android:debug`으로 디버그 APK를 만듭니다. 결과물은 `apps/android/app/build/outputs/apk/debug/app-debug.apk`입니다. 배포 서명과 Play App Signing 연결 절차는 `docs/android-release.md`를 참고하세요.
 
 ## 온프레미스 배포
 
