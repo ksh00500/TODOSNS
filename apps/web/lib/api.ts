@@ -10,7 +10,11 @@ const CACHE_TTL_MS = 24 * 60 * 60_000;
 const CACHE_MAX_ENTRIES = 50;
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly code?: string,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -247,7 +251,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!response.ok) {
     const body = await response.json().catch(() => ({ message: "요청을 처리하지 못했어요." }));
     const message = Array.isArray(body.message) ? body.message[0] : body.message;
-    throw new ApiError(response.status, responseErrorMessage(response.status, typeof message === "string" ? message : undefined));
+    const code = typeof body.code === "string" ? body.code : undefined;
+    throw new ApiError(
+      response.status,
+      responseErrorMessage(response.status, typeof message === "string" ? message : undefined),
+      code,
+    );
   }
   const cacheCopy = cacheable ? response.clone() : null;
   if (cacheCopy && typeof window !== "undefined" && "caches" in window && epochAtStart === requestEpoch && scopeAtStart === getSessionScope()) {

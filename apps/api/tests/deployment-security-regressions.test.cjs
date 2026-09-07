@@ -73,13 +73,36 @@ test("공개 인증 설정은 초대 가입과 Google 서버 플래그를 그대
     process.env.INVITE_REQUIRED = "false";
     process.env.GOOGLE_AUTH_ENABLED = "true";
     process.env.GOOGLE_CLIENT_ID = "client";
-    assert.deepEqual(new AuthController({}).config(), { inviteRequired: false, googleAuthEnabled: true });
+    assert.deepEqual(new AuthController({}).config(), { inviteRequired: false, googleAuthEnabled: true, googleClientId: "client" });
     process.env.INVITE_REQUIRED = "true";
     delete process.env.GOOGLE_CLIENT_ID;
-    assert.deepEqual(new AuthController({}).config(), { inviteRequired: true, googleAuthEnabled: false });
+    assert.deepEqual(new AuthController({}).config(), { inviteRequired: true, googleAuthEnabled: false, googleClientId: null });
   } finally {
     if (original.invite === undefined) delete process.env.INVITE_REQUIRED; else process.env.INVITE_REQUIRED = original.invite;
     if (original.google === undefined) delete process.env.GOOGLE_AUTH_ENABLED; else process.env.GOOGLE_AUTH_ENABLED = original.google;
+    if (original.client === undefined) delete process.env.GOOGLE_CLIENT_ID; else process.env.GOOGLE_CLIENT_ID = original.client;
+  }
+});
+
+test("Google 신규 가입은 검증된 계정에 추가 프로필을 요구하고 잘못된 토큰은 401로 거부한다", async () => {
+  const original = { enabled: process.env.GOOGLE_AUTH_ENABLED, client: process.env.GOOGLE_CLIENT_ID };
+  const prisma = { user: { findUnique: async () => null } };
+  const auth = new AuthService(prisma, {}, {}, new ChatEvents());
+  try {
+    process.env.GOOGLE_AUTH_ENABLED = "true";
+    process.env.GOOGLE_CLIENT_ID = "client";
+    auth.google = { verifyIdToken: async () => ({ getPayload: () => ({ email: "new@example.test", sub: "google-new", email_verified: true }) }) };
+    await assert.rejects(
+      () => auth.googleLogin({ idToken: "valid-token" }, {}),
+      (error) => error.getResponse().code === "GOOGLE_PROFILE_REQUIRED" && error.getStatus() === 400,
+    );
+    auth.google = { verifyIdToken: async () => { throw new Error("invalid signature"); } };
+    await assert.rejects(
+      () => auth.googleLogin({ idToken: "invalid-token" }, {}),
+      (error) => error.getStatus() === 401 && /Google 계정/.test(error.message),
+    );
+  } finally {
+    if (original.enabled === undefined) delete process.env.GOOGLE_AUTH_ENABLED; else process.env.GOOGLE_AUTH_ENABLED = original.enabled;
     if (original.client === undefined) delete process.env.GOOGLE_CLIENT_ID; else process.env.GOOGLE_CLIENT_ID = original.client;
   }
 });

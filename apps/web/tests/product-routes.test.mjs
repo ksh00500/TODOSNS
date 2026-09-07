@@ -206,6 +206,20 @@ test("회원가입과 게시물 삭제는 브라우저 기본 UI를 사용하지
   assert.doesNotMatch(post, /window\.confirm|window\.alert|window\.prompt/);
 });
 
+test("Google 로그인은 공식 GIS 버튼과 서버 검증, 신규 가입 보완 단계로 연결된다", async () => {
+  const auth = await readFile(new URL("../components/auth-screen.tsx", import.meta.url), "utf8");
+  const googleButton = await readFile(new URL("../components/google-sign-in-button.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../lib/api.ts", import.meta.url), "utf8");
+  assert.match(googleButton, /https:\/\/accounts\.google\.com\/gsi\/client/);
+  assert.match(googleButton, /google\.accounts\.id\.renderButton/);
+  assert.match(auth, /\/auth\/google/);
+  assert.match(auth, /GOOGLE_PROFILE_REQUIRED/);
+  assert.match(auth, /BirthDatePicker/);
+  assert.match(auth, /Google 가입 완료/);
+  assert.match(api, /body\.code/);
+  assert.doesNotMatch(auth, /type=["']date["']/);
+});
+
 test("챌린지는 전용 선택 UI와 확인 시트를 사용한다", async () => {
   const composer = await readFile(new URL("../components/challenge-composer.tsx", import.meta.url), "utf8");
   const detail = await readFile(new URL("../app/(product)/challenges/[id]/page.tsx", import.meta.url), "utf8");

@@ -21,6 +21,16 @@
 
 운영에서는 `SEED_DEMO_DATA=false`, `NEXT_PUBLIC_ENABLE_DEMO=false`를 유지합니다. 베타 검증 뒤 시드 데모 데이터를 제거할 때는 먼저 DB 백업을 만든 다음 아래의 범위가 제한된 스크립트를 한 번 실행합니다. 운영자 계정과 초대 코드는 보존됩니다.
 
+### Google 로그인 활성화
+
+1. Google Auth Platform의 브랜딩에서 앱 이름, 지원 이메일, 승인된 도메인 `mungsil.kro.kr`, 홈페이지 `https://mungsil.kro.kr`, 개인정보 처리방침 `https://mungsil.kro.kr/privacy`, 이용약관 `https://mungsil.kro.kr/terms`를 설정합니다.
+2. 데이터 액세스는 로그인 기본 범위인 `openid`, `email`, `profile`만 사용합니다. 민감한 추가 범위는 요청하지 않습니다.
+3. 클라이언트에서 애플리케이션 유형 `웹 애플리케이션`을 만들고 승인된 JavaScript 원본에 `https://mungsil.kro.kr`을 추가합니다. 로컬 검증이 필요하면 `http://localhost:3000`도 추가합니다. 현재 구현은 JavaScript 콜백 방식이므로 승인된 리디렉션 URI와 Client Secret은 필요하지 않습니다.
+4. 발급된 공개 Client ID만 운영 `.env`의 `GOOGLE_CLIENT_ID`에 넣고 `GOOGLE_AUTH_ENABLED=true`로 바꿉니다. Client Secret이나 Google 사용자 토큰은 `.env`, Git, 채팅에 저장하지 않습니다.
+5. API를 재시작한 뒤 `/api/v1/auth/config`에서 `googleAuthEnabled`가 `true`인지 확인합니다. `/start`에서 기존 Google 사용자의 즉시 로그인, 신규 사용자의 아이디·생년월일·초대 코드 보완 가입, 같은 이메일의 비밀번호 계정 충돌을 각각 확인합니다.
+
+Android 앱은 웹을 신뢰해 실행하는 TWA이므로 같은 웹 Client ID를 사용합니다. 별도 Android OAuth Client ID는 이 로그인 방식에 필요하지 않습니다.
+
 ```sh
 sh infra/remove-seed-demo-data.sh infra/docker-compose.yml /srv/mungsil/.env
 ```

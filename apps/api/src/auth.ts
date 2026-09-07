@@ -157,30 +157,44 @@ export class AuthService {
     const ticket = await this.google.verifyIdToken({
       idToken: dto.idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
+    }).catch(() => {
+      throw new UnauthorizedException("Google 계정을 확인하지 못했어요.");
     });
     const profile = ticket.getPayload();
     if (!profile?.email || !profile.sub || profile.email_verified !== true) throw new UnauthorizedException("Google 계정을 확인하지 못했어요.");
     let user = await this.prisma.user.findUnique({ where: { googleId: profile.sub } });
     if (!user) {
       const existingEmail = await this.prisma.user.findUnique({ where: { email: profile.email.toLowerCase() } });
-      if (existingEmail) throw new ConflictException("같은 이메일 계정이 있어요. 비밀번호로 로그인한 뒤 계정 연결을 진행해주세요.");
-      if (!dto.birthDate) throw new BadRequestException("최초 가입에는 생년월일이 필요해요.");
+      if (existingEmail) throw new ConflictException("같은 이메일로 가입한 계정이 있어요. 비밀번호로 로그인해주세요.");
+      if (!dto.birthDate) {
+        throw new BadRequestException({
+          code: "GOOGLE_PROFILE_REQUIRED",
+          message: "Google 가입을 마치려면 생년월일과 아이디가 필요해요.",
+        });
+      }
       const birthDate = new Date(dto.birthDate);
       this.assertAdult(birthDate);
-      user = await this.prisma.$transaction(async (tx) => {
-        await this.consumeInvite(tx, dto.inviteCode);
-        return tx.user.create({
-          data: {
-            email: profile.email!.toLowerCase(),
-            googleId: profile.sub,
-            nickname: profile.name?.slice(0, 20) ?? "새 구름",
-            handle: dto.handle ?? `cloud.${profile.sub.slice(-8)}`,
-            birthDate,
-            timezone: process.env.APP_TIMEZONE ?? "Asia/Seoul",
-            emailVerifiedAt: new Date(),
-          },
+      try {
+        user = await this.prisma.$transaction(async (tx) => {
+          await this.consumeInvite(tx, dto.inviteCode);
+          return tx.user.create({
+            data: {
+              email: profile.email!.toLowerCase(),
+              googleId: profile.sub,
+              nickname: profile.name?.slice(0, 20) ?? "새 구름",
+              handle: dto.handle?.toLowerCase() ?? `cloud.${profile.sub.slice(-8)}`,
+              birthDate,
+              timezone: process.env.APP_TIMEZONE ?? "Asia/Seoul",
+              emailVerifiedAt: new Date(),
+            },
+          });
         });
-      });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new ConflictException("이미 사용 중인 아이디예요. 다른 아이디를 입력해주세요.");
+        }
+        throw error;
+      }
     } else if (user.email.toLowerCase() !== profile.email.toLowerCase()) {
       throw new UnauthorizedException("연결된 Google 계정을 확인하지 못했어요.");
     }
@@ -551,10 +565,12 @@ export class AuthController {
 
   @Get("config")
   config() {
+    const googleAuthEnabled =
+      process.env.GOOGLE_AUTH_ENABLED === "true" && Boolean(process.env.GOOGLE_CLIENT_ID);
     return {
       inviteRequired: process.env.INVITE_REQUIRED === "true",
-      googleAuthEnabled:
-        process.env.GOOGLE_AUTH_ENABLED === "true" && Boolean(process.env.GOOGLE_CLIENT_ID),
+      googleAuthEnabled,
+      googleClientId: googleAuthEnabled ? process.env.GOOGLE_CLIENT_ID : null,
     };
   }
 
