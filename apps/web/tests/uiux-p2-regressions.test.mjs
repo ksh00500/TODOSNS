@@ -60,6 +60,8 @@ test("마이 등급과 배지는 클릭 가능한 상세 정보를 제공하고 
   assert.match(me, /챌린지 내용 보기/);
   assert.match(me, /\/people\/\$\{me\.handle\}\/connections\?type=followers/);
   assert.match(connections, /search\.type === "following" \? "following" : "followers"/);
+  assert.match(connections, /router\.replace\(`\/people\/\$\{handle\}\/connections\?type=following`/);
+  assert.match(connections, /aria-pressed=\{kind === "following"\}/);
   assert.match(api, /description: true, kind: true, creator: \{ select: \{ nickname: true, handle: true \} \}/);
 });
 
