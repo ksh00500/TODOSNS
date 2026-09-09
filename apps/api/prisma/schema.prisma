@@ -373,26 +373,32 @@ model TodoListItem {
 }
 
 model Post {
-  id         String     @id @default(cuid())
-  authorId   String
-  author     User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  caption    String?    @db.VarChar(180)
-  todoListId String?
-  todoList   TodoList?  @relation(fields: [todoListId], references: [id], onDelete: SetNull)
-  visibility Visibility @default(PUBLIC)
-  mediaKey   String?
-  hiddenAt   DateTime?
-  todos      PostTodo[]
-  cheers     Cheer[]
-  comments   Comment[]
-  tags       PostTag[]
-  reports    Report[]
-  media      Media[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id                    String     @id @default(cuid())
+  authorId              String
+  author                User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  caption               String?    @db.VarChar(180)
+  todoListId            String?
+  todoList              TodoList?  @relation(fields: [todoListId], references: [id], onDelete: SetNull)
+  visibility            Visibility @default(PUBLIC)
+  mediaKey              String?
+  snapshot              Json?
+  snapshotSearchText    String?    @db.VarChar(2000)
+  snapshotCategories    String[]   @default([])
+  sourceAccessRevokedAt DateTime?
+  snapshotErasedAt      DateTime?
+  hiddenAt              DateTime?
+  todos                 PostTodo[]
+  cheers                Cheer[]
+  comments              Comment[]
+  tags                  PostTag[]
+  reports               Report[]
+  media                 Media[]
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 
   @@index([createdAt])
   @@index([todoListId])
+  @@index([sourceAccessRevokedAt, snapshotErasedAt, createdAt])
 }
 
 model Tag {

@@ -70,6 +70,7 @@ services:
         condition: service_completed_successfully
     environment:
       NODE_ENV: production
+      DEPLOYMENT_SECURITY_PROFILE: local-synthetic
       PORT: 4000
       WEB_ORIGIN: http://${PUBLIC_HOST}:${PUBLIC_PORT}
       SITE_ORIGIN: http://${PUBLIC_HOST}:${PUBLIC_PORT}
@@ -95,6 +96,9 @@ services:
       SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD}
       SEED_INVITE_CODE: ${SEED_INVITE_CODE}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      MEDIA_READ_URL_TTL_SECONDS: ${MEDIA_READ_URL_TTL_SECONDS:-300}
+      ANALYTICS_COLLECTION_ENABLED: "false"
+      ANALYTICS_EXPORT_ENABLED: "false"
     expose: ["4000"]
     command: ["/bin/sh", "-c", "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/src/main.js"]
 

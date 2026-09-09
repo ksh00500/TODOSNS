@@ -12,7 +12,7 @@ const { io: createClient } = require("socket.io-client");
 const { of, lastValueFrom } = require("rxjs");
 const { FeedQueryDto } = require("../dist/src/dtos.js");
 const { AuthController, AuthService } = require("../dist/src/auth.js");
-const { OptionalJwtAuthGuard } = require("../dist/src/auth.js");
+const { JwtAuthGuard, OptionalJwtAuthGuard } = require("../dist/src/auth.js");
 const { PublicController } = require("../dist/src/controllers.js");
 const { PrismaService } = require("../dist/src/prisma.service.js");
 const { ChatEvents } = require("../dist/src/chat.events.js");
@@ -124,6 +124,18 @@ test("만료 액세스 토큰 로그아웃도 서버 세션을 폐기하고 소�
   }
 });
 
+test("인증 Guard는 JWT의 오래된 역할 대신 현재 DB 역할을 사용한다", async () => {
+  const requestState = { headers: { authorization: "Bearer valid" } };
+  const guard = new JwtAuthGuard(
+    { verify: () => ({ sub: "u1", sid: "s1", email: "old@example.test", role: "ADMIN" }) },
+    { session: { findFirst: async () => ({ user: { email: "current@example.test", role: "USER" } }) } },
+  );
+  const context = { switchToHttp: () => ({ getRequest: () => requestState }) };
+  assert.equal(await guard.canActivate(context), true);
+  assert.equal(requestState.user.role, "USER");
+  assert.equal(requestState.user.email, "current@example.test");
+});
+
 test("실제 Socket.IO 연결은 권한 상실 뒤 원문을 보내지 않고 방에서 제거한다", async (t) => {
   let member = true;
   let session = true;
@@ -203,7 +215,16 @@ test("미디어 객체 삭제 실패 시 추적 행을 보존하고 다음 정�
   const item = { id: "media-1", objectKey: "full", thumbnailKey: "thumb" };
   const prisma = { media: { findMany: async ({ where }) => { cleanupWhere = where; return [item]; }, delete: async () => { deletedRows += 1; } } };
   const media = new MediaService(prisma);
-  media.s3 = { send: async () => { if (failures-- > 0) throw new Error("storage unavailable"); } };
+  media.s3 = { send: async (command) => {
+    if (failures-- > 0) throw new Error("storage unavailable");
+    if (command.constructor.name === "HeadObjectCommand") {
+      const missing = new Error("not found");
+      missing.name = "NotFound";
+      missing.$metadata = { httpStatusCode: 404 };
+      throw missing;
+    }
+    return {};
+  } };
   await media.cleanupIncompleteUploads();
   assert.equal(deletedRows, 0);
   await media.cleanupIncompleteUploads();
@@ -262,13 +283,17 @@ test("운영 환경은 예시 비밀값과 동일한 JWT 비밀을 거부한다"
     NODE_ENV: "production", DATABASE_URL: "postgresql://u:p@db/app", REDIS_URL: "redis://redis:6379",
     JWT_ACCESS_SECRET: "a".repeat(32), JWT_REFRESH_SECRET: "b".repeat(32), WEB_ORIGIN: "https://app.example.test",
     STORAGE_BUCKET: "media", STORAGE_REGION: "ap-southeast-2",
-    SMTP_HOST: "smtp.example.test", SITE_ORIGIN: "https://app.example.test",
+    SMTP_HOST: "smtp.example.test", SITE_ORIGIN: "https://app.example.test", COOKIE_SECURE: "true",
   };
   assert.throws(() => validateEnvironment({ ...base, JWT_ACCESS_SECRET: "replace-with-at-least-32-random-characters" }), /must not use an example/);
   assert.throws(() => validateEnvironment({ ...base, JWT_REFRESH_SECRET: base.JWT_ACCESS_SECRET }), /must be different/);
   assert.equal(validateEnvironment(base).NODE_ENV, "production");
   assert.throws(() => validateEnvironment({ ...base, STORAGE_BUCKET: "" }), /STORAGE_BUCKET or MINIO_BUCKET/);
   assert.throws(() => validateEnvironment({ ...base, STORAGE_ENDPOINT: "https://storage.example.test" }), /explicit access and secret keys/);
+  assert.throws(() => validateEnvironment({ ...base, SITE_ORIGIN: "http://app.example.test" }), /must use https/);
+  assert.throws(() => validateEnvironment({ ...base, COOKIE_SECURE: "false" }), /COOKIE_SECURE must be true/);
+  assert.equal(validateEnvironment({ ...base, DEPLOYMENT_SECURITY_PROFILE: "local-synthetic", SITE_ORIGIN: "http://127.0.0.1:8080", WEB_ORIGIN: "http://127.0.0.1:8080", COOKIE_SECURE: "false", SEED_DEMO_DATA: "true" }).DEPLOYMENT_SECURITY_PROFILE, "local-synthetic");
+  assert.throws(() => validateEnvironment({ ...base, DEPLOYMENT_SECURITY_PROFILE: "local-synthetic", SITE_ORIGIN: "http://127.0.0.1:8080", WEB_ORIGIN: "http://127.0.0.1:8080", COOKIE_SECURE: "false", SEED_DEMO_DATA: "false" }), /must not contain real user data/);
 });
 
 test("운영 S3는 IAM 자격 증명 체인을 사용하고 로컬 MinIO 호환성을 유지한다", () => {
@@ -296,4 +321,11 @@ test("운영 S3는 IAM 자격 증명 체인을 사용하고 로컬 MinIO 호환�
   assert.equal(minio.publicEndpoint, "http://localhost:9000");
   assert.equal(minio.forcePathStyle, true);
   assert.deepEqual(minio.credentials, { accessKeyId: "local-access", secretAccessKey: "local-secret" });
+});
+
+test("요청 로그는 query 원문을 기록하지 않고 외부 요청 ID를 제한한다", async () => {
+  const main = await require("node:fs/promises").readFile(require("node:path").join(__dirname, "../src/main.ts"), "utf8");
+  assert.match(main, /request\.path/);
+  assert.doesNotMatch(main, /path:\s*request\.originalUrl/);
+  assert.match(main, /\^\[A-Za-z0-9\._:-\]\{1,120\}\$/);
 });

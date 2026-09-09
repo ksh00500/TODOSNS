@@ -59,6 +59,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      DEPLOYMENT_SECURITY_PROFILE: internet
       PORT: 4000
       WEB_ORIGIN: https://${APP_DOMAIN}
       DATABASE_URL: postgresql://mungsil:${POSTGRES_PASSWORD}@postgres:5432/mungsil?schema=public
@@ -89,6 +90,9 @@ services:
       MEDIA_MAX_BYTES_PER_USER: ${MEDIA_MAX_BYTES_PER_USER:-500000000}
       MEDIA_PROCESS_CONCURRENCY: ${MEDIA_PROCESS_CONCURRENCY:-1}
       MEDIA_PROCESS_TIMEOUT_MS: ${MEDIA_PROCESS_TIMEOUT_MS:-30000}
+      MEDIA_READ_URL_TTL_SECONDS: ${MEDIA_READ_URL_TTL_SECONDS:-300}
+      ANALYTICS_COLLECTION_ENABLED: "false"
+      ANALYTICS_EXPORT_ENABLED: "false"
     expose: ["4000"]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/v1/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]

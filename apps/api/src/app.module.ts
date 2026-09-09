@@ -20,6 +20,7 @@ import { resolve } from "node:path";
 import { ChallengeChatService } from "./challenge-chat.service";
 import { ChatEvents } from "./chat.events";
 import { DirectChatService } from "./direct-chat.service";
+import { DataGovernanceService } from "./data-governance.service";
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../../.env")], validate: validateEnvironment }), JwtModule.register({}), ScheduleModule.forRoot(), ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
@@ -37,6 +38,7 @@ import { DirectChatService } from "./direct-chat.service";
     MaintenanceService,
     ChallengeChatService,
     DirectChatService,
+    DataGovernanceService,
     ChatEvents,
     ChatGateway,
     { provide: APP_GUARD, useClass: ThrottlerGuard },

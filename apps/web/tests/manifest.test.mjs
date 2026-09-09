@@ -14,6 +14,19 @@ test("서비스 워커는 변경 요청을 캐시하거나 큐에 넣지 않는�
   const worker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
   assert.match(worker, /request\.method !== "GET"/);
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
+  assert.match(worker, /STATIC_PREFIXES/);
+  assert.match(worker, /if \(!isCacheableStatic\(request, url\)\) return/);
+  assert.doesNotMatch(worker, /\["style", "script", "font", "image"\]\.includes/);
+  assert.doesNotMatch(worker, /"\/today", "\/explore", "\/todos", "\/challenges"/);
+});
+
+test("웹 문서는 프레이밍·object·base URI 보안 헤더를 제공한다", async () => {
+  const config = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");
+  assert.match(config, /frame-ancestors 'none'/);
+  assert.match(config, /object-src 'none'/);
+  assert.match(config, /base-uri 'self'/);
+  assert.match(config, /X-Frame-Options/);
+  assert.match(config, /Referrer-Policy/);
 });
 
 test("Android TWA는 운영 도메인과 필수 런타임 컴포넌트를 검증한다", async () => {

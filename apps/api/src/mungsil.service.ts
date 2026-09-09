@@ -21,6 +21,11 @@ const TODO_CATEGORY_DEFAULTS = [
   { name: "취미", baseCategory: "취미", icon: "palette", color: "butter" },
 ] as const;
 const TODO_BASE_CATEGORIES = new Set(TODO_CATEGORY_DEFAULTS.map((item) => item.baseCategory));
+const ACTIVE_POST_SNAPSHOT = {
+  snapshot: { not: Prisma.DbNull },
+  sourceAccessRevokedAt: null,
+  snapshotErasedAt: null,
+} satisfies Prisma.PostWhereInput;
 const DEFAULT_VERIFICATION_CRITERIA = [
   "사진만 보고 오늘 실천을 완료했다고 판단할 수 있나요?",
   "사진이 챌린지 주제와 맞나요?",
@@ -28,6 +33,8 @@ const DEFAULT_VERIFICATION_CRITERIA = [
 ];
 export const rankOf = (power: number) => power >= 5000 ? "별구름" : power >= 2000 ? "노을구름" : power >= 800 ? "뭉게구름" : power >= 300 ? "솜구름" : power >= 100 ? "조각구름" : "구름씨앗";
 export const cloneListRepeatRule = (mode: CloneTodoListRepeatMode, sourceRule: string | null, overrideRule?: string | null) => mode === CloneTodoListRepeatMode.NONE ? null : mode === CloneTodoListRepeatMode.CUSTOM && overrideRule !== undefined ? overrideRule : sourceRule;
+const visibilityRank = (visibility: Visibility) => visibility === Visibility.PUBLIC ? 2 : visibility === Visibility.FOLLOWERS ? 1 : 0;
+export const isMoreRestrictiveVisibility = (previous: Visibility, next?: Visibility) => next !== undefined && visibilityRank(next) < visibilityRank(previous);
 export const normalizeHashtags = (values: string[]) => {
   const normalized = values.map((value) => value.normalize("NFKC").trim().replace(/^#+/, "").toLocaleLowerCase("ko"));
   if (normalized.some((value) => !value || value.length > 30 || !/^[\p{L}\p{N}_]+$/u.test(value))) {
@@ -37,6 +44,36 @@ export const normalizeHashtags = (values: string[]) => {
 };
 
 const captionHashtags = (caption?: string) => [...(caption ?? "").matchAll(/(?:^|\s)#([\p{L}\p{N}_]{1,30})/gu)].map((match) => match[1]);
+
+type SnapshotTodo = {
+  id: string;
+  title: string;
+  notes: string | null;
+  category: string;
+  dueDate: string;
+  completedAt: string | null;
+  repeatRule: string | null;
+  seriesId: string | null;
+};
+type PostSnapshotV1 =
+  | { version: 1; kind: "TODO"; capturedAt: string; todo: SnapshotTodo }
+  | { version: 1; kind: "TODO_LIST"; capturedAt: string; list: { id: string; title: string; description: string | null; items: Array<{ order: number; todo: SnapshotTodo }> } };
+
+const snapshotTodo = (todo: { id: string; title: string; notes: string | null; category: string; dueDate: Date; completedAt: Date | null; repeatRule: string | null; seriesId: string | null }): SnapshotTodo => ({
+  id: todo.id,
+  title: todo.title,
+  notes: todo.notes,
+  category: todo.category,
+  dueDate: todo.dueDate.toISOString(),
+  completedAt: todo.completedAt?.toISOString() ?? null,
+  repeatRule: todo.repeatRule,
+  seriesId: todo.seriesId,
+});
+
+const snapshotSearchText = (values: Array<string | null | undefined>) => values.filter(Boolean).join(" ").slice(0, 2000);
+
+export const isReadablePostSnapshot = (post: { snapshot: unknown; sourceAccessRevokedAt: Date | null; snapshotErasedAt: Date | null }) =>
+  Boolean(post.snapshot) && post.sourceAccessRevokedAt === null && post.snapshotErasedAt === null;
 
 const postRelations = (viewerId: string | null) => ({
   author: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } },
@@ -78,7 +115,7 @@ export class MungsilService {
 
   async profile(userId: string) {
     const [user, completedCount, receivedCheers, copiedCount, earnedTitles] = await Promise.all([
-      this.prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { avatarMedia: true, _count: { select: { followers: true, following: true, posts: { where: { hiddenAt: null } } } } } }),
+      this.prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { avatarMedia: true, _count: { select: { followers: true, following: true, posts: { where: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null } } } } } }),
       this.prisma.todo.count({ where: { userId, completedAt: { not: null }, deletedAt: null } }),
       this.prisma.cheer.count({ where: { post: { authorId: userId, hiddenAt: null } } }),
       this.prisma.todo.count({ where: { sourceTodo: { userId }, deletedAt: null } }),
@@ -194,7 +231,8 @@ export class MungsilService {
   }
 
   async updateTodoList(userId: string, id: string, dto: UpdateTodoListDto) {
-    await this.ownTodoList(userId, id);
+    const existing = await this.ownTodoList(userId, id);
+    const revokeSnapshotAccess = isMoreRestrictiveVisibility(existing.visibility, dto.visibility);
     if (dto.todoIds) {
       const todoIds = [...new Set(dto.todoIds)];
       const owned = await this.prisma.todo.findMany({ where: { id: { in: todoIds }, userId, deletedAt: null }, select: { id: true, seriesId: true } });
@@ -204,27 +242,43 @@ export class MungsilService {
       if (grouped) throw new BadRequestException("이미 다른 루틴 그룹에 담긴 TODO가 있어요.");
       return this.prisma.$transaction(async (tx) => {
         await tx.todoListItem.deleteMany({ where: { listId: id } });
-        return tx.todoList.update({ where: { id }, data: { title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+        const updated = await tx.todoList.update({ where: { id }, data: { title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+        if (revokeSnapshotAccess) await tx.post.updateMany({ where: { todoListId: id, sourceAccessRevokedAt: null }, data: { sourceAccessRevokedAt: new Date() } });
+        return updated;
       });
     }
-    return this.prisma.todoList.update({ where: { id }, data: dto, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.todoList.update({ where: { id }, data: dto, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+      if (revokeSnapshotAccess) await tx.post.updateMany({ where: { todoListId: id, sourceAccessRevokedAt: null }, data: { sourceAccessRevokedAt: new Date() } });
+      return updated;
+    });
   }
 
-  async removeTodoList(userId: string, id: string) { await this.ownTodoList(userId, id); const shared = await this.prisma.post.count({ where: { todoListId: id, hiddenAt: null } }); if (shared) throw new BadRequestException("게시 중인 루틴은 삭제할 수 없어요."); await this.prisma.todoList.delete({ where: { id } }); return { ok: true }; }
+  async removeTodoList(userId: string, id: string) {
+    await this.ownTodoList(userId, id);
+    const postIds = await this.erasePostSnapshots({ todoListId: id });
+    await this.prisma.todoList.delete({ where: { id } });
+    await this.media.purgePosts(postIds);
+    return { ok: true };
+  }
 
   async cloneTodoList(userId: string, id: string, dto: CloneTodoListDto) {
     const source = await this.readableTodoList(userId, id);
     const baseDate = dto.dueDate ? new Date(dto.dueDate) : new Date();
-    const sourceBase = source.items.reduce((minimum, item) => Math.min(minimum, item.todo.dueDate.getTime()), source.items[0]?.todo.dueDate.getTime() ?? baseDate.getTime());
-    const sourceIds = new Set(source.items.map((item) => item.todo.id));
-    const overrides = new Map((dto.items ?? []).map((item) => [item.sourceTodoId, item]));
-    if (overrides.size !== (dto.items?.length ?? 0) || [...overrides.keys()].some((todoId) => !sourceIds.has(todoId))) {
-      throw new BadRequestException("가져올 루틴의 TODO 설정을 확인해주세요.");
-    }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
     const cloned = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.todoList.findUniqueOrThrow({
+        where: { id: source.id },
+        include: { items: { where: { todo: { deletedAt: null } }, include: { todo: true }, orderBy: { order: "asc" } } },
+      });
+      const sourceBase = current.items.reduce((minimum, item) => Math.min(minimum, item.todo.dueDate.getTime()), current.items[0]?.todo.dueDate.getTime() ?? baseDate.getTime());
+      const sourceIds = new Set(current.items.map((item) => item.todo.id));
+      const overrides = new Map((dto.items ?? []).map((item) => [item.sourceTodoId, item]));
+      if (overrides.size !== (dto.items?.length ?? 0) || [...overrides.keys()].some((todoId) => !sourceIds.has(todoId))) {
+        throw new BadRequestException("삭제되었거나 가져올 수 없는 TODO 설정이 포함되어 있어요.");
+      }
       const list = await tx.todoList.create({ data: { userId, sourceTodoListId: source.id, title: dto.title ?? source.title, description: source.description, visibility: Visibility.PRIVATE } });
-      for (const item of source.items) {
+      for (const item of current.items) {
         const override = overrides.get(item.todo.id);
         const dueDate = override?.dueDate ? new Date(override.dueDate) : new Date(baseDate.getTime() + item.todo.dueDate.getTime() - sourceBase);
         const repeatRule = cloneListRepeatRule(dto.repeatMode, item.todo.repeatRule, override?.repeatRule);
@@ -240,7 +294,7 @@ export class MungsilService {
         await tx.notification.create({ data: { userId: source.userId, type: NotificationType.COPY, title: "루틴을 가져갔어요", body: "누군가 회원님의 루틴을 자신의 하루에 담았어요.", referenceId: source.id, targetType: "TODO_LIST", targetId: source.id } });
       }
       return cloned;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     if (source.userId !== userId) await this.reward(source.userId, 5, "UNIQUE_LIST_COPY", cloned.id, 3);
     return cloned;
   }
@@ -304,14 +358,24 @@ export class MungsilService {
       await this.preserveDetachedSeriesMembership(userId, todo, updated);
       await this.setTodoListMembership(userId, updated, dto.todoListId, todo.id);
     }
+    if (isMoreRestrictiveVisibility(todo.visibility, dto.visibility)) {
+      await this.prisma.post.updateMany({
+        where: {
+          sourceAccessRevokedAt: null,
+          OR: [{ todos: { some: { todoId } } }, { todoList: { items: { some: { todoId } } } }],
+        },
+        data: { sourceAccessRevokedAt: new Date() },
+      });
+    }
     return this.prisma.todo.findUniqueOrThrow({ where: { id: updated.id }, include: { categoryRef: true } });
   }
 
   async removeTodo(userId: string, todoId: string) {
     await this.ownTodo(userId, todoId);
-    const shared = await this.prisma.postTodo.count({ where: { todoId, post: { hiddenAt: null } } });
-    if (shared) throw new BadRequestException("게시물을 먼저 삭제한 뒤 TODO를 삭제해주세요.");
-    return this.prisma.todo.update({ where: { id: todoId }, data: { deletedAt: new Date() } });
+    const postIds = await this.erasePostSnapshots({ OR: [{ todos: { some: { todoId } } }, { todoList: { items: { some: { todoId } } } }] });
+    const removed = await this.prisma.todo.update({ where: { id: todoId }, data: { deletedAt: new Date() } });
+    await this.media.purgePosts(postIds);
+    return removed;
   }
 
   async restoreTodo(userId: string, todoId: string) {
@@ -347,7 +411,7 @@ export class MungsilService {
 
   async uncompleteTodo(userId: string, todoId: string) {
     await this.ownTodo(userId, todoId);
-    const shared = await this.prisma.postTodo.count({ where: { todoId, post: { hiddenAt: null } } });
+    const shared = await this.prisma.postTodo.count({ where: { todoId, post: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null } } });
     if (shared) throw new BadRequestException("게시물을 먼저 삭제한 뒤 완료를 취소해주세요.");
     return this.prisma.todo.update({ where: { id: todoId }, data: { completedAt: null } });
   }
@@ -375,26 +439,49 @@ export class MungsilService {
   async createPost(userId: string, dto: CreatePostDto) {
     if (Boolean(dto.todoId) === Boolean(dto.todoListId)) throw new BadRequestException("TODO 또는 TODO 리스트 하나를 선택해주세요.");
     if (dto.mediaId) await this.media.readyOwned(userId, dto.mediaId);
-    let todoId: string | undefined;
-    if (dto.todoId) {
-      const todo = await this.ownTodo(userId, dto.todoId);
-      if (!todo.completedAt) throw new BadRequestException("완료한 TODO만 게시할 수 있어요.");
-      todoId = todo.id;
-    }
-    if (dto.todoListId) {
-      const list = await this.ownTodoList(userId, dto.todoListId);
-      const count = await this.prisma.todoListItem.count({ where: { listId: list.id } });
-      if (!count) throw new BadRequestException("비어 있는 TODO 리스트는 게시할 수 없어요.");
-    }
     const hashtags = normalizeHashtags([...(dto.hashtags ?? []), ...captionHashtags(dto.caption)]);
-    const created = await this.prisma.post.create({ data: {
-      authorId: userId,
-      caption: dto.caption,
-      visibility: dto.visibility,
-      todoListId: dto.todoListId,
-      todos: todoId ? { create: { todoId } } : undefined,
-      tags: hashtags.length ? { create: hashtags.map((name) => ({ tag: { connectOrCreate: { where: { name }, create: { name } } } })) } : undefined,
-    } });
+    const capturedAt = new Date();
+    const created = await this.prisma.$transaction(async (tx) => {
+      let todoId: string | undefined;
+      let snapshot: PostSnapshotV1;
+      let categories: string[];
+      let searchText: string;
+      if (dto.todoId) {
+        const todo = await tx.todo.findFirst({ where: { id: dto.todoId, userId, deletedAt: null } });
+        if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요.");
+        if (!todo.completedAt) throw new BadRequestException("완료한 TODO만 게시할 수 있어요.");
+        todoId = todo.id;
+        snapshot = { version: 1, kind: "TODO", capturedAt: capturedAt.toISOString(), todo: snapshotTodo(todo) };
+        categories = [todo.category];
+        searchText = snapshotSearchText([dto.caption, todo.title, todo.notes, todo.category]);
+      } else {
+        const list = await tx.todoList.findFirst({
+          where: { id: dto.todoListId, userId },
+          include: { items: { where: { todo: { deletedAt: null } }, include: { todo: true }, orderBy: { order: "asc" } } },
+        });
+        if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요.");
+        if (!list.items.length) throw new BadRequestException("비어 있는 TODO 리스트는 게시할 수 없어요.");
+        snapshot = {
+          version: 1,
+          kind: "TODO_LIST",
+          capturedAt: capturedAt.toISOString(),
+          list: { id: list.id, title: list.title, description: list.description, items: list.items.map((item) => ({ order: item.order, todo: snapshotTodo(item.todo) })) },
+        };
+        categories = [...new Set(list.items.map((item) => item.todo.category))];
+        searchText = snapshotSearchText([dto.caption, list.title, list.description, ...list.items.flatMap((item) => [item.todo.title, item.todo.notes, item.todo.category])]);
+      }
+      return tx.post.create({ data: {
+        authorId: userId,
+        caption: dto.caption,
+        visibility: dto.visibility,
+        todoListId: dto.todoListId,
+        snapshot: snapshot as unknown as Prisma.InputJsonValue,
+        snapshotSearchText: searchText,
+        snapshotCategories: categories,
+        todos: todoId ? { create: { todoId } } : undefined,
+        tags: hashtags.length ? { create: hashtags.map((name) => ({ tag: { connectOrCreate: { where: { name }, create: { name } } } })) } : undefined,
+      } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     if (dto.mediaId) {
       try {
         await this.media.attachToPost(userId, dto.mediaId, created.id);
@@ -420,11 +507,11 @@ export class MungsilService {
       recommendedCategories = (viewer?.interests ?? []).filter((item) => TODO_BASE_CATEGORIES.has(item as typeof TODO_CATEGORY_DEFAULTS[number]["baseCategory"]));
     }
     const selectedCategories = category !== "전체" ? [category] : recommendedCategories;
-    const categoryFilter: Prisma.PostWhereInput | undefined = selectedCategories.length ? { OR: [{ todos: { some: { todo: { category: { in: selectedCategories } } } } }, { todoList: { items: { some: { todo: { category: { in: selectedCategories } } } } } }] } : undefined;
+    const categoryFilter: Prisma.PostWhereInput | undefined = selectedCategories.length ? { snapshotCategories: { hasSome: selectedCategories } } : undefined;
     const cursor = this.decodeCursor(page.cursor);
     const cursorFilter: Prisma.PostWhereInput | undefined = cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : undefined;
     const filters = [categoryFilter, cursorFilter].filter(Boolean) as Prisma.PostWhereInput[];
-    const rows = await this.prisma.post.findMany({ take: page.limit + 1, where: { hiddenAt: null, authorId: { notIn: hiddenIds }, author: { suspendedAt: null, deletionRequestedAt: null }, OR: visibility, AND: filters }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: postRelations(userId) });
+    const rows = await this.prisma.post.findMany({ take: page.limit + 1, where: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, authorId: { notIn: hiddenIds }, author: { suspendedAt: null, deletionRequestedAt: null }, OR: visibility, AND: filters }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: postRelations(userId) });
     const visibleRows = rows.slice(0, page.limit);
     const last = visibleRows.at(-1);
     const nextCursor = rows.length > page.limit && last ? this.encodeCursor(last.createdAt, last.id) : null;
@@ -441,7 +528,7 @@ export class MungsilService {
   }
 
   async publicProfile(handle: string, viewerId: string | null) {
-    const user = await this.prisma.user.findFirst({ where: { handle, suspendedAt: null, deletionRequestedAt: null }, select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, bio: true, lifetimePower: true, recentVitality: true, _count: { select: { followers: true, following: true, posts: { where: { hiddenAt: null, visibility: Visibility.PUBLIC } } } } } });
+    const user = await this.prisma.user.findFirst({ where: { handle, suspendedAt: null, deletionRequestedAt: null }, select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, bio: true, lifetimePower: true, recentVitality: true, _count: { select: { followers: true, following: true, posts: { where: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, visibility: Visibility.PUBLIC } } } } } });
     if (!user) throw new NotFoundException("사용자를 찾을 수 없어요.");
     if (viewerId) await this.assertNotBlocked(viewerId, user.id);
     const avatarUrl = user.avatarMedia ? await this.media.viewUrl(user.avatarMedia.thumbnailKey ?? user.avatarMedia.objectKey) : user.avatarUrl;
@@ -456,6 +543,7 @@ export class MungsilService {
     const rows = await this.prisma.post.findMany({
       take: page.limit + 1,
       where: {
+        ...ACTIVE_POST_SNAPSHOT,
         authorId: user.id,
         visibility: Visibility.PUBLIC,
         hiddenAt: null,
@@ -478,6 +566,7 @@ export class MungsilService {
     if (!text) throw new BadRequestException("검색어를 입력해주세요.");
     const hiddenIds = await this.blockedUserIds(viewerId);
     const publicPostWhere: Prisma.PostWhereInput = {
+      ...ACTIVE_POST_SNAPSHOT,
       visibility: Visibility.PUBLIC,
       hiddenAt: null,
       authorId: { notIn: hiddenIds },
@@ -487,11 +576,7 @@ export class MungsilService {
       OR: [
         { caption: { contains: text, mode: "insensitive" } },
         { tags: { some: { tag: { name: { contains: text.toLocaleLowerCase("ko"), mode: "insensitive" } } } } },
-        { todos: { some: { todo: { title: { contains: text, mode: "insensitive" }, deletedAt: null } } } },
-        { todos: { some: { todo: { category: { contains: text, mode: "insensitive" }, deletedAt: null } } } },
-        { todoList: { title: { contains: text, mode: "insensitive" } } },
-        { todoList: { description: { contains: text, mode: "insensitive" } } },
-        { todoList: { items: { some: { todo: { title: { contains: text, mode: "insensitive" }, deletedAt: null } } } } },
+        { snapshotSearchText: { contains: text, mode: "insensitive" } },
       ],
     };
     const tagWhere: Prisma.TagWhereInput = {
@@ -559,7 +644,7 @@ export class MungsilService {
     const take = Math.min(Math.max(limit, 1), 20);
     const grouped = await this.prisma.postTag.groupBy({
       by: ["tagId"],
-      where: { post: { visibility: Visibility.PUBLIC, hiddenAt: null, author: { suspendedAt: null, deletionRequestedAt: null } } },
+      where: { post: { ...ACTIVE_POST_SNAPSHOT, visibility: Visibility.PUBLIC, hiddenAt: null, author: { suspendedAt: null, deletionRequestedAt: null } } },
       _count: { postId: true },
       orderBy: { _count: { postId: "desc" } },
       take,
@@ -595,7 +680,8 @@ export class MungsilService {
   async removePost(userId: string, postId: string) {
     const post = await this.prisma.post.findFirst({ where: { id: postId, authorId: userId, hiddenAt: null } });
     if (!post) throw new NotFoundException("게시물을 찾을 수 없어요.");
-    await this.prisma.post.update({ where: { id: postId }, data: { hiddenAt: new Date() } });
+    await this.erasePostSnapshots({ id: postId, authorId: userId });
+    await this.media.purgePosts([postId]);
     return { ok: true };
   }
 
@@ -1110,7 +1196,7 @@ export class MungsilService {
       this.prisma.user.count({ where: { suspendedAt: { not: null }, deletionRequestedAt: null } }),
       this.prisma.session.findMany({ where: { revokedAt: null, expiresAt: { gt: new Date() }, lastUsedAt: { gte: since } }, distinct: ["userId"], select: { userId: true } }).then((items) => items.length),
       this.prisma.todo.count({ where: { completedAt: { gte: since }, deletedAt: null } }),
-      this.prisma.post.count({ where: { createdAt: { gte: since }, hiddenAt: null } }),
+      this.prisma.post.count({ where: { ...ACTIVE_POST_SNAPSHOT, createdAt: { gte: since }, hiddenAt: null } }),
       this.prisma.todo.count({ where: { createdAt: { gte: since }, sourceTodoId: { not: null }, deletedAt: null } }),
       this.prisma.report.count({ where: { status: { in: ["OPEN", "REVIEWING"] } } }),
       this.prisma.challengeCheckIn.count({ where: { status: CheckInStatus.PENDING, hiddenAt: null, challenge: { verificationMode: VerificationMode.PEER_PHOTO, hiddenAt: null } } }),
@@ -1199,10 +1285,11 @@ export class MungsilService {
     return updated;
   }
 
-  async adminContent(query: AdminContentQueryDto) {
+  async adminContent(query: AdminContentQueryDto, adminId?: string) {
     const text = query.query?.trim();
     const cursor = this.decodeCursor(query.cursor);
     const hiddenFilter = query.status === "VISIBLE" ? { hiddenAt: null } : query.status === "HIDDEN" ? { hiddenAt: { not: null } } : {};
+    if (adminId) await this.audit(adminId, "SENSITIVE_CONTENT_LIST_VIEWED", "CONTENT_SEARCH", query.type, "운영 콘텐츠 목록 조회", { type: query.type, status: query.status ?? "ALL", hasQuery: Boolean(text) });
     if (query.type === "COMMENT") {
       const rows = await this.prisma.comment.findMany({ where: { ...hiddenFilter, AND: [...(text ? [{ OR: [{ body: { contains: text, mode: "insensitive" as const } }, { author: { handle: { contains: text.toLowerCase(), mode: "insensitive" as const } } }] }] : []), ...(cursor ? [{ OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] }] : [])] }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: query.limit + 1, include: { author: { select: { id: true, nickname: true, handle: true } }, post: { select: { id: true, caption: true } }, _count: { select: { reports: true } } } });
       const items = rows.slice(0, query.limit);
@@ -1423,6 +1510,28 @@ export class MungsilService {
     });
   }
 
+  private async erasePostSnapshots(where: Prisma.PostWhereInput) {
+    return this.prisma.$transaction(async (tx) => {
+      const rows = await tx.post.findMany({ where, select: { id: true } });
+      if (!rows.length) return [];
+      const ids = rows.map((row) => row.id);
+      const erasedAt = new Date();
+      await tx.post.updateMany({
+        where: { id: { in: ids } },
+        data: {
+          caption: null,
+          snapshot: Prisma.DbNull,
+          snapshotSearchText: null,
+          snapshotCategories: [],
+          snapshotErasedAt: erasedAt,
+          hiddenAt: erasedAt,
+        },
+      });
+      await tx.postTag.deleteMany({ where: { postId: { in: ids } } });
+      return ids;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
   private async ownTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, userId, deletedAt: null } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); return todo; }
   private async ensureTodoCategories(userId: string) {
     await this.prisma.todoCategory.createMany({ data: TODO_CATEGORY_DEFAULTS.map((item, position) => ({ userId, ...item, position, isDefault: true })), skipDuplicates: true });
@@ -1445,13 +1554,13 @@ export class MungsilService {
     }
     return { category: fallback, categoryId: null };
   }
-  private async readableTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, deletedAt: null, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { postLinks: { some: { post: { hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } } }] } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); await this.assertNotBlocked(userId, todo.userId); return todo; }
+  private async readableTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, deletedAt: null, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { postLinks: { some: { post: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } } }] } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); await this.assertNotBlocked(userId, todo.userId); return todo; }
   private async ownTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, userId } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); return list; }
-  private async readableTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, user: { followers: { some: { followerId: userId } } } }, { posts: { some: { hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } }] }, include: { items: { include: { todo: true }, orderBy: { order: "asc" } } } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); await this.assertNotBlocked(userId, list.userId); return list; }
+  private async readableTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, user: { followers: { some: { followerId: userId } } } }, { posts: { some: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } }] }, include: { items: { where: { todo: { deletedAt: null } }, include: { todo: true }, orderBy: { order: "asc" } } } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); await this.assertNotBlocked(userId, list.userId); return list; }
   private async readablePost(postId: string, userId: string | null) {
     const visibility: Prisma.PostWhereInput[] = [{ visibility: Visibility.PUBLIC }];
     if (userId) visibility.push({ authorId: userId }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } });
-    const post = await this.prisma.post.findFirst({ where: { id: postId, hiddenAt: null, author: { suspendedAt: null, deletionRequestedAt: null }, OR: visibility }, include: postRelations(userId) });
+    const post = await this.prisma.post.findFirst({ where: { ...ACTIVE_POST_SNAPSHOT, id: postId, hiddenAt: null, author: { suspendedAt: null, deletionRequestedAt: null }, OR: visibility }, include: postRelations(userId) });
     if (!post) throw new NotFoundException("게시물을 찾을 수 없어요.");
     if (userId) await this.assertNotBlocked(userId, post.authorId);
     return post;
@@ -1468,6 +1577,10 @@ export class MungsilService {
     if (blocked) throw new NotFoundException("내용을 찾을 수 없어요.");
   }
   private async serializePost(post: PostRow) {
+    if (!isReadablePostSnapshot(post)) throw new NotFoundException("게시물을 찾을 수 없어요.");
+    const snapshot = post.snapshot as unknown as PostSnapshotV1;
+    const snapshotTodos = snapshot.kind === "TODO" ? [snapshot.todo] : snapshot.list.items.map((item) => item.todo);
+    const snapshotList = snapshot.kind === "TODO_LIST" ? snapshot.list : null;
     const postMedia = post.media[0];
     const avatarUrl = post.author.avatarMedia
       ? await this.media.viewUrl(post.author.avatarMedia.thumbnailKey ?? post.author.avatarMedia.objectKey)
@@ -1480,8 +1593,8 @@ export class MungsilService {
       mediaUrl: postMedia ? await this.media.viewUrl(postMedia.objectKey) : post.mediaKey ? await this.media.viewUrl(post.mediaKey) : null,
       thumbnailUrl: postMedia?.thumbnailKey ? await this.media.viewUrl(postMedia.thumbnailKey) : null,
       hashtags: post.tags.map(({ tag }) => tag.name),
-      todos: post.todos.filter(({ todo }) => !todo.deletedAt).map(({ todo }) => this.publicTodo(todo)),
-      todoList: post.todoList ? { id: post.todoList.id, title: post.todoList.title, description: post.todoList.description, items: post.todoList.items.filter((item) => !item.todo.deletedAt).map((item) => ({ order: item.order, todo: this.publicTodo(item.todo) })) } : null,
+      todos: snapshot.kind === "TODO" ? snapshotTodos : [],
+      todoList: snapshotList,
       cheerCount: post._count.cheers,
       commentCount: post._count.comments,
       copyCount: post.todoList?._count.copies ?? post.todos.reduce((sum, link) => sum + link.todo._count.copies, 0),

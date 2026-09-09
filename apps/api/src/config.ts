@@ -57,6 +57,22 @@ export function validateEnvironment(config: Record<string, unknown>) {
     if (endpoint && (!accessKey || !secretKey)) {
       throw new Error("Custom storage endpoints require explicit access and secret keys");
     }
+
+    const localSynthetic = env.DEPLOYMENT_SECURITY_PROFILE === "local-synthetic";
+    if (localSynthetic && env.SEED_DEMO_DATA !== "true") {
+      throw new Error("local-synthetic production profile requires SEED_DEMO_DATA=true and must not contain real user data");
+    }
+    if (!localSynthetic) {
+      for (const origin of [env.SITE_ORIGIN, ...(env.WEB_ORIGIN ?? "").split(",")]) {
+        if (origin && new URL(origin.trim()).protocol !== "https:") {
+          throw new Error("Production SITE_ORIGIN and WEB_ORIGIN must use https");
+        }
+      }
+      if (env.COOKIE_SECURE !== "true") throw new Error("Production COOKIE_SECURE must be true");
+      if (endpoint && new URL(endpoint).protocol !== "https:") {
+        throw new Error("Production custom storage endpoints must use https");
+      }
+    }
   }
 
   assertUrl("DATABASE_URL", env.DATABASE_URL, ["postgresql:", "postgres:"]);
@@ -74,6 +90,7 @@ export function validateEnvironment(config: Record<string, unknown>) {
     ["MEDIA_MAX_BYTES_PER_USER", 10_000_000, 10_000_000_000],
     ["MEDIA_PROCESS_CONCURRENCY", 1, 16],
     ["MEDIA_PROCESS_TIMEOUT_MS", 5_000, 120_000],
+    ["MEDIA_READ_URL_TTL_SECONDS", 60, 900],
   ];
   for (const [name, minimum, maximum] of numericLimits) {
     if (env[name] !== undefined && (!/^\d+$/.test(env[name]!) || Number(env[name]) < minimum || Number(env[name]) > maximum)) {

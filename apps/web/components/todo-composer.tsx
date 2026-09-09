@@ -168,7 +168,7 @@ export function TodoComposer({
       </form>
     </Sheet>
     {confirmation === "discard" && <ConfirmSheet title="작성 중인 내용을 닫을까요?" body="저장하지 않은 변경사항은 사라져요." confirmLabel="변경사항 버리기" danger onClose={() => setConfirmation(null)} onConfirm={onClose} />}
-    {confirmation === "delete" && onDelete && <ConfirmSheet title="이 TODO를 삭제할까요?" body="선택한 일정만 삭제해요. 반복 시리즈의 다른 일정은 유지돼요." confirmLabel="이번 TODO 삭제" danger busy={busy} error={error} onClose={() => setConfirmation(null)} onConfirm={onDelete} />}
+    {confirmation === "delete" && onDelete && <ConfirmSheet title="이 TODO를 삭제할까요?" body="선택한 일정만 삭제해요. 연결된 게시물이 있다면 게시 내용과 사진도 삭제되며, 반복 시리즈의 다른 일정은 유지돼요." confirmLabel="이번 TODO 삭제" danger busy={busy} error={error} onClose={() => setConfirmation(null)} onConfirm={onDelete} />}
     {confirmation === "end" && onEndSeries && <ConfirmSheet title="이 날짜 이후 반복을 종료할까요?" body={`${new Date(`${day}T12:00:00`).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}부터 같은 반복 시리즈의 이후 일정을 종료해요. 이미 지난 일정과 완료 기록은 유지돼요.`} confirmLabel="이후 반복 종료" danger busy={busy} error={error} onClose={() => setConfirmation(null)} onConfirm={onEndSeries} />}
   </>);
 }

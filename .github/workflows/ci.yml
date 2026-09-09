@@ -49,6 +49,8 @@ jobs:
       - run: npm ci
       - run: npm run db:generate
       - run: npm run prisma:deploy -w @mungsil/api
+      - run: psql "${DATABASE_URL%%\?*}" -v ON_ERROR_STOP=1 -f infra/database/roles.sql
+      - run: psql "${DATABASE_URL%%\?*}" -v ON_ERROR_STOP=1 -f infra/database/verify-role-boundaries.sql
       - run: npm run lint
       - run: npm run test
       - run: npm run build

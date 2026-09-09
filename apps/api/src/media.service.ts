@@ -1,7 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import {
+  DeleteObjectsCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectVersionsCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -17,6 +20,7 @@ const MAX_IMAGE_BYTES = 10_000_000;
 const DEFAULT_ACCOUNT_MEDIA_BYTES = 500_000_000;
 const DEFAULT_PROCESSING_CONCURRENCY = 2;
 const DEFAULT_PROCESSING_TIMEOUT_MS = 30_000;
+const DEFAULT_READ_URL_TTL_SECONDS = 300;
 
 @Injectable()
 export class MediaService {
@@ -42,6 +46,12 @@ export class MediaService {
     DEFAULT_PROCESSING_TIMEOUT_MS,
     5_000,
     120_000,
+  );
+  private readonly readUrlTtlSeconds = this.numberSetting(
+    "MEDIA_READ_URL_TTL_SECONDS",
+    DEFAULT_READ_URL_TTL_SECONDS,
+    60,
+    900,
   );
   private activeProcessing = 0;
 
@@ -138,7 +148,7 @@ export class MediaService {
             Key: objectKey,
             Body: full.data,
             ContentType: "image/webp",
-            CacheControl: "private, max-age=31536000, immutable",
+            CacheControl: "private, no-store",
           }),
           { abortSignal: abort.signal },
         ),
@@ -148,15 +158,12 @@ export class MediaService {
             Key: thumbnailKey,
             Body: thumbnail,
             ContentType: "image/webp",
-            CacheControl: "private, max-age=31536000, immutable",
+            CacheControl: "private, no-store",
           }),
           { abortSignal: abort.signal },
         ),
       ]);
-      await this.s3.send(
-        new DeleteObjectCommand({ Bucket: this.bucket, Key: media.objectKey }),
-        { abortSignal: abort.signal },
-      ).catch(() => undefined);
+      const sourceDeletionTaskId = await this.queueObjectDeletion(media.id, media.ownerId, media.objectKey, "SOURCE_AFTER_TRANSFORM");
       const ready = await this.prisma.media.update({
         where: { id: media.id },
         data: {
@@ -170,6 +177,12 @@ export class MediaService {
           completedAt: new Date(),
         },
       });
+      try {
+        await this.deleteObjectCompletely(media.objectKey, abort.signal);
+        await this.completeObjectDeletionTask(sourceDeletionTaskId);
+      } catch (error) {
+        this.logger.error(JSON.stringify({ event: "transformed_source_delete_deferred", taskId: sourceDeletionTaskId, code: this.storageErrorCode(error) }));
+      }
       return this.serialize(ready);
     } catch (error) {
       await this.prisma.media.update({
@@ -237,7 +250,7 @@ export class MediaService {
     return getSignedUrl(
       this.publicS3,
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      { expiresIn: 3600 },
+      { expiresIn: this.readUrlTtlSeconds },
     );
   }
 
@@ -261,6 +274,28 @@ export class MediaService {
       await this.deleteObjects([item.objectKey, item.thumbnailKey]);
     }
     if (media.length) await this.prisma.media.deleteMany({ where: { id: { in: media.map((item) => item.id) } } });
+  }
+
+  async purgePosts(postIds: string[]) {
+    if (!postIds.length) return;
+    const media = await this.prisma.media.findMany({
+      where: { postId: { in: postIds } },
+      select: { id: true, ownerId: true, objectKey: true, thumbnailKey: true },
+    });
+    for (const item of media) {
+      let complete = true;
+      for (const key of [item.objectKey, item.thumbnailKey].filter((value): value is string => Boolean(value))) {
+        const taskId = await this.queueObjectDeletion(item.id, item.ownerId, key, "POST_SNAPSHOT_ERASURE");
+        try {
+          await this.deleteObjectCompletely(key);
+          await this.completeObjectDeletionTask(taskId);
+        } catch (error) {
+          complete = false;
+          this.logger.error(JSON.stringify({ event: "post_media_delete_deferred", taskId, code: this.storageErrorCode(error) }));
+        }
+      }
+      if (complete) await this.prisma.media.deleteMany({ where: { id: item.id, postId: { in: postIds } } });
+    }
   }
 
   @Cron("0 30 3 * * *", { timeZone: "UTC" })
@@ -287,6 +322,23 @@ export class MediaService {
   }
 
   async purgeOwner(userId: string) {
+    if (typeof this.prisma.$queryRawUnsafe === "function") {
+      const queued = await this.prisma.$queryRawUnsafe<Array<{ id: string; objectKey: string }>>(
+        `SELECT "id", "objectKey" FROM governance."ObjectDeletionTask"
+         WHERE "subjectUserId" = $1 AND "completedAt" IS NULL
+         ORDER BY "createdAt"`,
+        userId,
+      );
+      for (const task of queued) {
+        await this.deleteObjectCompletely(task.objectKey);
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE governance."ObjectDeletionTask"
+           SET "completedAt" = NOW(), "lastErrorCode" = NULL, "updatedAt" = NOW()
+           WHERE "id" = $1`,
+          task.id,
+        );
+      }
+    }
     const media = await this.prisma.media.findMany({
       where: { ownerId: userId },
       select: { id: true, objectKey: true, thumbnailKey: true },
@@ -300,8 +352,147 @@ export class MediaService {
 
   private async deleteObjects(keys: Array<string | null>) {
     for (const key of keys.filter((value): value is string => Boolean(value))) {
-      await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+      await this.deleteObjectCompletely(key);
     }
+  }
+
+  @Cron("0 */10 * * * *", { timeZone: "UTC" })
+  async retryObjectDeletionTasks() {
+    if (typeof this.prisma.$queryRawUnsafe !== "function") return;
+    const tasks = await this.prisma.$queryRawUnsafe<Array<{ id: string; mediaId: string | null; objectKey: string; reason: string }>>(
+      `WITH candidates AS (
+         SELECT "id" FROM governance."ObjectDeletionTask"
+         WHERE "completedAt" IS NULL AND "nextAttemptAt" <= NOW()
+         ORDER BY "nextAttemptAt", "createdAt"
+         FOR UPDATE SKIP LOCKED
+         LIMIT 50
+       )
+       UPDATE governance."ObjectDeletionTask" task
+       SET "attempts" = task."attempts" + 1, "lastAttemptAt" = NOW(),
+           "nextAttemptAt" = NOW() + INTERVAL '10 minutes', "updatedAt" = NOW()
+       FROM candidates
+       WHERE task."id" = candidates."id"
+       RETURNING task."id", task."mediaId", task."objectKey", task."reason"`,
+    );
+    for (const task of tasks) {
+      try {
+        await this.deleteObjectCompletely(task.objectKey);
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE governance."ObjectDeletionTask"
+           SET "completedAt" = NOW(), "lastErrorCode" = NULL, "updatedAt" = NOW()
+           WHERE "id" = $1`,
+          task.id,
+        );
+        if (task.mediaId && task.reason === "POST_SNAPSHOT_ERASURE") {
+          const pending = await this.prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+            `SELECT COUNT(*)::bigint AS "count" FROM governance."ObjectDeletionTask"
+             WHERE "mediaId" = $1 AND "completedAt" IS NULL`,
+            task.mediaId,
+          );
+          if (pending[0]?.count === 0n) await this.prisma.media.deleteMany({ where: { id: task.mediaId, post: { snapshotErasedAt: { not: null } } } });
+        }
+      } catch (error) {
+        const code = this.storageErrorCode(error);
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE governance."ObjectDeletionTask"
+           SET "lastErrorCode" = $2,
+               "nextAttemptAt" = NOW() + (LEAST(1440, POWER(2, LEAST("attempts", 10)))::text || ' minutes')::interval,
+               "updatedAt" = NOW()
+           WHERE "id" = $1`,
+          task.id,
+          code,
+        );
+        this.logger.error(JSON.stringify({ event: "object_deletion_retry_failed", taskId: task.id, code }));
+      }
+    }
+  }
+
+  private async queueObjectDeletion(mediaId: string, ownerId: string, objectKey: string, reason: string) {
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `INSERT INTO governance."ObjectDeletionTask"
+         ("id", "mediaId", "subjectUserId", "bucket", "objectKey", "reason", "nextAttemptAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NOW())
+       ON CONFLICT ("bucket", "objectKey") WHERE "completedAt" IS NULL
+       DO UPDATE SET "nextAttemptAt" = NOW(), "updatedAt" = NOW()
+       RETURNING "id"`,
+      randomUUID(),
+      mediaId,
+      ownerId,
+      this.bucket,
+      objectKey,
+      reason,
+    );
+    return rows[0].id;
+  }
+
+  private async completeObjectDeletionTask(taskId: string) {
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE governance."ObjectDeletionTask"
+       SET "completedAt" = NOW(), "lastErrorCode" = NULL, "updatedAt" = NOW()
+       WHERE "id" = $1`,
+      taskId,
+    );
+  }
+
+  private async deleteObjectCompletely(key: string, abortSignal?: AbortSignal) {
+    let unversionedDeleteAttempted = false;
+    for (let round = 0; round < 20; round += 1) {
+      const targets: Array<{ Key: string; VersionId?: string }> = [];
+      let keyMarker: string | undefined;
+      let versionIdMarker: string | undefined;
+      do {
+        const listed = await this.s3.send(new ListObjectVersionsCommand({
+          Bucket: this.bucket,
+          Prefix: key,
+          KeyMarker: keyMarker,
+          VersionIdMarker: versionIdMarker,
+        }), { abortSignal });
+        targets.push(
+          ...(listed.Versions ?? []).filter((item) => item.Key === key).map((item) => ({ Key: key, VersionId: item.VersionId })),
+          ...(listed.DeleteMarkers ?? []).filter((item) => item.Key === key).map((item) => ({ Key: key, VersionId: item.VersionId })),
+        );
+        keyMarker = listed.IsTruncated ? listed.NextKeyMarker : undefined;
+        versionIdMarker = listed.IsTruncated ? listed.NextVersionIdMarker : undefined;
+      } while (keyMarker || versionIdMarker);
+
+      if (targets.length) {
+        for (let index = 0; index < targets.length; index += 1000) {
+          const response = await this.s3.send(new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: { Objects: targets.slice(index, index + 1000), Quiet: true },
+          }), { abortSignal });
+          if (response.Errors?.length) throw new Error(`object-version-delete-failed:${response.Errors[0].Code ?? "unknown"}`);
+        }
+        continue;
+      }
+
+      if (!unversionedDeleteAttempted) {
+        await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }), { abortSignal });
+        unversionedDeleteAttempted = true;
+        continue;
+      }
+
+      try {
+        await this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }), { abortSignal });
+      } catch (error) {
+        if (this.isObjectMissing(error)) return;
+        throw error;
+      }
+      throw new Error("object-delete-verification-failed");
+    }
+    throw new Error("object-delete-version-limit-exceeded");
+  }
+
+  private isObjectMissing(error: unknown) {
+    if (!error || typeof error !== "object") return false;
+    const value = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+    return value.name === "NoSuchKey" || value.name === "NotFound" || value.$metadata?.httpStatusCode === 404;
+  }
+
+  private storageErrorCode(error: unknown) {
+    if (!error || typeof error !== "object") return "UNKNOWN";
+    const value = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+    return (value.name ?? value.Code ?? (value.$metadata?.httpStatusCode ? `HTTP_${value.$metadata.httpStatusCode}` : "UNKNOWN")).slice(0, 80);
   }
 
   private async serialize(media: Media) {

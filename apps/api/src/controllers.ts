@@ -173,7 +173,7 @@ export class AdminController {
   @Patch("invite-codes/:id") updateInviteCode(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateInviteCodeDto) { this.allowAdmin(u); return this.service.updateInviteCode(u.sub, id, dto.disabled); }
   @Get("users") users(@CurrentUser() u: JwtUser, @Query() query: AdminUserQueryDto) { this.allowAdmin(u); return this.service.adminUsers(query); }
   @Patch("users/:id/suspension") suspendUser(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateUserSuspensionDto) { this.allowAdmin(u); return this.service.updateUserSuspension(u.sub, id, dto.suspended, dto.reason); }
-  @Get("content") content(@CurrentUser() u: JwtUser, @Query() query: AdminContentQueryDto) { this.allow(u); return this.service.adminContent(query); }
+  @Get("content") content(@CurrentUser() u: JwtUser, @Query() query: AdminContentQueryDto) { this.allow(u); return this.service.adminContent(query, u.sub); }
   @Patch("content/:type/:id/visibility") contentVisibility(@CurrentUser() u: JwtUser, @Param("type") type: string, @Param("id") id: string, @Body() dto: UpdateContentVisibilityDto) { this.allow(u); return this.service.updateAdminContentVisibility(u.sub, type, id, dto.hidden, dto.reason); }
   @Get("audit-logs") auditLogs(@CurrentUser() u: JwtUser, @Query() page: PageDto) { this.allowAdmin(u); return this.service.adminAuditLogs(page); }
   @Get("reports") reports(@CurrentUser() u: JwtUser, @Query() page: PageDto) { this.allow(u); return this.service.adminReports(page); }

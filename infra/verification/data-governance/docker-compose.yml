@@ -1,0 +1,99 @@
+name: ${COMPOSE_PROJECT_NAME:-mungsil-dg-verify-20260909}
+
+x-verification-logging: &verification-logging
+  driver: json-file
+  options:
+    max-size: "5m"
+    max-file: "2"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: "no"
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 150
+    logging: *verification-logging
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: verify_owner
+      POSTGRES_PASSWORD: ${VERIFY_POSTGRES_PASSWORD:?set VERIFY_POSTGRES_PASSWORD}
+    volumes:
+      - verify_pgdata:/var/lib/postgresql/data
+    networks: [verification]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verify_owner -d postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    restart: "no"
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 150
+    logging: *verification-logging
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${VERIFY_MINIO_ACCESS_KEY:?set VERIFY_MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${VERIFY_MINIO_SECRET_KEY:?set VERIFY_MINIO_SECRET_KEY}
+    volumes:
+      - verify_minio:/data
+    networks: [verification]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set verify http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing verify/mungsil-unversioned &&
+        mc mb --ignore-existing verify/mungsil-versioned &&
+        mc version enable verify/mungsil-versioned
+    environment:
+      MINIO_ROOT_USER: ${VERIFY_MINIO_ACCESS_KEY:?set VERIFY_MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${VERIFY_MINIO_SECRET_KEY:?set VERIFY_MINIO_SECRET_KEY}
+    networks: [verification]
+
+  runner:
+    build:
+      context: ../../..
+      dockerfile: infra/verification/data-governance/Dockerfile
+    restart: "no"
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 250
+    logging: *verification-logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      VERIFY_POSTGRES_PASSWORD: ${VERIFY_POSTGRES_PASSWORD:?set VERIFY_POSTGRES_PASSWORD}
+      VERIFY_MINIO_ACCESS_KEY: ${VERIFY_MINIO_ACCESS_KEY:?set VERIFY_MINIO_ACCESS_KEY}
+      VERIFY_MINIO_SECRET_KEY: ${VERIFY_MINIO_SECRET_KEY:?set VERIFY_MINIO_SECRET_KEY}
+      ANALYTICS_COLLECTION_ENABLED: "false"
+      ANALYTICS_EXPORT_ENABLED: "false"
+    networks: [verification]
+    volumes:
+      - ./artifacts:/artifacts
+    command: ["infra/verification/data-governance/run-inside-container.sh"]
+
+networks:
+  verification:
+    internal: false
+
+volumes:
+  verify_pgdata:
+  verify_minio:

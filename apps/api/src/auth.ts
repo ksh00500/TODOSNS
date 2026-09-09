@@ -9,6 +9,7 @@ import {
   Get,
   Injectable,
   Logger,
+  Optional,
   Post,
   Req,
   Res,
@@ -34,6 +35,8 @@ import {
 import { EmailService } from "./email.service";
 import { ChatEvents } from "./chat.events";
 import { Throttle } from "@nestjs/throttler";
+import { DataGovernanceService } from "./data-governance.service";
+import { MaintenanceService } from "./maintenance.service";
 
 type JwtUser = { sub: string; role: string; email: string; sid: string };
 type RefreshUser = JwtUser & { fid: string; jti: string };
@@ -53,9 +56,13 @@ export class JwtAuthGuard implements CanActivate {
     const token = request.headers.authorization?.replace(/^Bearer\s+/i, "");
     if (!token) throw new UnauthorizedException("로그인이 필요해요.");
     try {
-      request.user = this.jwt.verify<JwtUser>(token, { secret: process.env.JWT_ACCESS_SECRET });
-      const active = await this.prisma.session.count({ where: { id: request.user.sid, userId: request.user.sub, revokedAt: null, expiresAt: { gt: new Date() }, user: { suspendedAt: null, deletionRequestedAt: null } } });
+      const claims = this.jwt.verify<JwtUser>(token, { secret: process.env.JWT_ACCESS_SECRET });
+      const active = await this.prisma.session.findFirst({
+        where: { id: claims.sid, userId: claims.sub, revokedAt: null, expiresAt: { gt: new Date() }, user: { suspendedAt: null, deletionRequestedAt: null } },
+        select: { user: { select: { email: true, role: true } } },
+      });
       if (!active) throw new Error("revoked");
+      request.user = { ...claims, email: active.user.email, role: active.user.role };
       return true;
     } catch {
       throw new UnauthorizedException("로그인이 만료됐어요.");
@@ -72,9 +79,12 @@ export class OptionalJwtAuthGuard implements CanActivate {
     const token = request.headers.authorization?.replace(/^Bearer\s+/i, "");
     if (token) {
       try {
-        const user = this.jwt.verify<JwtUser>(token, { secret: process.env.JWT_ACCESS_SECRET });
-        const active = await this.prisma.session.count({ where: { id: user.sid, userId: user.sub, revokedAt: null, expiresAt: { gt: new Date() }, user: { suspendedAt: null, deletionRequestedAt: null } } });
-        request.user = active ? user : undefined;
+        const claims = this.jwt.verify<JwtUser>(token, { secret: process.env.JWT_ACCESS_SECRET });
+        const active = await this.prisma.session.findFirst({
+          where: { id: claims.sid, userId: claims.sub, revokedAt: null, expiresAt: { gt: new Date() }, user: { suspendedAt: null, deletionRequestedAt: null } },
+          select: { user: { select: { email: true, role: true } } },
+        });
+        request.user = active ? { ...claims, email: active.user.email, role: active.user.role } : undefined;
       } catch {
         request.user = undefined;
       }
@@ -93,6 +103,8 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly email: EmailService,
     private readonly events: ChatEvents,
+    @Optional() private readonly governance?: DataGovernanceService,
+    @Optional() private readonly erasureWorker?: MaintenanceService,
   ) {}
 
   private assertAdult(date: Date) {
@@ -340,18 +352,23 @@ export class AuthService {
   }
 
   async requestDeletion(userId: string) {
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+    const requestedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
         where: { id: userId },
-        data: { deletionRequestedAt: new Date() },
-      }),
-      this.prisma.session.updateMany({
+        data: { deletionRequestedAt: requestedAt },
+      });
+      await tx.session.updateMany({
         where: { userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      }),
-    ]);
+        data: { revokedAt: requestedAt },
+      });
+      await this.governance?.registerErasure(tx, userId, requestedAt, requestedAt);
+    });
     this.events.revoke({ kind: "user", userId });
-    return { ok: true, purgeWithinDays: 7 };
+    void this.erasureWorker?.purgeDeletedAccount(userId, requestedAt).catch((error: unknown) => {
+      this.logger.error(JSON.stringify({ event: "account_purge_start_failed", code: error instanceof Error ? error.name : "UNKNOWN" }));
+    });
+    return { ok: true, purgeStarted: true };
   }
 
   private async createSession(

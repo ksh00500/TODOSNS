@@ -16,7 +16,11 @@ async function bootstrap() {
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(cookieParser());
   app.use((request: Request, response: Response, next: NextFunction) => {
-    const requestId = String(request.headers["x-request-id"] ?? randomUUID());
+    const suppliedRequestId = request.headers["x-request-id"];
+    const candidateRequestId = Array.isArray(suppliedRequestId) ? suppliedRequestId[0] : suppliedRequestId;
+    const requestId = typeof candidateRequestId === "string" && /^[A-Za-z0-9._:-]{1,120}$/.test(candidateRequestId)
+      ? candidateRequestId
+      : randomUUID();
     const startedAt = Date.now();
     response.setHeader("x-request-id", requestId);
     response.on("finish", () => {
@@ -25,7 +29,7 @@ async function bootstrap() {
         message: "request.completed",
         requestId,
         method: request.method,
-        path: request.originalUrl,
+        path: request.path,
         statusCode: response.statusCode,
         durationMs: Date.now() - startedAt,
       })}\n`);
