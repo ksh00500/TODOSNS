@@ -21,6 +21,7 @@ import { ChallengeChatService } from "./challenge-chat.service";
 import { ChatEvents } from "./chat.events";
 import { DirectChatService } from "./direct-chat.service";
 import { DataGovernanceService } from "./data-governance.service";
+import { TodoCategoryService } from "./todo-category.service";
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../../.env")], validate: validateEnvironment }), JwtModule.register({}), ScheduleModule.forRoot(), ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
@@ -39,6 +40,7 @@ import { DataGovernanceService } from "./data-governance.service";
     ChallengeChatService,
     DirectChatService,
     DataGovernanceService,
+    TodoCategoryService,
     ChatEvents,
     ChatGateway,
     { provide: APP_GUARD, useClass: ThrottlerGuard },

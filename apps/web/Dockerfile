@@ -1,10 +1,11 @@
-FROM node:24-alpine AS deps
+ARG NODE_IMAGE=node:24-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package*.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
-RUN npm ci
+RUN npm ci --no-audit --no-fund && npm cache clean --force
 
 FROM deps AS build
 COPY apps/web/next.config.ts apps/web/postcss.config.mjs apps/web/tsconfig.json ./apps/web/
@@ -30,14 +31,17 @@ RUN npm run build -w @mungsil/contracts && npm run build -w @mungsil/web
 FROM build AS prod-deps
 RUN npm prune --omit=dev
 
-FROM node:24-alpine AS runner
+FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/apps/web/.next ./apps/web/.next
 COPY --from=prod-deps /app/apps/web/public ./apps/web/public
 COPY --from=prod-deps /app/apps/web/package.json ./apps/web/package.json
+COPY --from=prod-deps /app/apps/api/package.json ./apps/api/package.json
+COPY --from=prod-deps /app/packages/contracts/package.json ./packages/contracts/package.json
 COPY --from=prod-deps /app/package.json ./package.json
+COPY package-lock.json ./package-lock.json
 USER node
 EXPOSE 3000
 CMD ["npm", "run", "start", "-w", "@mungsil/web"]

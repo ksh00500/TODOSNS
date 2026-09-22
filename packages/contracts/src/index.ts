@@ -52,6 +52,12 @@ export interface TodoCategoryDto {
   todoCount?: number;
 }
 
+export interface TodoCategoryTodosPageDto {
+  items: TodoDto[];
+  counts: { all: number; open: number; done: number };
+  nextCursor: string | null;
+}
+
 export interface TodoListDto {
   id: string;
   title: string;
@@ -185,6 +191,7 @@ export interface ChallengeChatMessageDto {
   deletedAt?: string | null;
   hiddenAt?: string | null;
   blocked: boolean;
+  isMine: boolean;
   canEdit: boolean;
   canDelete: boolean;
   canModerate: boolean;
@@ -222,6 +229,7 @@ export interface DirectChatMessageDto {
   deletedAt?: string | null;
   hiddenAt?: string | null;
   blocked: boolean;
+  isMine: boolean;
   canDelete: boolean;
   createdAt: string;
 }
@@ -286,6 +294,16 @@ export interface NotificationPageDto {
   items: NotificationDto[];
   nextCursor: string | null;
   unreadCount: number;
+}
+
+export interface BlockedUserPageDto {
+  items: Array<{ userId: string; user: Pick<UserSummary, "id" | "nickname" | "handle" | "avatarUrl"> | null; createdAt: string }>;
+  nextCursor: string | null;
+}
+
+export interface TodoSearchPageDto {
+  items: Array<TodoDto & { group: { id: string; title: string } | null }>;
+  nextCursor: string | null;
 }
 
 export interface ChallengeDto {
@@ -359,6 +377,11 @@ export interface CommentDto {
   body: string;
   createdAt: string;
   author: UserSummary;
+}
+
+export interface CommentPageDto {
+  items: CommentDto[];
+  nextCursor: string | null;
 }
 
 export interface SessionUserDto {

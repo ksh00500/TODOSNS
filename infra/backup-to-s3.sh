@@ -16,7 +16,8 @@ esac
 stamp="$(date -u +%Y%m%d-%H%M%S)"
 key="backups/database/mungsil-$stamp.sql.gz"
 
-docker compose -f "$compose_file" exec -T postgres pg_dump -U mungsil mungsil \
+docker compose -f "$compose_file" exec -T postgres /bin/sh -eu -c \
+  'export PGPASSWORD="$(cat /run/secrets/database_backup_password)"; exec pg_dump -h 127.0.0.1 -U mungsil_backup -d mungsil' \
   | gzip -9 \
   | aws s3 cp - "s3://$bucket/$key" --region "${STORAGE_REGION:-ap-southeast-2}" --only-show-errors
 

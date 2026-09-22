@@ -19,7 +19,7 @@ test("새 스키마 변경에 운영 배포용 마이그레이션이 포함된�
 test("사용자 카테고리는 공개 기준과 반복 TODO 연결을 함께 보존한다", async () => {
   const schema = await readFile(join(__dirname, "../prisma/schema.prisma"), "utf8");
   const migration = await readFile(join(__dirname, "../prisma/migrations/20260902120000_todo_categories/migration.sql"), "utf8");
-  const service = await readFile(join(__dirname, "../src/mungsil.service.ts"), "utf8");
+  const service = await readFile(join(__dirname, "../src/todo-category.service.ts"), "utf8");
   const recurrence = await readFile(join(__dirname, "../src/recurrence.service.ts"), "utf8");
   assert.match(schema, /model TodoCategory/);
   assert.match(schema, /baseCategory\s+String/);

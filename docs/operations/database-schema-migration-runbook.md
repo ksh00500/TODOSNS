@@ -1,6 +1,6 @@
 # 데이터 보존형 다중 스키마 migration 런북
 
-상태: 운영 실행 금지. `20260908120000_data_governance_expand`는 로컬/CI 합성 DB 검증 대상이며 운영 적용은 별도 승인 대상이다.
+상태: `20260908120000_data_governance_expand`와 `20260908130000_post_snapshot_expand`는 2026-09-10 승인 후 운영 적용 완료. 이후 migration은 runtime/migrator 분리 경로의 격리 검증과 별도 운영 승인 대상이다.
 
 ## 사전 조건
 
@@ -8,7 +8,7 @@
 2. 적용 중인 commit SHA, Prisma 6.12.0, PostgreSQL 17, 전체 migration checksum과 `_prisma_migrations` 상태를 기록한다.
 3. schema/model/enum/constraint/index/sequence/view/trigger와 raw SQL 참조를 inventory한다.
 4. 암호화 DB backup과 media inventory를 같은 변경 ID로 만들고 격리 복원 성공, RPO/RTO, checksum을 기록한다.
-5. runtime/migrator LOGIN role, `search_path`, owner, public CREATE, default privileges를 확인한다.
+5. `inspect-role-boundaries.sql`로 runtime/migrator LOGIN role, `search_path`, owner, public CREATE, membership과 default privileges를 확인한다.
 6. 실제 운영 migration은 점검 창·실행자·rollback/전진 수정 승인 뒤 한 번만 수행한다. `db push`, `migrate reset`, 기존 migration 수정은 금지한다.
 
 ## 합성 검증 순서
@@ -56,4 +56,4 @@ Prisma migration 실패 시 `_prisma_migrations`를 수동 변조하지 않는�
 
 ## 운영 보류 사항
 
-Prisma 6.13+ multiSchema 호환, 실제 runtime LOGIN 비밀 배포, maintenance/API DB 자격 증명 분리, lock 시간, backup 위치·보유기간, 복원 삭제 재적용 방식이 승인되지 않았다. 따라서 원격 DB에는 이번 migration과 roles.sql을 적용하지 않는다.
+Prisma 6.13+ multiSchema 호환, 실제 runtime/migrator/backup LOGIN 전환, lock 시간, backup 위치·보유기간, 복원 삭제 재적용 방식은 승인되지 않았다. 새 자격 증명 분리는 [DB runtime·migration 자격 증명 분리 절차](database-runtime-migration-separation.md)에 따라 격리 검증과 운영 승인을 거쳐야 한다.

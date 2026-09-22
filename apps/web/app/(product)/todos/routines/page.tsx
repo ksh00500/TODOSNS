@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, ListPlus, Send } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { TodoDto, TodoListDto, Visibility } from "@/lib/types";
+import type { TodoListDto, Visibility } from "@/lib/types";
 import { useSession } from "@/components/app-providers";
 import { AuthGate, EmptyState, ErrorState, ListSkeleton } from "@/components/states";
 import { PublishSheet } from "@/components/publish-sheet";
@@ -19,17 +19,6 @@ export default function TodoGroupsPage() {
   const [publishing, setPublishing] = useState<TodoListDto | null>(null);
   const [notice, setNotice] = useState("");
   const lists = useQuery({ queryKey: ["todo-lists"], queryFn: () => apiFetch<TodoListDto[]>("/todo-lists"), enabled: status === "authenticated" });
-  const todos = useQuery({
-    queryKey: ["todos", "group-library"],
-    queryFn: () => {
-      const from = new Date();
-      const to = new Date();
-      from.setDate(from.getDate() - 60);
-      to.setDate(to.getDate() + 60);
-      return apiFetch<TodoDto[]>(`/todos?from=${from.toISOString()}&to=${to.toISOString()}`);
-    },
-    enabled: status === "authenticated",
-  });
   const publish = useMutation({
     mutationFn: (data: { caption: string; visibility: Visibility; hashtags: string[]; mediaId?: string }) => apiFetch("/feed/posts", { method: "POST", body: JSON.stringify({ todoListId: publishing?.id, ...data }) }),
     onSuccess: () => {
@@ -47,9 +36,6 @@ export default function TodoGroupsPage() {
 
   if (status === "loading") return <main className="app-page"><ListSkeleton /></main>;
   if (status === "guest") return <main className="app-page"><AuthGate title="TODO 그룹은 로그인 후 관리할 수 있어요" /></main>;
-
-  const allTodos = [...(todos.data ?? []), ...(lists.data ?? []).flatMap((list) => list.items.map((item) => item.todo))]
-    .filter((todo, index, rows) => rows.findIndex((item) => item.id === todo.id) === index);
 
   return (
     <main className="app-page todo-management-page">
@@ -75,8 +61,8 @@ export default function TodoGroupsPage() {
           })}
         </div>
       )}
-      {creating && <RoutineComposer todos={allTodos} lists={lists.data ?? []} onClose={() => setCreating(false)} onSaved={() => refresh("새 TODO 그룹을 만들었어요.")} />}
-      {editing && <RoutineComposer todos={allTodos} lists={lists.data ?? []} list={editing} onClose={() => setEditing(null)} onSaved={() => refresh("TODO 그룹을 정리했어요.")} />}
+      {creating && <RoutineComposer lists={lists.data ?? []} onClose={() => setCreating(false)} onSaved={() => refresh("새 TODO 그룹을 만들었어요.")} />}
+      {editing && <RoutineComposer lists={lists.data ?? []} list={editing} onClose={() => setEditing(null)} onSaved={() => refresh("TODO 그룹을 정리했어요.")} />}
       {publishing && <PublishSheet list={publishing} busy={publish.isPending} onClose={() => setPublishing(null)} onPublish={(data) => publish.mutateAsync(data)} />}
     </main>
   );

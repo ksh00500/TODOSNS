@@ -1,6 +1,7 @@
 -- Run only as the dedicated database owner during an approved deployment.
--- These are NOLOGIN capability roles. Create LOGIN roles and grant only the
--- required capability role in the secret-management/deployment system.
+-- These are NOLOGIN capability roles, not API credentials. Actual owner,
+-- migrator, runtime, and backup LOGIN boundaries are managed by
+-- bootstrap-login-roles.sql and apply-runtime-grants.sql.
 
 DO $$
 BEGIN

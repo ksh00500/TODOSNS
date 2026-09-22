@@ -1,11 +1,11 @@
 "use client";
 
 import { FormEvent, use, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Flag, MessageCircle, Send, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { apiFetch, userErrorMessage } from "@/lib/api";
-import type { Comment, FeedPost } from "@/lib/types";
+import type { CommentPage, FeedPost } from "@/lib/types";
 import { useSession } from "@/components/app-providers";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { FeedCard } from "@/components/feed-card";
@@ -26,7 +26,13 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
   const [commentError, setCommentError] = useState("");
   const endpoint = status === "authenticated" ? "/feed/posts" : "/public/posts";
   const post = useQuery({ queryKey: ["post", id, endpoint], queryFn: () => apiFetch<FeedPost>(`${endpoint}/${id}`) });
-  const comments = useQuery({ queryKey: ["comments", id, endpoint], queryFn: () => apiFetch<Comment[]>(`${endpoint}/${id}/comments`) });
+  const comments = useInfiniteQuery({
+    queryKey: ["comments", id, endpoint],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => apiFetch<CommentPage>(`${endpoint}/${id}/comments?limit=30${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+  const commentRows = comments.data?.pages.flatMap((page) => page.items) ?? [];
   const requireLogin = () => router.push(`/start?returnTo=${encodeURIComponent(`/posts/${id}`)}`);
   const cheer = useMutation({ mutationFn: () => { if (status !== "authenticated") { requireLogin(); throw new Error("LOGIN_REQUIRED"); } return apiFetch(`/feed/posts/${id}/cheer`, { method: "POST" }); }, onSuccess: () => { setNotice(""); void client.invalidateQueries({ queryKey: ["post", id] }); }, onError: (cause) => { if (!(cause instanceof Error && cause.message === "LOGIN_REQUIRED")) setNotice(userErrorMessage(cause, "응원을 저장하지 못했어요.")); } });
   const openImport = () => { if (status !== "authenticated") { requireLogin(); return; } router.push(`/todos/import?postId=${id}`); };
@@ -40,7 +46,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
     <header className="simple-header"><div><span>실천 상세</span><h1>오늘의 기록</h1></div>{post.data && status === "authenticated" && <div className="header-actions">{post.data.author.id === user?.id ? <button className="round-button danger" onClick={() => { setDeleteError(""); setConfirmingPost(true); }} disabled={removePost.isPending} aria-label="게시물 삭제"><Trash2 /></button> : <button className="round-button" onClick={() => setReporting(true)} aria-label="게시물 신고"><Flag /></button>}</div>}</header>
     {notice && <button className="notice" onClick={() => setNotice("")}>{notice}</button>}
     {post.isLoading ? <ListSkeleton /> : post.isError || !post.data ? <ErrorState onRetry={() => void post.refetch()} /> : <FeedCard post={post.data} pending={cheer.isPending} onCheer={() => cheer.mutate()} onCopy={openImport} />}
-    <section className="comments-section"><div className="section-heading"><div><h2>따뜻한 한마디</h2><span>{comments.data?.length ?? 0}개의 응원</span></div><MessageCircle /></div><div className="quick-comments">{["응원해요!", "꾸준함이 멋져요", "저도 해볼래요"].map((text) => <button key={text} onClick={() => setBody(text)}>{text}</button>)}</div>{comments.isLoading ? <ListSkeleton count={2} /> : comments.isError ? <ErrorState onRetry={() => void comments.refetch()} /> : !comments.data?.length ? <EmptyState title="첫 응원을 기다리고 있어요" body="부담 없이 따뜻한 한마디를 남겨보세요." /> : <div className="comment-list">{comments.data.map((item) => <article key={item.id}><span className="avatar">{item.author.nickname.slice(0,1)}</span><div><b>{item.author.nickname}<small>@{item.author.handle}</small></b><p>{item.body}</p><time>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</time></div>{item.author.id === user?.id && <button className="comment-delete" onClick={() => { setDeleteError(""); setConfirmingCommentId(item.id); }} aria-label="댓글 삭제"><Trash2 /></button>}</article>)}</div>}<form className="comment-form" onSubmit={submit}><label className="sr-only" htmlFor="comment-body">응원 댓글</label><div className="comment-input-wrap"><input id="comment-body" value={body} onChange={(event) => setBody(event.target.value)} aria-describedby={commentError ? "comment-error" : undefined} aria-invalid={Boolean(commentError)} maxLength={300} placeholder="가볍게 응원 한마디 남기기" />{commentError && <p className="form-error comment-inline-error" id="comment-error" role="alert">{commentError}</p>}</div><button aria-label="댓글 보내기" disabled={!body.trim() || comment.isPending}><Send /></button></form></section>
+    <section className="comments-section"><div className="section-heading"><div><h2>따뜻한 한마디</h2><span>{post.data?.commentCount ?? commentRows.length}개의 응원</span></div><MessageCircle /></div><div className="quick-comments">{["응원해요!", "꾸준함이 멋져요", "저도 해볼래요"].map((text) => <button key={text} onClick={() => setBody(text)}>{text}</button>)}</div>{comments.isLoading ? <ListSkeleton count={2} /> : comments.isError ? <ErrorState onRetry={() => void comments.refetch()} /> : !commentRows.length ? <EmptyState title="첫 응원을 기다리고 있어요" body="부담 없이 따뜻한 한마디를 남겨보세요." /> : <div className="comment-list">{commentRows.map((item) => <article key={item.id}><span className="avatar">{item.author.nickname.slice(0,1)}</span><div><b>{item.author.nickname}<small>@{item.author.handle}</small></b><p>{item.body}</p><time>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</time></div>{item.author.id === user?.id && <button className="comment-delete" onClick={() => { setDeleteError(""); setConfirmingCommentId(item.id); }} aria-label="댓글 삭제"><Trash2 /></button>}</article>)}{comments.hasNextPage && <button type="button" className="button secondary full" disabled={comments.isFetchingNextPage} onClick={() => void comments.fetchNextPage()}>{comments.isFetchingNextPage ? "불러오는 중…" : "댓글 더 보기"}</button>}</div>}<form className="comment-form" onSubmit={submit}><label className="sr-only" htmlFor="comment-body">응원 댓글</label><div className="comment-input-wrap"><input id="comment-body" value={body} onChange={(event) => setBody(event.target.value)} aria-describedby={commentError ? "comment-error" : undefined} aria-invalid={Boolean(commentError)} maxLength={300} placeholder="가볍게 응원 한마디 남기기" />{commentError && <p className="form-error comment-inline-error" id="comment-error" role="alert">{commentError}</p>}</div><button aria-label="댓글 보내기" disabled={!body.trim() || comment.isPending}><Send /></button></form></section>
     {reporting && <ReportSheet targetType="POST" targetId={id} onClose={() => setReporting(false)} onReported={() => setNotice("신고를 접수했어요.")} />}
     {confirmingPost && <ConfirmSheet title="게시물을 삭제할까요?" body="TODO 완료 기록은 남지만 게시 내용과 첨부 사진은 삭제돼요. 삭제한 게시물은 되돌릴 수 없어요." confirmLabel="게시물 삭제" busyLabel="삭제하는 중…" danger busy={removePost.isPending} error={deleteError} onClose={closeDelete} onConfirm={() => removePost.mutate()} />}
     {confirmingCommentId && <ConfirmSheet title="댓글을 삭제할까요?" body="삭제한 댓글은 다시 복구할 수 없어요." confirmLabel="댓글 삭제" busyLabel="삭제하는 중…" danger busy={removeComment.isPending} error={deleteError} onClose={closeDelete} onConfirm={() => removeComment.mutate(confirmingCommentId)} />}

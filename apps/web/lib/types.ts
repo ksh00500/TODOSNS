@@ -16,6 +16,7 @@ import type {
   ChatNotificationLevel,
   ChatReactionType,
   CommentDto,
+  CommentPageDto,
   DirectChatMessageDto,
   DirectChatPageDto,
   DirectConversationDto,
@@ -27,6 +28,7 @@ import type {
   SearchResultsDto,
   SearchSuggestionsDto,
   TodoCategoryDto,
+  TodoCategoryTodosPageDto,
   TodoDto,
   TodoListDto,
   UserSummary,
@@ -34,6 +36,7 @@ import type {
 } from "@mungsil/contracts";
 
 export type { TodoCategoryDto, TodoDto, TodoListDto, UserSummary, Visibility };
+export type TodoCategoryTodosPage = TodoCategoryTodosPageDto;
 export type SessionUser = SessionUserDto;
 export type FeedPost = FeedPostDto;
 export type FeedPage = FeedPageDto;
@@ -54,6 +57,7 @@ export type DirectMessageRequest = DirectMessageRequestDto;
 export type DirectMessageStart = DirectMessageStartDto;
 export type { ChatNotificationLevel, ChatReactionType };
 export type Comment = CommentDto;
+export type CommentPage = CommentPageDto;
 export type AdminOverview = AdminOverviewDto;
 export type AdminInviteCode = AdminInviteCodeDto;
 export type AdminUser = AdminUserDto;

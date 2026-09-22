@@ -9,6 +9,7 @@
 - AWS 운영 API에는 장기 Access Key를 주입하지 않고, 대상 S3 버킷으로 제한한 EC2 IAM Role의 임시 자격 증명을 사용한다.
 - 개인정보 처리방침·약관의 운영 주체, 연락처, 수집 항목, 보유·파기 기간과 동의 버전을 담당자가 확정한다.
 - `npm ci`, `npm run lint`, `npm test`, `npm run build`, `npm audit --omit=dev`와 격리 PostgreSQL E2E를 통과시킨다.
+- `mungsil_runtime` 실제 LOGIN으로 핵심 API와 INVOKER trigger가 동작하고 DDL·migration history·owner 전환이 거부되는지 확인한다. migration job 외 컨테이너에는 migrator 비밀이 없어야 한다.
 - Docker 이미지 태그를 커밋 SHA로 고정하고 배포할 이미지의 digest를 기록한다. `latest`만으로 배포하지 않는다.
 - DB와 사진의 사전 백업을 서로 같은 배포 변경 번호로 기록하고, 최근 백업의 실제 복원 점검 결과가 있어야 한다.
 
@@ -27,7 +28,7 @@
 1. 현재 `/health/live`와 `/health/ready`, 디스크·메모리, PostgreSQL·Redis·S3 상태를 기록한다.
 2. 커밋 SHA 이미지로 웹/API를 준비하되 아직 기존 트래픽을 바꾸지 않는다.
 3. 마이그레이션 SQL을 검토한다. 삭제·축소·NOT NULL 추가처럼 이전 코드와 호환되지 않는 변경은 같은 배포에 넣지 않고 확장 → 코드 전환 → 후속 정리 순서로 나눈다.
-4. 단일 배포 작업에서 `prisma migrate deploy`를 한 번 실행한다. API 복제본마다 동시에 실행하지 않는다.
+4. `infra/deploy-separated.sh`의 일회성 migrator job으로 `prisma migrate deploy`를 한 번 실행한다. API 복제본이나 API restart에서 실행하지 않는다. 실패하면 기존 API를 유지한다.
 5. 새 API의 readiness가 성공한 뒤 새 웹과 프록시를 전환한다.
 6. 아래 스모크 테스트를 수행하고 모두 성공한 뒤 배포 완료로 기록한다.
 

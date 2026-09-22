@@ -7,7 +7,8 @@ config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
-  experimental: { optimizePackageImports: ["lucide-react"] },
+  // Run build checks in worker threads so restricted Windows runners can complete production builds.
+  experimental: { optimizePackageImports: ["lucide-react"], workerThreads: true },
   turbopack: { root: path.resolve(__dirname, "../..") },
   async headers() {
     return [{

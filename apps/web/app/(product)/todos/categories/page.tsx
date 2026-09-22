@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { FormEvent, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ArrowDown, ArrowUp, CalendarDays, Check, CheckCircle2, ChevronRight, ChevronsDown, ChevronsUp, Circle, Clock3, Eye, EyeOff, GripVertical, Pencil, Plus, Repeat2, Tags } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { TodoCategoryDto, TodoDto } from "@/lib/types";
+import type { TodoCategoryDto, TodoCategoryTodosPage } from "@/lib/types";
 import { REPEAT_OPTIONS, TODO_CATEGORIES, toRepeatPreset } from "@/lib/todo-options";
 import { useSession } from "@/components/app-providers";
 import { AuthGate, EmptyState, ErrorState, ListSkeleton } from "@/components/states";
@@ -28,17 +28,19 @@ function repeatLabel(rule?: string | null) {
 
 function CategoryTodoSheet({ category, onClose }: { category: TodoCategoryDto; onClose: () => void }) {
   const [filter, setFilter] = useState<CategoryTodoFilter>("ALL");
-  const todos = useQuery({
-    queryKey: ["todo-category-todos", category.id],
-    queryFn: () => apiFetch<TodoDto[]>(`/me/todo-categories/${category.id}/todos`),
+  const todos = useInfiniteQuery({
+    queryKey: ["todo-category-todos", category.id, filter],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => apiFetch<TodoCategoryTodosPage>(`/me/todo-categories/${category.id}/todos?limit=30&status=${filter}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`),
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
-  const rows = todos.data ?? [];
-  const openCount = rows.filter((todo) => !todo.completedAt).length;
-  const doneCount = rows.length - openCount;
-  const totalCount = todos.isLoading ? category.todoCount ?? 0 : rows.length;
-  const filtered = rows.filter((todo) => filter === "ALL" || (filter === "DONE" ? Boolean(todo.completedAt) : !todo.completedAt));
+  const rows = todos.data?.pages.flatMap((page) => page.items) ?? [];
+  const counts = todos.data?.pages[0]?.counts;
+  const openCount = counts?.open ?? 0;
+  const doneCount = counts?.done ?? 0;
+  const totalCount = counts?.all ?? category.todoCount ?? 0;
   const filters: Array<{ value: CategoryTodoFilter; label: string; count: number }> = [
-    { value: "ALL", label: "전체", count: rows.length },
+    { value: "ALL", label: "전체", count: totalCount },
     { value: "OPEN", label: "예정", count: openCount },
     { value: "DONE", label: "완료", count: doneCount },
   ];
@@ -53,9 +55,9 @@ function CategoryTodoSheet({ category, onClose }: { category: TodoCategoryDto; o
         <div className="category-todo-filters" aria-label="TODO 상태 필터">
           {filters.map((item) => <button type="button" key={item.value} className={filter === item.value ? "selected" : ""} aria-pressed={filter === item.value} disabled={todos.isLoading} onClick={() => setFilter(item.value)}>{item.label}<span>{todos.isLoading ? "…" : item.count}</span></button>)}
         </div>
-        {todos.isLoading ? <ListSkeleton /> : todos.isError ? <ErrorState message={todos.error instanceof Error ? todos.error.message : "카테고리 TODO를 불러오지 못했어요."} onRetry={() => void todos.refetch()} /> : filtered.length === 0 ? <EmptyState title={filter === "ALL" ? "아직 담긴 TODO가 없어요" : `${filters.find((item) => item.value === filter)?.label} TODO가 없어요`} body={filter === "ALL" ? "TODO를 만들 때 이 카테고리를 선택하면 여기에 모여요." : "다른 상태를 선택해 목록을 확인해보세요."} /> : (
+        {todos.isLoading ? <ListSkeleton /> : todos.isError ? <ErrorState message={todos.error instanceof Error ? todos.error.message : "카테고리 TODO를 불러오지 못했어요."} onRetry={() => void todos.refetch()} /> : rows.length === 0 ? <EmptyState title={filter === "ALL" ? "아직 담긴 TODO가 없어요" : `${filters.find((item) => item.value === filter)?.label} TODO가 없어요`} body={filter === "ALL" ? "TODO를 만들 때 이 카테고리를 선택하면 여기에 모여요." : "다른 상태를 선택해 목록을 확인해보세요."} /> : (
           <div className="category-todo-list">
-            {filtered.map((todo) => {
+            {rows.map((todo) => {
               const date = new Date(todo.dueDate);
               const dateKey = localDateKey(todo.dueDate);
               return (
@@ -66,6 +68,7 @@ function CategoryTodoSheet({ category, onClose }: { category: TodoCategoryDto; o
                 </Link>
               );
             })}
+            {todos.hasNextPage && <button type="button" className="button secondary full" disabled={todos.isFetchingNextPage} onClick={() => void todos.fetchNextPage()}>{todos.isFetchingNextPage ? "불러오는 중…" : "TODO 더 보기"}</button>}
           </div>
         )}
       </div>

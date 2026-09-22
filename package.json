@@ -14,6 +14,7 @@
       "js-yaml": "5.2.2"
     },
     "nanoid": "3.3.18",
+    "multer": "2.4.0",
     "postcss": "$postcss",
     "qs": "6.16.0",
     "sharp": "$sharp"
@@ -28,11 +29,12 @@
     "db:generate": "npm run prisma:generate -w @mungsil/api",
     "db:migrate": "npm run prisma:migrate -w @mungsil/api",
     "db:seed": "npm run prisma:seed -w @mungsil/api",
-    "compose:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d --build",
+    "compose:up": "sh infra/deploy-separated.sh infra/docker-compose.yml .env",
+    "compose:migrate": "docker compose --env-file .env -f infra/docker-compose.yml --profile migration run --rm --no-deps migrate",
     "compose:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
     "compose:dev:up": "docker compose -f infra/docker-compose.dev.yml up -d",
     "compose:dev:down": "docker compose -f infra/docker-compose.dev.yml down",
-    "compose:staging:up": "docker compose --env-file .env -f infra/docker-compose.staging.yml up -d --build",
+    "compose:staging:up": "sh infra/deploy-separated.sh infra/docker-compose.staging.yml .env",
     "compose:staging:down": "docker compose --env-file .env -f infra/docker-compose.staging.yml down",
     "android:debug": "cd apps/android && gradlew.bat assembleDebug",
     "android:signing-report": "cd apps/android && gradlew.bat signingReport",
@@ -41,7 +43,7 @@
   "devDependencies": {
     "concurrently": "^9.2.1",
     "postcss": "8.5.23",
-    "sharp": "0.35.0",
+    "sharp": "0.35.4",
     "typescript": "^5.9.3"
   }
 }

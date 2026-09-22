@@ -1,6 +1,6 @@
 # 데이터베이스 경계와 접근 제어 ADR
 
-상태: expand 단계 구현, 운영 적용 승인 대기. 결정일 2026-09-08.
+상태: expand migration 운영 적용 완료, LOGIN 자격 증명 분리는 로컬 구현·격리 검증 대기. 결정일 2026-09-08, 상태 갱신 2026-09-10.
 
 ## 결정
 
@@ -34,7 +34,7 @@ AccountIdentity와 ServiceProfile은 기존 ID를 PK/FK로 유지한다. expand 
 
 ## 역할 행렬
 
-`infra/database/roles.sql`은 비로그인 capability role만 만든다. 실제 LOGIN role과 비밀번호/IAM 연계는 승인된 배포 시스템에서 만든다.
+`infra/database/roles.sql`은 비로그인 capability role만 만든다. 실제 LOGIN 경계는 `bootstrap-login-roles.sql`과 `apply-runtime-grants.sql`로 분리해 구현했으며 운영 적용 전이다. 비밀번호는 SQL·Git·CLI 인자에 두지 않고 승인된 secret 경로에서 주입한다.
 
 | 역할 | 허용 | 명시적 거부/비허용 |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ AccountIdentity와 ServiceProfile은 기존 ID를 PK/FK로 유지한다. expand 
 
 격리 합성 DB에 migration을 적용한 뒤 owner로 `roles.sql`, `verify-role-boundaries.sql`을 순서대로 실행한다. 검증 SQL은 각 역할로 `SET ROLE`해 허용 SELECT/INSERT를 수행하고 identity, mapping, row-level analytics, public User에 대한 대표 forbidden query가 `insufficient_privilege`인지 확인한다. CI에 두 스크립트를 연결했다.
 
-이번 로컬 호스트는 Docker Linux 엔진이 실행 중이지 않아 실제 role 연결 검증은 아직 미실행이다. 정적 SQL 존재나 Prisma build만으로 권한 분리 완료로 표시하지 않는다.
+2026-09-09 capability role은 격리 합성 DB에서 검증했다. 실제 `mungsil_runtime`/`mungsil_migrator` LOGIN URL과 owner/default privilege 전환은 새 구현이므로 아직 미검증이다. 정적 SQL이나 기존 capability 결과만으로 실제 자격 증명 분리가 완료됐다고 표시하지 않는다.
 
 ## 다음 단계와 rollback
 

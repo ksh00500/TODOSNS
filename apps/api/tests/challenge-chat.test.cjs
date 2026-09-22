@@ -32,6 +32,7 @@ test("참여·종료·채팅 제한은 모든 변경 경로에서 다시 검사�
   assert.match(service, /private async context\([\s\S]*members: \{ where: \{ userId \}/);
   assert.match(service, /async send[\s\S]*assertWritable/);
   assert.match(service, /async update[\s\S]*assertWritable/);
+  assert.match(service, /async remove[\s\S]*assertWritable/);
   assert.match(service, /async toggleReaction[\s\S]*assertWritable/);
   assert.match(service, /effectiveEnd <= new Date\(\)/);
   assert.match(service, /conversationMute\.findFirst[\s\S]*expiresAt: \{ gt: new Date\(\) \}/);
@@ -54,12 +55,13 @@ test("사진·답장·복수 반응과 방별 단일 알림 계약을 지킨다"
 test("종료·삭제·신고 감사와 1대1 API 우회 차단이 고정된다", () => {
   const service = read("src/challenge-chat.service.ts");
   const mungsil = read("src/mungsil.service.ts");
+  const direct = read("src/direct-chat.service.ts");
   assert.match(service, /CHAT_PURGE_WARNING/);
   assert.match(service, /purgeMessageMedia[\s\S]*conversation\.delete/);
   assert.match(service, /take: 3[\s\S]*targetMessageId/);
   assert.match(service, /CHAT_MESSAGE_HIDDEN/);
-  assert.match(mungsil, /async messages[\s\S]*kind: ConversationKind\.DIRECT/);
-  assert.match(mungsil, /async sendMessage[\s\S]*kind: ConversationKind\.DIRECT/);
+  assert.doesNotMatch(mungsil, /async messages|async sendMessage|async requestMessage|async acceptMessage/);
+  assert.match(direct, /private async context[\s\S]*kind: ConversationKind\.DIRECT/);
 });
 
 function schemaOf() {

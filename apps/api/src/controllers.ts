@@ -1,12 +1,13 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtAuthGuard, OptionalJwtAuthGuard } from "./auth";
-import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeChatMessageDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, FeedQueryDto, MessageRequestDto, ModerateChatMessageDto, MuteChatMemberDto, PageDto, PresignDto, ReadChallengeChatDto, ReorderTodoCategoriesDto, ResolveReportDto, SearchDto, ToggleChatReactionDto, UpdateChallengeChatMessageDto, UpdateChallengeDto, UpdateChallengeRewardDto, UpdateChatSettingsDto, UpdateContentVisibilityDto, UpdateInviteCodeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, UpdateUserSuspensionDto, UserTargetDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
+import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeChatMessageDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, FeedQueryDto, MessageRequestDto, ModerateChatMessageDto, MuteChatMemberDto, PageDto, PresignDto, ReadChallengeChatDto, ReorderTodoCategoriesDto, ResolveReportDto, SearchDto, TodoCategoryTodosQueryDto, TodoSearchDto, ToggleChatReactionDto, UpdateChallengeChatMessageDto, UpdateChallengeDto, UpdateChallengeRewardDto, UpdateChatSettingsDto, UpdateContentVisibilityDto, UpdateInviteCodeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, UpdateUserSuspensionDto, UserTargetDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
 import { MediaService } from "./media.service";
 import { MungsilService } from "./mungsil.service";
 import { ChallengeChatService } from "./challenge-chat.service";
 import { DirectChatService } from "./direct-chat.service";
 import { ChatReactionType } from "@prisma/client";
 import { Throttle } from "@nestjs/throttler";
+import { TodoCategoryService } from "./todo-category.service";
 
 type JwtUser = { sub: string; role: string; email: string };
 
@@ -14,6 +15,7 @@ type JwtUser = { sub: string; role: string; email: string };
 @Controller("todos")
 export class TodoController {
   constructor(private readonly service: MungsilService) {}
+  @Get("search") search(@CurrentUser() u: JwtUser, @Query() query: TodoSearchDto) { return this.service.searchTodos(u.sub, query); }
   @Get() list(@CurrentUser() u: JwtUser, @Query("from") from?: string, @Query("to") to?: string) { return this.service.listTodos(u.sub, from, to); }
   @Post() create(@CurrentUser() u: JwtUser, @Body() dto: CreateTodoDto) { return this.service.createTodo(u.sub, dto); }
   @Patch(":id") update(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateTodoDto) { return this.service.updateTodo(u.sub, id, dto); }
@@ -42,7 +44,7 @@ export class FeedController {
   constructor(private readonly service: MungsilService) {}
   @Get() feed(@CurrentUser() u: JwtUser, @Query() query: FeedQueryDto) { return this.service.feed(u.sub, query); }
   @Get("posts/:id") detail(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.postDetail(id, u.sub); }
-  @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.postComments(id, u.sub); }
+  @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser, @Param("id") id: string, @Query() page: PageDto) { return this.service.postComments(id, u.sub, page); }
   @Post("posts") post(@CurrentUser() u: JwtUser, @Body() dto: CreatePostDto) { return this.service.createPost(u.sub, dto); }
   @Post("posts/:id/cheer") cheer(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.toggleCheer(u.sub, id); }
   @Post("posts/:id/comments") comment(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: CommentDto) { return this.service.comment(u.sub, id, dto.body); }
@@ -56,7 +58,7 @@ export class PublicController {
   constructor(private readonly service: MungsilService) {}
   @Get("feed") feed(@CurrentUser() u: JwtUser | undefined, @Query() query: FeedQueryDto) { return this.service.feed(u?.sub ?? null, query); }
   @Get("posts/:id") post(@CurrentUser() u: JwtUser | undefined, @Param("id") id: string) { return this.service.postDetail(id, u?.sub ?? null); }
-  @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser | undefined, @Param("id") id: string) { return this.service.postComments(id, u?.sub ?? null); }
+  @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser | undefined, @Param("id") id: string, @Query() page: PageDto) { return this.service.postComments(id, u?.sub ?? null, page); }
   @Get("users/:handle") user(@CurrentUser() u: JwtUser | undefined, @Param("handle") handle: string) { return this.service.publicProfile(handle, u?.sub ?? null); }
   @Get("users/:handle/posts") userPosts(@CurrentUser() u: JwtUser | undefined, @Param("handle") handle: string, @Query() page: PageDto) { return this.service.publicUserPosts(handle, page, u?.sub ?? null); }
   @Get("search/suggestions") searchSuggestions(@Query("limit") limit?: string) { const parsed = Number(limit ?? 10); return this.service.publicSearchSuggestions(Number.isFinite(parsed) ? parsed : 10); }
@@ -118,6 +120,8 @@ export class SocialController {
   constructor(private readonly service: MungsilService) {}
   @Post("follow") follow(@CurrentUser() u: JwtUser, @Body() dto: UserTargetDto) { return this.service.toggleFollow(u.sub, dto.userId); }
   @Post("block") block(@CurrentUser() u: JwtUser, @Body() dto: UserTargetDto) { return this.service.block(u.sub, dto.userId); }
+  @Get("blocks") blocks(@CurrentUser() u: JwtUser, @Query() page: PageDto) { return this.service.blocks(u.sub, page); }
+  @Delete("blocks/:userId") unblock(@CurrentUser() u: JwtUser, @Param("userId") userId: string) { return this.service.unblock(u.sub, userId); }
   @Post("report") report(@CurrentUser() u: JwtUser, @Body() dto: CreateReportDto) { return this.service.report(u.sub, dto); }
   @Get("follow-state/:userId") followState(@CurrentUser() u: JwtUser, @Param("userId") userId: string) { return this.service.followState(u.sub, userId); }
   @Get("followers/:userId") followers(@CurrentUser() u: JwtUser, @Param("userId") userId: string, @Query() page: PageDto) { return this.service.followers(u.sub, userId, page); }
@@ -146,17 +150,18 @@ export class MessageController {
 @UseGuards(JwtAuthGuard)
 @Controller("me")
 export class MeController {
-  constructor(private readonly service: MungsilService, private readonly media: MediaService) {}
+  constructor(private readonly service: MungsilService, private readonly media: MediaService, private readonly categoryService: TodoCategoryService) {}
   @Get() profile(@CurrentUser() u: JwtUser) { return this.service.profile(u.sub); }
   @Patch() update(@CurrentUser() u: JwtUser, @Body() dto: UpdateProfileDto) { return this.service.updateProfile(u.sub, dto); }
-  @Get("todo-categories") todoCategories(@CurrentUser() u: JwtUser, @Query("archived") archived?: string) { return this.service.listTodoCategories(u.sub, archived === "true"); }
-  @Post("todo-categories") createTodoCategory(@CurrentUser() u: JwtUser, @Body() dto: CreateTodoCategoryDto) { return this.service.createTodoCategory(u.sub, dto); }
-  @Patch("todo-categories/reorder") reorderTodoCategories(@CurrentUser() u: JwtUser, @Body() dto: ReorderTodoCategoriesDto) { return this.service.reorderTodoCategories(u.sub, dto.ids); }
-  @Get("todo-categories/:id/todos") todoCategoryTodos(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.listTodoCategoryTodos(u.sub, id); }
-  @Patch("todo-categories/:id") updateTodoCategory(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateTodoCategoryDto) { return this.service.updateTodoCategory(u.sub, id, dto); }
+  @Get("todo-categories") todoCategories(@CurrentUser() u: JwtUser, @Query("archived") archived?: string) { return this.categoryService.list(u.sub, archived === "true"); }
+  @Post("todo-categories") createTodoCategory(@CurrentUser() u: JwtUser, @Body() dto: CreateTodoCategoryDto) { return this.categoryService.create(u.sub, dto); }
+  @Patch("todo-categories/reorder") reorderTodoCategories(@CurrentUser() u: JwtUser, @Body() dto: ReorderTodoCategoriesDto) { return this.categoryService.reorder(u.sub, dto.ids); }
+  @Get("todo-categories/:id/todos") todoCategoryTodos(@CurrentUser() u: JwtUser, @Param("id") id: string, @Query() query: TodoCategoryTodosQueryDto) { return this.categoryService.listTodos(u.sub, id, query, query.status); }
+  @Patch("todo-categories/:id") updateTodoCategory(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: UpdateTodoCategoryDto) { return this.categoryService.update(u.sub, id, dto); }
   @Get("notifications") notifications(@CurrentUser() u: JwtUser, @Query() page: PageDto) { return this.service.notifications(u.sub, page); }
   @Get("notifications/unread-count") unreadCount(@CurrentUser() u: JwtUser) { return this.service.unreadNotificationCount(u.sub); }
   @Post("notifications/read") read(@CurrentUser() u: JwtUser) { return this.service.readNotifications(u.sub); }
+  @Post("notifications/:id/read") readOne(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.readNotification(u.sub, id); }
   @Post("media/presign") @Throttle({ default: { limit: 20, ttl: 60_000 } }) presign(@CurrentUser() u: JwtUser, @Body() dto: PresignDto) { return this.media.presign(u.sub, dto); }
   @Post("media/complete") @Throttle({ default: { limit: 10, ttl: 60_000 } }) completeMedia(@CurrentUser() u: JwtUser, @Body() dto: CompleteMediaDto) { return this.media.complete(u.sub, dto); }
 }

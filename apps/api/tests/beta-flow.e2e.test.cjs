@@ -6,15 +6,34 @@ const { ValidationPipe } = require("@nestjs/common");
 const { NestFactory } = require("@nestjs/core");
 const { PrismaClient } = require("@prisma/client");
 const { hash } = require("bcryptjs");
-const { createHash } = require("node:crypto");
+const { createHash, randomBytes } = require("node:crypto");
 const { AppModule } = require("../dist/src/app.module.js");
 
 const enabled = process.env.RUN_DATABASE_E2E === "1";
-const prefix = `beta-${Date.now()}-`;
+const runId = randomBytes(6).toString("hex");
+const prefix = `beta-${runId}-`;
+const handles = Object.freeze({
+  a: `bt_a_${runId}`,
+  b: `bt_b_${runId}`,
+  cap: `bt_p_${runId}`,
+  concurrent: `bt_c_${runId}`,
+  invite1: `bt_i1_${runId}`,
+  invite2: `bt_i2_${runId}`,
+});
+const generatedHandles = Object.values(handles);
+assert.equal(new Set(generatedHandles).size, generatedHandles.length, "beta E2E handles must be unique before database setup");
+for (const handle of generatedHandles) {
+  assert.match(handle, /^[a-z0-9._]{3,20}$/, `invalid beta E2E handle: ${handle}`);
+}
 const prisma = new PrismaClient();
 const testInviteHash = createHash("sha256").update("ONE-TIME-BETA").digest("hex");
 
 const auth = (token) => ({ Authorization: `Bearer ${token}` });
+
+test("핵심 순환 E2E 합성 handle은 DB 연결 전에 유효하고 고유하다", () => {
+  assert.equal(new Set(generatedHandles).size, generatedHandles.length);
+  assert.equal(generatedHandles.every((handle) => handle.length <= 20), true);
+});
 
 async function createVerifiedUser(suffix) {
   return prisma.user.create({
@@ -22,7 +41,7 @@ async function createVerifiedUser(suffix) {
       email: `${prefix}${suffix}@mungsil.test`,
       passwordHash: await hash("Beta-password-1", 4),
       nickname: `베타${suffix}`,
-      handle: `${prefix}${suffix}`.replace(/[^a-z0-9._]/g, "").slice(0, 20),
+      handle: handles[suffix],
       birthDate: new Date("1995-01-01T00:00:00.000Z"),
       emailVerifiedAt: new Date(),
       timezone: "Asia/Seoul",
@@ -164,8 +183,8 @@ test("두 사용자의 생성 → 완료 → 공유 → 응원·댓글 → 가�
     process.env.INVITE_REQUIRED = "true";
     const inviteCode = "ONE-TIME-BETA";
     await prisma.inviteCode.create({ data: { codeHash: testInviteHash, label: prefix, maxUses: 1 } });
-    await request(server).post("/api/v1/auth/signup").send({ email: `${prefix}invite1@mungsil.test`, password: "Beta-password-1", nickname: "초대회원", handle: `${prefix}invite1`.slice(0, 20), birthDate: "1995-01-01", inviteCode }).expect(201);
-    await request(server).post("/api/v1/auth/signup").send({ email: `${prefix}invite2@mungsil.test`, password: "Beta-password-1", nickname: "초대실패", handle: `${prefix}invite2`.slice(0, 20), birthDate: "1995-01-01", inviteCode }).expect(400);
+    await request(server).post("/api/v1/auth/signup").send({ email: `${prefix}invite1@mungsil.test`, password: "Beta-password-1", nickname: "초대회원", handle: handles.invite1, birthDate: "1995-01-01", inviteCode }).expect(201);
+    await request(server).post("/api/v1/auth/signup").send({ email: `${prefix}invite2@mungsil.test`, password: "Beta-password-1", nickname: "초대실패", handle: handles.invite2, birthDate: "1995-01-01", inviteCode }).expect(400);
   } finally {
     process.env.INVITE_REQUIRED = "false";
     await prisma.user.deleteMany({ where: { email: { startsWith: prefix } } });

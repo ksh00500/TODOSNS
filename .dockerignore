@@ -16,3 +16,4 @@ test-results
 .codex*
 .agents
 docs/reviews
+infra/secrets/*

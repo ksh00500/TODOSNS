@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: mungsil
       POSTGRES_USER: mungsil
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mungsil}
+      POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD:-mungsil}
     ports:
       - "5432:5432"
     volumes:
@@ -28,7 +28,7 @@ services:
       - redis_dev_data:/data
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

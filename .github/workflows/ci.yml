@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:17-alpine
@@ -46,14 +46,101 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Record dependency baseline
+        run: |
+          node --version
+          npm --version
+          sha256sum package-lock.json
       - run: npm ci
+      - name: Audit all locked dependencies
+        run: npm audit
+      - name: Audit production dependency scope
+        run: npm audit --omit=dev
       - run: npm run db:generate
       - run: npm run prisma:deploy -w @mungsil/api
+      - name: Create synthetic separated database LOGIN roles
+        env:
+          MUNGSIL_RUNTIME_DB_PASSWORD: ci-runtime-password-at-least-32-characters
+          MUNGSIL_MIGRATOR_DB_PASSWORD: ci-migrator-password-at-least-32-characters
+          MUNGSIL_BACKUP_DB_PASSWORD: ci-backup-password-at-least-32-characters
+        run: |
+          psql "${DATABASE_URL%%\?*}" -v ON_ERROR_STOP=1 -f infra/database/bootstrap-login-roles.sql
       - run: psql "${DATABASE_URL%%\?*}" -v ON_ERROR_STOP=1 -f infra/database/roles.sql
+      - run: psql "${DATABASE_URL%%\?*}" -v ON_ERROR_STOP=1 -v database_name=mungsil_test -v legacy_owner=mungsil -f infra/database/apply-runtime-grants.sql
       - run: psql "${DATABASE_URL%%\?*}" -v ON_ERROR_STOP=1 -f infra/database/verify-role-boundaries.sql
+      - name: Verify actual runtime and migrator LOGIN boundaries
+        env:
+          RUNTIME_DATABASE_URL_FILE: ${{ runner.temp }}/runtime-database-url
+          MIGRATOR_DATABASE_URL_FILE: ${{ runner.temp }}/migrator-database-url
+          BACKUP_DATABASE_URL_FILE: ${{ runner.temp }}/backup-database-url
+          ALLOW_SYNTHETIC_DDL_CHECK: "1"
+        run: |
+          printf '%s\n' 'postgresql://mungsil_runtime:ci-runtime-password-at-least-32-characters@localhost:5432/mungsil_test?schema=public' > "$RUNTIME_DATABASE_URL_FILE"
+          printf '%s\n' 'postgresql://mungsil_migrator:ci-migrator-password-at-least-32-characters@localhost:5432/mungsil_test?schema=public&options=-c%20role%3Dmungsil_owner' > "$MIGRATOR_DATABASE_URL_FILE"
+          printf '%s\n' 'postgresql://mungsil_backup:ci-backup-password-at-least-32-characters@localhost:5432/mungsil_test?schema=public' > "$BACKUP_DATABASE_URL_FILE"
+          chmod 600 "$RUNTIME_DATABASE_URL_FILE" "$MIGRATOR_DATABASE_URL_FILE" "$BACKUP_DATABASE_URL_FILE"
+          node apps/api/scripts/verify-db-logins.cjs
+          env -u DATABASE_URL DATABASE_URL_FILE="$MIGRATOR_DATABASE_URL_FILE" EXPECTED_DB_SESSION_ROLE=mungsil_migrator EXPECTED_DB_CURRENT_ROLE=mungsil_owner node apps/api/scripts/run-migrations.cjs
+          env -u DATABASE_URL DATABASE_URL_FILE="$MIGRATOR_DATABASE_URL_FILE" EXPECTED_DB_SESSION_ROLE=mungsil_migrator EXPECTED_DB_CURRENT_ROLE=mungsil_owner node apps/api/scripts/run-migrations.cjs
+          if env -u DATABASE_URL DATABASE_URL_FILE="$MIGRATOR_DATABASE_URL_FILE" EXPECTED_DB_SESSION_ROLE=mungsil_runtime EXPECTED_DB_CURRENT_ROLE=mungsil_runtime node apps/api/scripts/start-runtime.cjs >"$RUNNER_TEMP/wrong-runtime-role.log" 2>&1; then
+            echo "runtime entrypoint accepted the migrator LOGIN" >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/wrong-runtime-role.log"
+          grep -F 'database role mismatch: expected mungsil_runtime/mungsil_runtime, received mungsil_migrator/mungsil_owner' "$RUNNER_TEMP/wrong-runtime-role.log"
+          if env -u DATABASE_URL DATABASE_URL_FILE="$RUNTIME_DATABASE_URL_FILE" EXPECTED_DB_SESSION_ROLE=mungsil_migrator EXPECTED_DB_CURRENT_ROLE=mungsil_owner node apps/api/scripts/run-migrations.cjs >"$RUNNER_TEMP/wrong-migrator-role.log" 2>&1; then
+            echo "migration entrypoint accepted the runtime LOGIN" >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/wrong-migrator-role.log"
+          grep -F 'database role mismatch: expected mungsil_migrator/mungsil_owner, received mungsil_runtime/mungsil_runtime' "$RUNNER_TEMP/wrong-migrator-role.log"
       - run: npm run lint
-      - run: npm run test
+      - name: Start isolated synthetic object storage
+        run: |
+          docker run -d --name mungsil-minio-ci -p 9000:9000 \
+            -e MINIO_ROOT_USER=mungsil \
+            -e MINIO_ROOT_PASSWORD=mungsil-local-password \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker logs mungsil-minio-ci
+          exit 1
+      - name: Test through the actual runtime LOGIN
+        env:
+          DATABASE_URL: postgresql://mungsil_runtime:ci-runtime-password-at-least-32-characters@localhost:5432/mungsil_test?schema=public
+          RUN_OBJECT_STORAGE_E2E: "1"
+          OBJECT_STORAGE_CREATE_BUCKET: "1"
+          OBJECT_STORAGE_VERSIONED: "1"
+        run: npm run test
+      - name: Verify backup LOGIN dump and isolated restore
+        env:
+          PGPASSWORD: ci-migrator-password-at-least-32-characters
+          PGOPTIONS: -c role=mungsil_owner
+        run: |
+          server_major="$(psql -h localhost -U mungsil_migrator -d mungsil_test -Atc 'SHOW server_version_num' | cut -c1-2)"
+          client_major="$(docker run --rm postgres:17-alpine pg_dump --version | sed -E 's/.* ([0-9]+).*/\1/')"
+          test "$server_major" = "$client_major"
+          psql -h localhost -U mungsil_migrator -d mungsil_test -v ON_ERROR_STOP=1 -c 'CREATE TABLE public.backup_restore_probe(id integer PRIMARY KEY, value text NOT NULL)'
+          psql -h localhost -U mungsil_migrator -d mungsil_test -v ON_ERROR_STOP=1 -c "INSERT INTO public.backup_restore_probe VALUES (1, 'synthetic-backup-ok')"
+          docker run --rm --network host -e PGPASSWORD=ci-backup-password-at-least-32-characters -v "$RUNNER_TEMP:/backup" postgres:17-alpine pg_dump -h localhost -U mungsil_backup -d mungsil_test --format=custom --file=/backup/mungsil-test.dump
+          PGOPTIONS= PGPASSWORD=mungsil dropdb -h localhost -U mungsil --if-exists mungsil_restore
+          PGOPTIONS= PGPASSWORD=mungsil createdb -h localhost -U mungsil mungsil_restore
+          docker run --rm --network host -e PGPASSWORD=mungsil -v "$RUNNER_TEMP:/backup" postgres:17-alpine pg_restore -h localhost -U mungsil -d mungsil_restore --no-owner --no-acl /backup/mungsil-test.dump
+          test "$(PGOPTIONS= PGPASSWORD=mungsil psql -h localhost -U mungsil -d mungsil_restore -Atc 'SELECT value FROM public.backup_restore_probe WHERE id = 1')" = "synthetic-backup-ok"
+          psql -h localhost -U mungsil_migrator -d mungsil_test -v ON_ERROR_STOP=1 -c 'DROP TABLE public.backup_restore_probe'
+          PGOPTIONS= PGPASSWORD=mungsil dropdb -h localhost -U mungsil mungsil_restore
       - run: npm run build
-      - run: npm audit --omit=dev
+      - name: Build and inspect Linux production images
+        run: |
+          docker build -f apps/api/Dockerfile -t mungsil-api-ci .
+          docker run --rm --entrypoint node mungsil-api-ci -e "require('@prisma/client'); require('sharp'); require('nodemailer');"
+          docker run --rm --entrypoint npm mungsil-api-ci audit --omit=dev
+          docker build -f apps/web/Dockerfile -t mungsil-web-ci --build-arg NEXT_PUBLIC_SITE_URL=https://example.test .
+          docker run --rm --entrypoint npm mungsil-web-ci audit --omit=dev
       - run: bash -n infra/backup.sh
+      - run: bash -n infra/backup-to-s3.sh
+      - run: bash -n infra/deploy-separated.sh
       - run: docker compose --env-file .env.example -f infra/docker-compose.yml config --quiet
+      - run: docker compose --env-file .env.example -f infra/docker-compose.staging.yml config --quiet

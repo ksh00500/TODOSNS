@@ -15,7 +15,7 @@
 | S3 version/파생 삭제 | MinIO 합성 검증, AWS 대기 | 실제 SDK로 MinIO version ON/OFF 객체·version·delete marker·이웃 prefix 경계 통과. 전용 AWS S3는 생성 권한 대기 |
 | 분석 기반 | 구현, 정책 승인 대기 | 목적/동의/보유/event/monthly/review/release schema. collection/export 기본 OFF, 실제 caller/endpoint 없음 |
 | 월/연령 합성 함수 | 합성 검증 | 서울 월 경계, 활동 당시 decade, UNKNOWN, 필드 allowlist 테스트 |
-| 운영 migration | 미적용 | 원격/실제 DB에 실행하지 않음 |
+| 운영 migration | 적용 완료 | 2026-09-10 승인 후 12→14 migration 적용, 당시 게시물 0건으로 legacy backfill 없음 |
 | 실제 파기/수집/외부 제공 | 미실행 | 별도 승인 전 금지 |
 
 ## SEC 진행
@@ -33,8 +33,8 @@
 | SEC-09 | 구현, 실제 응답 검증 대기 | Next CSP 최소 강제(frame/object/base/form), X-Frame/Referrer/nosniff/Permissions. Google/Next production build 통과 |
 | SEC-10 | 로컬 구현, DB 검증 대기 | 게시 시점 snapshot, 원본 범위 축소 시 조회·검색·이미지 URL·가져오기 차단, 삭제·탈퇴 시 파기. 기존 타인 복제본은 정책 대기 |
 | SEC-11 | 일부 구현 | query 없는 request path와 제한된 request ID, 운영 content list 조회 감사. 사건 기반 열람 범위·로그 보유기간 남음 |
-| SEC-12 | expand 구현, 운영 대기 | schema/capability role/backup 분리 문서. 현재 API와 migration DB credential 분리 미적용 |
-| SEC-13 | 일부 검증 | `npm audit --omit=dev` 0건. git history secret/image/Android/SBOM 별도 검사 필요 |
+| SEC-12 | 로컬 후속 구현, 격리 검증 대기 | owner/migrator/runtime/backup LOGIN, secret mount와 일회성 migration 경로 구현. 실제 운영 role·비밀 전환은 미적용 |
+| SEC-13 | 로컬 감사 0건 | 전체/운영 audit 0건 재확인. 운영 Linux image npm 11 경고 재현, OS image/SBOM 별도 검사 필요 |
 | SEC-14 | 진행 | CI에 migration+실제 role SQL. Redis/MinIO/Mailpit/browser/AWS restore E2E는 대기 |
 
 ## 테스트 기록

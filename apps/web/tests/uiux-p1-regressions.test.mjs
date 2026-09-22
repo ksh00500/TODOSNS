@@ -102,16 +102,19 @@ test("반복 종료와 변경 이탈은 전용 확인 시트를 거친다", asyn
 });
 
 test("채팅은 렌더된 마지막 메시지 기준으로 신규 수와 읽음 캐시를 맞춘다", async () => {
+  const chatState = await source("../lib/chat-state.ts");
   for (const path of [
     "../app/(product)/messages/[id]/page.tsx",
     "../app/(product)/challenges/[id]/chat/page.tsx",
   ]) {
     const chat = await source(path);
     assert.match(chat, /lastMessageIdRef/);
-    assert.match(chat, /items\.findIndex\(\(item\) => item\.id === previousId\)/);
+    assert.match(chat, /countNewChatMessages\(items, previousId\)/);
     assert.match(chat, /nearBottomRef/);
     assert.match(chat, /queryKey: \["chat-inbox"\]/);
     assert.doesNotMatch(chat, /className="chat-messages" aria-live/);
-    assert.match(chat, /draftVersionRef\.current === draft\.version/);
+    assert.match(chat, /shouldClearChatDraft\(draft\.version, draftVersionRef\.current, true\)/);
   }
+  assert.match(chatState, /items\.findIndex\(\(item\) => item\.id === previousId\)/);
+  assert.match(chatState, /succeeded && submittedVersion === currentVersion/);
 });

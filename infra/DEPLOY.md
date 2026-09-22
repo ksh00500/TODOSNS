@@ -6,7 +6,7 @@
 2. 서버에서 `npm ci && npm run db:generate`를 실행합니다.
 3. `npm run compose:staging:up`으로 웹, API, PostgreSQL, Redis, MinIO를 시작합니다.
 4. `http://PUBLIC_HOST:PUBLIC_PORT/api/v1/health`와 `/api/v1/ready`가 각각 200인지 확인합니다.
-5. `docker compose --env-file .env -f infra/docker-compose.staging.yml exec api node apps/api/prisma/seed.cjs`로 운영자·데모 계정과 초대 코드를 생성합니다. 값은 `.env`의 `SEED_ADMIN_PASSWORD`, `SEED_DEMO_PASSWORD`, `SEED_INVITE_CODE`를 사용합니다. 데모 사용자와 예시 콘텐츠는 `SEED_DEMO_DATA=true`일 때만 생성합니다.
+5. `docker compose --env-file .env -f infra/docker-compose.staging.yml --profile seed run --rm --no-deps seed`로 운영자·데모 계정과 초대 코드를 일회성 생성합니다. seed 비밀은 상시 API 환경에 들어가지 않으며, 데모 사용자와 예시 콘텐츠는 `SEED_DEMO_DATA=true`일 때만 생성합니다.
 
 스테이징 Caddy는 같은 포트에서 웹, `/api`, `/mungsil-media`를 경로로 나눕니다. PostgreSQL·Redis·MinIO 관리 포트는 호스트에 공개하지 않습니다. HTTP 환경에서는 로그인 쿠키를 위해 `COOKIE_SECURE=false`를 사용하지만, PWA 설치와 운영 전환에는 도메인과 HTTPS를 적용하고 `COOKIE_SECURE=true`로 바꿔야 합니다.
 
@@ -15,8 +15,8 @@
 1. `APP_DOMAIN`의 DNS를 서버의 Elastic IP로 연결하고 80/443을 엽니다.
 2. 비공개 S3 버킷을 만들고 CORS에 `https://APP_DOMAIN`을 허용합니다. EC2에는 해당 버킷만 읽고 쓸 수 있는 IAM Role을 연결합니다.
 3. `.env`의 `STORAGE_BUCKET`, `STORAGE_REGION`, SMTP와 모든 비밀값을 채웁니다. AWS S3에서는 `STORAGE_ENDPOINT`와 장기 Access Key를 설정하지 않습니다.
-4. `npm run compose:up`을 실행합니다. 운영 Compose는 MinIO를 실행하지 않고 EC2 IAM Role의 임시 자격 증명으로 S3를 사용합니다.
-5. API 컨테이너가 시작할 때 Prisma 마이그레이션을 먼저 적용하며, 실패하면 API가 열리지 않습니다.
+4. [DB runtime·migration 자격 증명 분리 절차](../docs/operations/database-runtime-migration-separation.md)에 따라 bootstrap role 전환과 실제 LOGIN 검증을 먼저 완료합니다. `.env`에는 DB 비밀값 대신 권한 0600인 secret 파일 경로만 둡니다.
+5. `npm run compose:up`을 실행합니다. 이 명령은 API/web image를 순차 준비하고 일회성 migrator job이 성공한 뒤 runtime API를 교체합니다. API 재시작 자체는 migration을 실행하지 않습니다. 운영 Compose는 MinIO를 실행하지 않고 EC2 IAM Role의 임시 자격 증명으로 S3를 사용합니다.
 6. `https://APP_DOMAIN/api/v1/ready`가 200인지 확인한 뒤 초대 코드를 배포합니다.
 
 운영에서는 `SEED_DEMO_DATA=false`, `NEXT_PUBLIC_ENABLE_DEMO=false`를 유지합니다. 베타 검증 뒤 시드 데모 데이터를 제거할 때는 먼저 DB 백업을 만든 다음 아래의 범위가 제한된 스크립트를 한 번 실행합니다. 운영자 계정과 초대 코드는 보존됩니다.

@@ -155,7 +155,7 @@ trap cleanup EXIT
   check_production
 
   printf 'stage=pull_and_start_synthetic_minio\n'
-  docker pull minio/minio:latest >/dev/null
+  docker pull quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z >/dev/null
   docker volume create --label "$run_label" "$minio_volume" >/dev/null
   docker run --detach \
     --name "$minio_name" \
@@ -165,7 +165,7 @@ trap cleanup EXIT
     --env MINIO_ROOT_USER="$minio_access" \
     --env MINIO_ROOT_PASSWORD="$minio_secret" \
     --volume "$minio_volume:/data" \
-    minio/minio:latest server /data >/dev/null
+    quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data >/dev/null
   for _ in $(seq 1 40); do
     if docker exec "$minio_name" mc ready local >/dev/null 2>&1; then break; fi
     sleep 1

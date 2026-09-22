@@ -56,6 +56,12 @@
 
 실제 AWS S3 전용 버킷 검증은 생성 권한 부재로 미실행이다. MinIO 결과를 AWS 고유 versioning/IAM 동작의 증거로 대체하지 않는다.
 
+## 2026-09-10 운영 상태 갱신
+
+- 사용자가 EC2를 한 단계 상향하고 새 public IP `3.27.27.110`으로 DNS를 갱신했다. 재접속 시 약 2 GiB RAM, 1 GiB swap으로 확인됐다.
+- 승인 후 commit `2e6acb0`의 API/web와 migration 12→14를 운영 적용했고 외부 readiness/web 200을 확인했다.
+- 이 기록은 당시 데이터 거버넌스 배포 결과다. 2026-09-10에 새로 구현한 runtime/migrator/backup LOGIN 분리는 아직 EC2 합성 검증이나 운영 적용을 하지 않았다.
+
 ## 운영 배포 사전 수치
 
 - 현재 운영 migration: 12개, schema up to date

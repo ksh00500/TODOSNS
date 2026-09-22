@@ -1,26 +1,16 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { createHash, randomBytes } from "node:crypto";
-import { ChallengeKind, CheckInStatus, ConversationKind, NotificationType, Prisma, ReportTarget, RequestStatus, RewardStatus, VerificationMode, VerificationVoteVerdict, Visibility } from "@prisma/client";
+import { ChallengeKind, CheckInStatus, ConversationKind, NotificationType, Prisma, ReportTarget, RewardStatus, VerificationMode, VerificationVoteVerdict, Visibility } from "@prisma/client";
 import { PrismaService } from "./prisma.service";
 import { MediaService } from "./media.service";
-import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CloneTodoListRepeatMode, CompleteTodoDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, FeedQueryDto, PageDto, SearchDto, SendMessageDto, UpdateChallengeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
+import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CloneTodoListRepeatMode, CompleteTodoDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoDto, CreateTodoListDto, FeedQueryDto, PageDto, SearchDto, TodoSearchDto, UpdateChallengeDto, UpdateProfileDto, UpdateTodoDto, UpdateTodoListDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
 import { RecurrenceService } from "./recurrence.service";
 import { challengeLeaderboard, challengeTotalDays, PEER_VERIFICATION, peerVerificationDecision, peerVoteVerdict } from "./challenge-policy";
 import { ChallengeChatService } from "./challenge-chat.service";
+import { TodoCategoryService, TODO_BASE_CATEGORIES, TODO_CATEGORY_DEFAULTS } from "./todo-category.service";
 
 const COMMUNITY_CHALLENGE_COST = 500;
-const TODO_CATEGORY_DEFAULTS = [
-  { name: "생활", baseCategory: "생활", icon: "home", color: "aqua" },
-  { name: "건강", baseCategory: "건강", icon: "heart", color: "blush" },
-  { name: "운동", baseCategory: "운동", icon: "activity", color: "aqua" },
-  { name: "공부", baseCategory: "공부", icon: "graduation", color: "butter" },
-  { name: "독서", baseCategory: "독서", icon: "book", color: "aqua" },
-  { name: "마음", baseCategory: "마음", icon: "brain", color: "blush" },
-  { name: "커리어", baseCategory: "커리어", icon: "briefcase", color: "aqua" },
-  { name: "취미", baseCategory: "취미", icon: "palette", color: "butter" },
-] as const;
-const TODO_BASE_CATEGORIES = new Set(TODO_CATEGORY_DEFAULTS.map((item) => item.baseCategory));
 const ACTIVE_POST_SNAPSHOT = {
   snapshot: { not: Prisma.DbNull },
   sourceAccessRevokedAt: null,
@@ -89,7 +79,7 @@ type PostRow = Prisma.PostGetPayload<{ include: ReturnType<typeof postRelations>
 
 @Injectable()
 export class MungsilService {
-  constructor(private readonly prisma: PrismaService, private readonly media: MediaService, private readonly recurrence: RecurrenceService, private readonly chat: ChallengeChatService) {}
+  constructor(private readonly prisma: PrismaService, private readonly media: MediaService, private readonly recurrence: RecurrenceService, private readonly chat: ChallengeChatService, private readonly todoCategories: TodoCategoryService) {}
 
   private async reward(userId: string, amount: number, reason: string, referenceId: string, dailyCap?: number) {
     const dayWindow = dailyCap ? await this.userDayWindow(userId) : null;
@@ -135,75 +125,10 @@ export class MungsilService {
     return this.profile(userId);
   }
 
-  async listTodoCategories(userId: string, includeArchived = false) {
-    await this.ensureTodoCategories(userId);
-    const rows = await this.prisma.todoCategory.findMany({
-      where: { userId, archivedAt: includeArchived ? undefined : null },
-      orderBy: [{ archivedAt: "asc" }, { position: "asc" }, { createdAt: "asc" }],
-      include: { _count: { select: { todos: { where: { deletedAt: null } } } } },
-    });
-    return rows.map(({ _count, ...row }) => ({ ...row, todoCount: _count.todos }));
-  }
-
-  async listTodoCategoryTodos(userId: string, id: string) {
-    await this.ensureTodoCategories(userId);
-    const category = await this.prisma.todoCategory.findFirst({ where: { id, userId } });
-    if (!category) throw new NotFoundException("카테고리를 찾을 수 없어요.");
-    return this.prisma.todo.findMany({
-      where: {
-        userId,
-        deletedAt: null,
-        OR: [
-          { categoryId: id },
-          ...(category.isDefault ? [{ categoryId: null, category: category.name }] : []),
-        ],
-      },
-      orderBy: [{ completedAt: "asc" }, { dueDate: "asc" }],
-      include: { categoryRef: true },
-    });
-  }
-
-  async createTodoCategory(userId: string, dto: CreateTodoCategoryDto) {
-    await this.ensureTodoCategories(userId);
-    if (!TODO_BASE_CATEGORIES.has(dto.baseCategory as typeof TODO_CATEGORY_DEFAULTS[number]["baseCategory"])) throw new BadRequestException("기준 카테고리를 확인해주세요.");
-    const active = await this.prisma.todoCategory.count({ where: { userId, archivedAt: null } });
-    if (active >= 12) throw new BadRequestException("사용 중인 카테고리는 최대 12개까지 만들 수 있어요.");
-    const name = dto.name.trim();
-    const duplicate = await this.prisma.todoCategory.findFirst({ where: { userId, name } });
-    if (duplicate) throw new ConflictException("이미 같은 이름의 카테고리가 있어요.");
-    const position = (await this.prisma.todoCategory.aggregate({ where: { userId, archivedAt: null }, _max: { position: true } }))._max.position ?? -1;
-    return this.prisma.todoCategory.create({ data: { userId, name, baseCategory: dto.baseCategory, icon: dto.icon, color: dto.color, position: position + 1 } });
-  }
-
-  async updateTodoCategory(userId: string, id: string, dto: UpdateTodoCategoryDto) {
-    const category = await this.prisma.todoCategory.findFirst({ where: { id, userId } });
-    if (!category) throw new NotFoundException("카테고리를 찾을 수 없어요.");
-    if (dto.baseCategory && !TODO_BASE_CATEGORIES.has(dto.baseCategory as typeof TODO_CATEGORY_DEFAULTS[number]["baseCategory"])) throw new BadRequestException("기준 카테고리를 확인해주세요.");
-    if (category.isDefault && (dto.name || dto.baseCategory || dto.icon || dto.color)) throw new BadRequestException("기본 카테고리는 이름과 기준을 바꿀 수 없어요.");
-    if (dto.archived === false) {
-      const active = await this.prisma.todoCategory.count({ where: { userId, archivedAt: null } });
-      if (active >= 12) throw new BadRequestException("사용 중인 카테고리는 최대 12개까지 둘 수 있어요.");
-    }
-    if (dto.archived === true && !category.archivedAt) {
-      const active = await this.prisma.todoCategory.count({ where: { userId, archivedAt: null } });
-      if (active <= 1) throw new BadRequestException("TODO를 만들려면 카테고리를 하나 이상 남겨주세요.");
-    }
-    const { archived, ...changes } = dto;
-    return this.prisma.todoCategory.update({ where: { id }, data: { ...changes, name: changes.name?.trim(), archivedAt: archived === undefined ? undefined : archived ? new Date() : null } });
-  }
-
-  async reorderTodoCategories(userId: string, ids: string[]) {
-    const uniqueIds = [...new Set(ids)];
-    const owned = await this.prisma.todoCategory.count({ where: { userId, id: { in: uniqueIds }, archivedAt: null } });
-    if (owned !== uniqueIds.length) throw new BadRequestException("카테고리 순서를 확인해주세요.");
-    await this.prisma.$transaction(uniqueIds.map((id, position) => this.prisma.todoCategory.update({ where: { id }, data: { position } })));
-    return this.listTodoCategories(userId);
-  }
-
   async createTodo(userId: string, dto: CreateTodoDto) {
     const { todoListId, ...todoInput } = dto;
     if (todoListId) await this.ownTodoList(userId, todoListId);
-    const category = await this.resolveTodoCategory(userId, todoInput.categoryId, todoInput.category);
+    const category = await this.todoCategories.resolve(userId, todoInput.categoryId, todoInput.category);
     todoInput.category = category.category;
     todoInput.categoryId = category.categoryId;
     let todo;
@@ -216,18 +141,58 @@ export class MungsilService {
     if (todoListId) await this.setTodoListMembership(userId, todo, todoListId);
     return this.prisma.todo.findUniqueOrThrow({ where: { id: todo.id }, include: { categoryRef: true } });
   }
-  listTodos(userId: string, from?: string, to?: string) { return this.prisma.todo.findMany({ where: { userId, deletedAt: null, dueDate: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, orderBy: [{ completedAt: "asc" }, { dueDate: "asc" }], include: { categoryRef: true } }); }
+  listTodos(userId: string, from?: string, to?: string) {
+    if (!from || !to) throw new BadRequestException("TODO 조회 기간을 입력해주세요.");
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime()) || fromDate > toDate) throw new BadRequestException("TODO 조회 기간을 확인해주세요.");
+    if (toDate.getTime() - fromDate.getTime() > 366 * 24 * 60 * 60 * 1000) throw new BadRequestException("TODO는 한 번에 366일 범위까지 조회할 수 있어요.");
+    return this.prisma.todo.findMany({ where: { userId, deletedAt: null, dueDate: { gte: fromDate, lte: toDate } }, orderBy: [{ completedAt: "asc" }, { dueDate: "asc" }, { id: "asc" }], include: { categoryRef: true } });
+  }
 
-  listTodoLists(userId: string) { return this.prisma.todoList.findMany({ where: { userId }, orderBy: { updatedAt: "desc" }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } }); }
+  async searchTodos(userId: string, query: TodoSearchDto) {
+    const from = new Date(query.from), to = new Date(query.to);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) throw new BadRequestException("조회 기간을 확인해주세요.");
+    let after: { dueDate: Date; id: string } | null = null;
+    if (query.cursor) {
+      try {
+        const value = JSON.parse(Buffer.from(query.cursor, "base64url").toString("utf8")) as { dueDate: string; id: string };
+        after = { dueDate: new Date(value.dueDate), id: value.id };
+        if (Number.isNaN(after.dueDate.getTime()) || typeof after.id !== "string") throw new Error();
+      } catch { throw new BadRequestException("페이지 위치를 확인해주세요."); }
+    }
+    const rows = await this.prisma.todo.findMany({
+      where: { userId, deletedAt: null, dueDate: { gte: from, lte: to }, ...(query.query.trim() ? { title: { contains: query.query.trim(), mode: "insensitive" } } : {}), ...(after ? { OR: [{ dueDate: { gt: after.dueDate } }, { dueDate: after.dueDate, id: { gt: after.id } }] } : {}) },
+      orderBy: [{ dueDate: "asc" }, { id: "asc" }], take: query.limit + 1, include: { categoryRef: true },
+    });
+    const page = rows.slice(0, query.limit);
+    const seriesIds = page.flatMap((todo) => todo.seriesId ? [todo.seriesId] : []);
+    const memberships = page.length ? await this.prisma.todoListItem.findMany({ where: { list: { userId }, OR: [{ todoId: { in: page.map((todo) => todo.id) } }, ...(seriesIds.length ? [{ todo: { seriesId: { in: seriesIds } } }] : [])] }, include: { list: { select: { id: true, title: true } }, todo: { select: { id: true, seriesId: true } } } }) : [];
+    const owner = new Map(memberships.flatMap((item) => [[item.todo.id, item.list], ...(item.todo.seriesId ? [[item.todo.seriesId, item.list] as const] : [])]));
+    const last = page.at(-1);
+    return { items: page.map((todo) => ({ ...todo, group: owner.get(todo.id) ?? (todo.seriesId ? owner.get(todo.seriesId) : undefined) ?? null })), nextCursor: rows.length > query.limit && last ? Buffer.from(JSON.stringify({ dueDate: last.dueDate.toISOString(), id: last.id })).toString("base64url") : null };
+  }
+
+  listTodoLists(userId: string) {
+    return this.prisma.todoList.findMany({
+      where: { userId },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      include: {
+        items: {
+          include: { todo: { include: { categoryRef: true } } },
+          orderBy: [{ order: "asc" }, { todoId: "asc" }],
+        },
+        _count: { select: { copies: true } },
+      },
+    });
+  }
 
   async createTodoList(userId: string, dto: CreateTodoListDto) {
     const todoIds = [...new Set(dto.todoIds)];
-    const owned = await this.prisma.todo.findMany({ where: { id: { in: todoIds }, userId, deletedAt: null }, select: { id: true, seriesId: true } });
-    if (owned.length !== todoIds.length) throw new ForbiddenException("내 TODO만 리스트에 담을 수 있어요.");
-    const seriesIds = owned.flatMap((todo) => todo.seriesId ? [todo.seriesId] : []);
-    const grouped = await this.prisma.todoListItem.findFirst({ where: { list: { userId }, OR: [{ todoId: { in: todoIds } }, ...(seriesIds.length ? [{ todo: { seriesId: { in: seriesIds } } }] : [])] } });
-    if (grouped) throw new BadRequestException("이미 다른 루틴 그룹에 담긴 TODO가 있어요.");
-    return this.prisma.todoList.create({ data: { userId, title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+    return this.prisma.$transaction(async (tx) => {
+      await this.assertGroupSelection(tx, userId, todoIds);
+      return tx.todoList.create({ data: { userId, title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async updateTodoList(userId: string, id: string, dto: UpdateTodoListDto) {
@@ -235,23 +200,27 @@ export class MungsilService {
     const revokeSnapshotAccess = isMoreRestrictiveVisibility(existing.visibility, dto.visibility);
     if (dto.todoIds) {
       const todoIds = [...new Set(dto.todoIds)];
-      const owned = await this.prisma.todo.findMany({ where: { id: { in: todoIds }, userId, deletedAt: null }, select: { id: true, seriesId: true } });
-      if (owned.length !== todoIds.length) throw new ForbiddenException("내 TODO만 리스트에 담을 수 있어요.");
-      const seriesIds = owned.flatMap((todo) => todo.seriesId ? [todo.seriesId] : []);
-      const grouped = await this.prisma.todoListItem.findFirst({ where: { list: { userId, id: { not: id } }, OR: [{ todoId: { in: todoIds } }, ...(seriesIds.length ? [{ todo: { seriesId: { in: seriesIds } } }] : [])] } });
-      if (grouped) throw new BadRequestException("이미 다른 루틴 그룹에 담긴 TODO가 있어요.");
       return this.prisma.$transaction(async (tx) => {
+        await this.assertGroupSelection(tx, userId, todoIds, id);
         await tx.todoListItem.deleteMany({ where: { listId: id } });
         const updated = await tx.todoList.update({ where: { id }, data: { title: dto.title, description: dto.description, visibility: dto.visibility, items: { create: todoIds.map((todoId, order) => ({ todoId, order })) } }, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
         if (revokeSnapshotAccess) await tx.post.updateMany({ where: { todoListId: id, sourceAccessRevokedAt: null }, data: { sourceAccessRevokedAt: new Date() } });
         return updated;
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     }
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.todoList.update({ where: { id }, data: dto, include: { items: { include: { todo: { include: { categoryRef: true } } }, orderBy: { order: "asc" } }, _count: { select: { copies: true } } } });
       if (revokeSnapshotAccess) await tx.post.updateMany({ where: { todoListId: id, sourceAccessRevokedAt: null }, data: { sourceAccessRevokedAt: new Date() } });
       return updated;
     });
+  }
+
+  private async assertGroupSelection(tx: Prisma.TransactionClient, userId: string, todoIds: string[], currentListId?: string) {
+    const owned = await tx.todo.findMany({ where: { id: { in: todoIds }, userId, deletedAt: null }, select: { id: true, seriesId: true } });
+    if (owned.length !== todoIds.length) throw new ForbiddenException("내 TODO만 리스트에 담을 수 있어요.");
+    const seriesIds = owned.flatMap((todo) => todo.seriesId ? [todo.seriesId] : []);
+    const grouped = await tx.todoListItem.findFirst({ where: { list: { userId, ...(currentListId ? { id: { not: currentListId } } : {}) }, OR: [{ todoId: { in: todoIds } }, ...(seriesIds.length ? [{ todo: { seriesId: { in: seriesIds } } }] : [])] } });
+    if (grouped) throw new BadRequestException("이미 다른 루틴 그룹에 담긴 TODO가 있어요.");
   }
 
   async removeTodoList(userId: string, id: string) {
@@ -303,7 +272,7 @@ export class MungsilService {
     const todo = await this.ownTodo(userId, todoId);
     if (dto.todoListId) await this.ownTodoList(userId, dto.todoListId);
     if (dto.categoryId !== undefined) {
-      const category = await this.resolveTodoCategory(userId, dto.categoryId, dto.category ?? todo.category, dto.categoryId === todo.categoryId);
+      const category = await this.todoCategories.resolve(userId, dto.categoryId, dto.category ?? todo.category, dto.categoryId === todo.categoryId);
       dto.category = category.category;
       dto.categoryId = category.categoryId;
     }
@@ -419,7 +388,7 @@ export class MungsilService {
   async cloneTodo(userId: string, sourceId: string, dto: CloneTodoDto) {
     const source = await this.readableTodo(userId, sourceId);
     if (dto.todoListId) await this.ownTodoList(userId, dto.todoListId);
-    const selectedCategory = dto.categoryId ? await this.resolveTodoCategory(userId, dto.categoryId, dto.category ?? source.category) : { category: dto.category ?? source.category, categoryId: null };
+    const selectedCategory = dto.categoryId ? await this.todoCategories.resolve(userId, dto.categoryId, dto.category ?? source.category) : { category: dto.category ?? source.category, categoryId: null };
     const repeatRule = dto.keepRepeat ? (dto.repeatRule ?? source.repeatRule) : null;
     const dueDate = dto.dueDate ?? new Date().toISOString();
     const todo = repeatRule
@@ -520,11 +489,28 @@ export class MungsilService {
 
   async postDetail(postId: string, userId: string | null) { return this.serializePost(await this.readablePost(postId, userId)); }
 
-  async postComments(postId: string, userId: string | null) {
+  async postComments(postId: string, userId: string | null, page: PageDto) {
     await this.readablePost(postId, userId);
     const hiddenIds = await this.blockedUserIds(userId);
-    const comments = await this.prisma.comment.findMany({ where: { postId, hiddenAt: null, authorId: { notIn: hiddenIds }, author: { suspendedAt: null, deletionRequestedAt: null } }, orderBy: { createdAt: "asc" }, include: { author: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } } });
-    return Promise.all(comments.map(async (comment) => ({ ...comment, author: await this.serializeUserSummary(comment.author) })));
+    const cursor = this.decodeCursor(page.cursor);
+    const rows = await this.prisma.comment.findMany({
+      where: {
+        postId,
+        hiddenAt: null,
+        authorId: { notIn: hiddenIds },
+        author: { suspendedAt: null, deletionRequestedAt: null },
+        ...(cursor ? { OR: [{ createdAt: { gt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { gt: cursor.id } }] } : {}),
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: page.limit + 1,
+      include: { author: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } },
+    });
+    const comments = rows.slice(0, page.limit);
+    const last = comments.at(-1);
+    return {
+      items: await Promise.all(comments.map(async (comment) => ({ ...comment, author: await this.serializeUserSummary(comment.author) }))),
+      nextCursor: rows.length > page.limit && last ? this.encodeCursor(last.createdAt, last.id) : null,
+    };
   }
 
   async publicProfile(handle: string, viewerId: string | null) {
@@ -1124,27 +1110,23 @@ export class MungsilService {
 
   async block(userId: string, targetId: string) { if (userId === targetId) throw new BadRequestException("자기 자신은 차단할 수 없어요."); await this.prisma.$transaction([this.prisma.block.upsert({ where: { blockerId_blockedId: { blockerId: userId, blockedId: targetId } }, create: { blockerId: userId, blockedId: targetId }, update: {} }), this.prisma.follow.deleteMany({ where: { OR: [{ followerId: userId, followingId: targetId }, { followerId: targetId, followingId: userId }] } })]); return { blocked: true }; }
 
-  async requestMessage(userId: string, receiverId: string) {
-    if (userId === receiverId) throw new BadRequestException("자기 자신에게 메시지를 보낼 수 없어요.");
-    const blocked = await this.prisma.block.count({ where: { OR: [{ blockerId: userId, blockedId: receiverId }, { blockerId: receiverId, blockedId: userId }] } }); if (blocked) throw new ForbiddenException("메시지를 보낼 수 없는 사용자예요.");
-    const mutual = await this.prisma.follow.count({ where: { OR: [{ followerId: userId, followingId: receiverId }, { followerId: receiverId, followingId: userId }] } });
-    if (mutual === 2) return this.createConversation(userId, receiverId);
-    return this.prisma.messageRequest.upsert({ where: { senderId_receiverId: { senderId: userId, receiverId } }, create: { senderId: userId, receiverId }, update: { status: RequestStatus.PENDING } });
+  async blocks(userId: string, page: PageDto) {
+    let after: { createdAt: Date; blockedId: string } | null = null;
+    if (page.cursor) {
+      try {
+        const value = JSON.parse(Buffer.from(page.cursor, "base64url").toString("utf8")) as { createdAt: string; blockedId: string };
+        after = { createdAt: new Date(value.createdAt), blockedId: value.blockedId };
+        if (Number.isNaN(after.createdAt.getTime()) || typeof after.blockedId !== "string") throw new Error();
+      } catch { throw new BadRequestException("페이지 위치를 확인해주세요."); }
+    }
+    const rows = await this.prisma.block.findMany({ where: { blockerId: userId, ...(after ? { OR: [{ createdAt: { lt: after.createdAt } }, { createdAt: after.createdAt, blockedId: { lt: after.blockedId } }] } : {}) }, orderBy: [{ createdAt: "desc" }, { blockedId: "desc" }], take: page.limit + 1, include: { blocked: { select: { id: true, nickname: true, handle: true, avatarUrl: true, deletionRequestedAt: true, suspendedAt: true } } } });
+    const items = rows.slice(0, page.limit).map((row) => ({ userId: row.blockedId, user: row.blocked.deletionRequestedAt || row.blocked.suspendedAt ? null : { id: row.blocked.id, nickname: row.blocked.nickname, handle: row.blocked.handle, avatarUrl: row.blocked.avatarUrl }, createdAt: row.createdAt }));
+    const last = rows[page.limit - 1];
+    return { items, nextCursor: rows.length > page.limit && last ? Buffer.from(JSON.stringify({ createdAt: last.createdAt.toISOString(), blockedId: last.blockedId })).toString("base64url") : null };
   }
-
-  async acceptMessage(userId: string, requestId: string) { const req = await this.prisma.messageRequest.findUniqueOrThrow({ where: { id: requestId } }); if (req.receiverId !== userId) throw new ForbiddenException(); await this.prisma.messageRequest.update({ where: { id: requestId }, data: { status: RequestStatus.ACCEPTED } }); return this.createConversation(req.senderId, req.receiverId); }
-  listConversations(userId: string) { return this.prisma.conversation.findMany({ where: { kind: ConversationKind.DIRECT, members: { some: { userId } } }, orderBy: { updatedAt: "desc" }, include: { members: { include: { user: { select: { id: true, nickname: true, handle: true, avatarUrl: true } } } }, messages: { take: 1, orderBy: { createdAt: "desc" } } } }); }
-  async messages(userId: string, conversationId: string) {
-    const conversation = await this.prisma.conversation.findFirst({ where: { id: conversationId, kind: ConversationKind.DIRECT, members: { some: { userId } } }, select: { id: true } });
-    if (!conversation) throw new NotFoundException("대화를 찾을 수 없어요.");
-    return this.prisma.message.findMany({ where: { conversationId, deletedAt: null }, orderBy: { createdAt: "asc" }, take: 100 });
-  }
-  async sendMessage(userId: string, conversationId: string, dto: SendMessageDto) {
-    const conversation = await this.prisma.conversation.findFirst({ where: { id: conversationId, kind: ConversationKind.DIRECT, members: { some: { userId } } }, select: { id: true } });
-    if (!conversation) throw new NotFoundException("대화를 찾을 수 없어요.");
-    const message = await this.prisma.message.create({ data: { senderId: userId, conversationId, body: dto.body } });
-    await this.prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
-    return message;
+  async unblock(userId: string, targetId: string) {
+    await this.prisma.block.deleteMany({ where: { blockerId: userId, blockedId: targetId } });
+    return { blocked: false };
   }
 
   async notifications(userId: string, page: PageDto) {
@@ -1154,7 +1136,18 @@ export class MungsilService {
     return { items, nextCursor: rows.length > page.limit ? items.at(-1)?.id ?? null : null, unreadCount };
   }
   unreadNotificationCount(userId: string) { return this.prisma.notification.count({ where: { userId, readAt: null } }).then((count) => ({ count })); }
-  readNotifications(userId: string) { return this.prisma.notification.updateMany({ where: { userId, readAt: null }, data: { readAt: new Date() } }); }
+  async readNotifications(userId: string) {
+    const readAt = new Date();
+    const result = await this.prisma.notification.updateMany({ where: { userId, readAt: null, createdAt: { lte: readAt } }, data: { readAt } });
+    return { count: result.count, readAt, unreadCount: await this.prisma.notification.count({ where: { userId, readAt: null } }) };
+  }
+  async readNotification(userId: string, id: string) {
+    const owned = await this.prisma.notification.findFirst({ where: { id, userId }, select: { id: true } });
+    if (!owned) throw new NotFoundException("알림을 찾을 수 없어요.");
+    const readAt = new Date();
+    await this.prisma.notification.updateMany({ where: { id, userId, readAt: null }, data: { readAt } });
+    return { readAt: (await this.prisma.notification.findUniqueOrThrow({ where: { id }, select: { readAt: true } })).readAt, unreadCount: await this.prisma.notification.count({ where: { userId, readAt: null } }) };
+  }
   async report(userId: string, dto: CreateReportDto) {
     if (dto.targetType === ReportTarget.USER) {
       if (dto.targetId === userId) throw new BadRequestException("자기 자신은 신고할 수 없어요.");
@@ -1533,27 +1526,6 @@ export class MungsilService {
   }
 
   private async ownTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, userId, deletedAt: null } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); return todo; }
-  private async ensureTodoCategories(userId: string) {
-    await this.prisma.todoCategory.createMany({ data: TODO_CATEGORY_DEFAULTS.map((item, position) => ({ userId, ...item, position, isDefault: true })), skipDuplicates: true });
-    const [unassignedTodo, unassignedSeries] = await Promise.all([
-      this.prisma.todo.findFirst({ where: { userId, categoryId: null }, select: { id: true } }),
-      this.prisma.todoSeries.findFirst({ where: { userId, categoryId: null }, select: { id: true } }),
-    ]);
-    if (!unassignedTodo && !unassignedSeries) return;
-    const defaults = await this.prisma.todoCategory.findMany({ where: { userId, isDefault: true }, select: { id: true, baseCategory: true } });
-    await this.prisma.$transaction(defaults.flatMap((category) => [
-      ...(unassignedTodo ? [this.prisma.todo.updateMany({ where: { userId, categoryId: null, category: category.baseCategory }, data: { categoryId: category.id } })] : []),
-      ...(unassignedSeries ? [this.prisma.todoSeries.updateMany({ where: { userId, categoryId: null, category: category.baseCategory }, data: { categoryId: category.id } })] : []),
-    ]));
-  }
-  private async resolveTodoCategory(userId: string, categoryId?: string | null, fallback = "생활", allowArchived = false) {
-    if (categoryId) {
-      const category = await this.prisma.todoCategory.findFirst({ where: { id: categoryId, userId, archivedAt: allowArchived ? undefined : null } });
-      if (!category) throw new BadRequestException("사용할 수 있는 카테고리를 선택해주세요.");
-      return { category: category.baseCategory, categoryId: category.id };
-    }
-    return { category: fallback, categoryId: null };
-  }
   private async readableTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, deletedAt: null, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { postLinks: { some: { post: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } } }] } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); await this.assertNotBlocked(userId, todo.userId); return todo; }
   private async ownTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, userId } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); return list; }
   private async readableTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, user: { followers: { some: { followerId: userId } } } }, { posts: { some: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } }] }, include: { items: { where: { todo: { deletedAt: null } }, include: { todo: true }, orderBy: { order: "asc" } } } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); await this.assertNotBlocked(userId, list.userId); return list; }
@@ -1616,6 +1588,5 @@ export class MungsilService {
     };
   }
   private async assertMember(userId: string, conversationId: string) { const found = await this.prisma.conversationMember.findUnique({ where: { conversationId_userId: { conversationId, userId } } }); if (!found) throw new ForbiddenException("대화에 참여할 수 없어요."); }
-  private async createConversation(a: string, b: string) { const existing = await this.prisma.conversation.findFirst({ where: { kind: ConversationKind.DIRECT, AND: [{ members: { some: { userId: a } } }, { members: { some: { userId: b } } }] }, include: { members: true } }); if (existing?.members.length === 2) return existing; return this.prisma.conversation.create({ data: { kind: ConversationKind.DIRECT, members: { create: [{ userId: a }, { userId: b }] } }, include: { members: true } }); }
   private notify(userId: string, type: NotificationType, title: string, body: string, referenceId?: string, targetType?: string, targetId?: string) { return this.prisma.notification.create({ data: { userId, type, title, body, referenceId, targetType, targetId } }); }
 }

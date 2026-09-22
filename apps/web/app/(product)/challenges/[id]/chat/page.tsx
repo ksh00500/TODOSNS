@@ -12,6 +12,7 @@ import { ReportSheet } from "@/components/report-sheet";
 import { Sheet } from "@/components/sheet";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/states";
 import { apiFetch, getSocketAccessToken, isDemoMode, uploadImage, userErrorMessage } from "@/lib/api";
+import { countNewChatMessages, isNearChatBottom, shouldClearChatDraft } from "@/lib/chat-state";
 import type { ChallengeChatMessage, ChallengeChatPage, ChatMember, ChatNotificationLevel, ChatReactionType } from "@/lib/types";
 
 const reactions: Array<{ type: ChatReactionType; emoji: string; label: string }> = [
@@ -69,10 +70,10 @@ export default function ChallengeChatPage() {
       for (const [index, file] of draft.files.entries()) mediaIds.push(await uploadImage(file, (value) => setProgress((current) => current.map((item, itemIndex) => itemIndex === index ? value : item))));
       return apiFetch(`/challenges/${id}/chat/messages`, { method: "POST", body: JSON.stringify({ body: draft.body, mediaIds, replyToId: draft.replyToId }) });
     },
-    onSuccess: async (_, draft) => { if (draftVersionRef.current === draft.version) { setBody(""); setFiles([]); setReplying(null); } setProgress([]); await refresh(); requestAnimationFrame(() => scrollToBottom()); },
+    onSuccess: async (_, draft) => { if (shouldClearChatDraft(draft.version, draftVersionRef.current, true)) { setBody(""); setFiles([]); setReplying(null); } setProgress([]); await refresh(); requestAnimationFrame(() => scrollToBottom()); },
     onError: (cause) => setNotice(userErrorMessage(cause, "메시지를 보내지 못했어요.")),
   });
-  const update = useMutation({ mutationFn: (draft: ChallengeEditDraft) => apiFetch(`/challenges/${id}/chat/messages/${draft.messageId}`, { method: "PATCH", body: JSON.stringify({ body: draft.body }) }), onSuccess: async (_, draft) => { if (draftVersionRef.current === draft.version) { setEditing(null); setBody(""); } await refresh(); }, onError: (cause) => setNotice(userErrorMessage(cause, "메시지를 수정하지 못했어요.")) });
+  const update = useMutation({ mutationFn: (draft: ChallengeEditDraft) => apiFetch(`/challenges/${id}/chat/messages/${draft.messageId}`, { method: "PATCH", body: JSON.stringify({ body: draft.body }) }), onSuccess: async (_, draft) => { if (shouldClearChatDraft(draft.version, draftVersionRef.current, true)) { setEditing(null); setBody(""); } await refresh(); }, onError: (cause) => setNotice(userErrorMessage(cause, "메시지를 수정하지 못했어요.")) });
   const remove = useMutation({ mutationFn: (messageId: string) => apiFetch(`/challenges/${id}/chat/messages/${messageId}`, { method: "DELETE" }), onSuccess: async () => { setDeleting(null); setMenuFor(null); await refresh(); } });
   const react = useMutation({ mutationFn: ({ messageId, type }: { messageId: string; type: ChatReactionType }) => apiFetch(`/challenges/${id}/chat/messages/${messageId}/reactions`, { method: "POST", body: JSON.stringify({ type }) }), onSuccess: async () => { setReactionFor(null); await refresh(); }, onError: (cause) => setNotice(userErrorMessage(cause, "반응을 저장하지 못했어요.")) });
   const read = useMutation({ mutationFn: (messageId: string) => apiFetch(`/challenges/${id}/chat/read`, { method: "POST", body: JSON.stringify({ messageId }) }), onSuccess: () => { void client.invalidateQueries({ queryKey: ["chat-inbox"] }); void client.invalidateQueries({ queryKey: ["shell-challenge-unread"] }); void client.invalidateQueries({ queryKey: ["challenges"] }); } });
@@ -94,7 +95,7 @@ export default function ChallengeChatPage() {
     void getSocketAccessToken().then((token) => {
       if (!token || disposed) return;
       socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000"}/chat`, { transports: ["websocket", "polling"], auth: { token }, withCredentials: true });
-      socket.on("connect", () => { renewing = false; socket?.emit("join", room.conversationId); });
+      socket.on("connect", () => { renewing = false; socket?.emit("join", room.conversationId); void refresh(); });
       socket.on("connect_error", async () => {
         if (renewing) return;
         renewing = true;
@@ -110,7 +111,7 @@ export default function ChallengeChatPage() {
 
   useEffect(() => { const timer = window.setInterval(() => void query.refetch(), 15_000); return () => window.clearInterval(timer); }, [query]);
   useEffect(() => { roomKeyRef.current = null; lastMessageIdRef.current = null; nearBottomRef.current = true; }, [id]);
-  useEffect(() => { const scroll = document.querySelector<HTMLElement>(".app-scroll"); if (!scroll) return; const updatePosition = () => { nearBottomRef.current = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 140; }; updatePosition(); scroll.addEventListener("scroll", updatePosition, { passive: true }); return () => scroll.removeEventListener("scroll", updatePosition); }, [id]);
+  useEffect(() => { const scroll = document.querySelector<HTMLElement>(".app-scroll"); if (!scroll) return; const updatePosition = () => { nearBottomRef.current = isNearChatBottom(scroll); }; updatePosition(); scroll.addEventListener("scroll", updatePosition, { passive: true }); return () => scroll.removeEventListener("scroll", updatePosition); }, [id]);
   useEffect(() => {
     const latest = items.at(-1);
     if (!latest || !room) return;
@@ -122,9 +123,8 @@ export default function ChallengeChatPage() {
     }
     const previousId = lastMessageIdRef.current;
     if (!previousId || previousId === latest.id) return;
-    const previousIndex = items.findIndex((item) => item.id === previousId);
     lastMessageIdRef.current = latest.id;
-    const newCount = previousIndex < 0 ? 0 : items.length - previousIndex - 1;
+    const newCount = countNewChatMessages(items, previousId);
     if (!newCount) return;
     if (nearBottomRef.current) requestAnimationFrame(scrollToBottom);
     else requestAnimationFrame(() => setIncomingState((current) => ({ roomId: id, count: (current.roomId === id ? current.count : 0) + newCount })));
@@ -155,7 +155,7 @@ export default function ChallengeChatPage() {
     {notice && <button className="notice chat-notice" onClick={() => setNotice("")}>{notice}</button>}
     {query.hasNextPage && <button className="chat-load-older" disabled={query.isFetchingNextPage} onClick={() => query.fetchNextPage()}><ChevronDown /> {query.isFetchingNextPage ? "불러오는 중…" : "이전 대화 더 보기"}</button>}
     <section className="chat-messages">
-      {!items.length ? <EmptyState title="첫 대화를 시작해보세요" body="챌린지에 도움이 된 방법이나 조심할 점을 나눠보세요." /> : items.map((message) => <ChatBubble key={message.id} message={message} revealed={revealedBlocked.has(message.id)} onReveal={() => setRevealedBlocked((current) => new Set(current).add(message.id))} onReply={() => { draftVersionRef.current += 1; setReplying(message); setEditing(null); }} onMenu={() => setMenuFor(message.id)} onReact={() => setReactionFor(message.id)} onHistory={() => setHistoryFor(message.id)} onMedia={setViewingMedia} />)}
+      {!items.length ? <EmptyState title="첫 대화를 시작해보세요" body="챌린지에 도움이 된 방법이나 조심할 점을 나눠보세요." /> : items.map((message) => <ChatBubble key={message.id} message={message} canMutate={!room.readOnly && !room.mutedUntil} revealed={revealedBlocked.has(message.id)} onReveal={() => setRevealedBlocked((current) => new Set(current).add(message.id))} onReply={() => { draftVersionRef.current += 1; setReplying(message); setEditing(null); }} onMenu={() => setMenuFor(message.id)} onReact={() => setReactionFor(message.id)} onHistory={() => setHistoryFor(message.id)} onMedia={setViewingMedia} />)}
     </section>
     {incoming > 0 && <button className="new-chat-messages" onClick={scrollToBottom}><span aria-live="polite">새 메시지 {incoming}개</span> <ChevronDown /></button>}
     {room.readOnly ? <div className="chat-readonly"><Check /><span><b>종료된 챌린지예요</b><small>{room.purgeAt ? `${new Date(room.purgeAt).toLocaleDateString("ko-KR")}까지 대화를 볼 수 있어요.` : "대화를 읽기만 할 수 있어요."}</small></span></div> : room.mutedUntil ? <div className="chat-readonly"><BellOff /><span><b>채팅이 잠시 제한됐어요</b><small>{new Date(room.mutedUntil).toLocaleString("ko-KR")}까지 읽기만 할 수 있어요.</small></span></div> : <form className="chat-composer" onSubmit={submit}>
@@ -166,7 +166,7 @@ export default function ChallengeChatPage() {
 
     {reactionFor && <ReactionSheet message={items.find((item) => item.id === reactionFor)!} onClose={() => setReactionFor(null)} onSelect={(type) => react.mutate({ messageId: reactionFor, type })} onUsers={(type, label) => { setReactionUsersFor({ messageId: reactionFor, type, label }); setReactionFor(null); }} busy={react.isPending} />}
     {reactionUsersFor && <ReactionUsersSheet challengeId={id} value={reactionUsersFor} onClose={() => setReactionUsersFor(null)} />}
-    {menuFor && <MessageMenu message={items.find((item) => item.id === menuFor)!} onClose={() => setMenuFor(null)} onReply={() => { const item = items.find((candidate) => candidate.id === menuFor)!; draftVersionRef.current += 1; setReplying(item); setEditing(null); setMenuFor(null); }} onEdit={() => { const item = items.find((candidate) => candidate.id === menuFor)!; draftVersionRef.current += 1; setEditing(item); setReplying(null); setBody(item.body ?? ""); setMenuFor(null); }} onDelete={() => { setDeleting(menuFor); setMenuFor(null); }} onHistory={() => { setHistoryFor(menuFor); setMenuFor(null); }} onReport={() => { setReporting(menuFor); setMenuFor(null); }} onModerate={() => { setModerating(items.find((item) => item.id === menuFor)!); setMenuFor(null); }} />}
+    {menuFor && <MessageMenu message={items.find((item) => item.id === menuFor)!} canMutate={!room.readOnly && !room.mutedUntil} onClose={() => setMenuFor(null)} onReply={() => { const item = items.find((candidate) => candidate.id === menuFor)!; draftVersionRef.current += 1; setReplying(item); setEditing(null); setMenuFor(null); }} onEdit={() => { const item = items.find((candidate) => candidate.id === menuFor)!; draftVersionRef.current += 1; setEditing(item); setReplying(null); setBody(item.body ?? ""); setMenuFor(null); }} onDelete={() => { setDeleting(menuFor); setMenuFor(null); }} onHistory={() => { setHistoryFor(menuFor); setMenuFor(null); }} onReport={() => { setReporting(menuFor); setMenuFor(null); }} onModerate={() => { setModerating(items.find((item) => item.id === menuFor)!); setMenuFor(null); }} />}
     {settingsOpen && <ChatSettings challengeId={id} value={room.notificationLevel} onClose={() => setSettingsOpen(false)} onSaved={refresh} />}
     {membersOpen && <MembersSheet challengeId={id} canManage={room.canManage} onClose={() => setMembersOpen(false)} />}
     {historyFor && <HistorySheet challengeId={id} messageId={historyFor} onClose={() => setHistoryFor(null)} />}
@@ -183,17 +183,17 @@ function ChatPhotoDraft({ file, index, progress, onRemove }: { file: File; index
   return <div><Image src={preview} alt={`첨부 사진 ${index + 1}`} width={72} height={72} unoptimized />{Boolean(progress && progress < 100) && <span>{progress}%</span>}<button type="button" aria-label={`첨부 사진 ${index + 1} 제거`} onClick={onRemove}><X /></button></div>;
 }
 
-function ChatBubble({ message, revealed, onReveal, onReply, onMenu, onReact, onHistory, onMedia }: { message: ChallengeChatMessage; revealed: boolean; onReveal: () => void; onReply: () => void; onMenu: () => void; onReact: () => void; onHistory: () => void; onMedia: (url: string) => void }) {
+function ChatBubble({ message, canMutate, revealed, onReveal, onReply, onMenu, onReact, onHistory, onMedia }: { message: ChallengeChatMessage; canMutate: boolean; revealed: boolean; onReveal: () => void; onReply: () => void; onMenu: () => void; onReact: () => void; onHistory: () => void; onMedia: (url: string) => void }) {
   if (message.kind === "SYSTEM") return <article className="chat-system-message"><span>{message.body}</span><time>{formatTime(message.createdAt)}</time></article>;
   if (message.blocked && !revealed) return <article className="chat-blocked-message"><span>차단한 사용자의 메시지예요.</span><button onClick={onReveal}>이 메시지만 보기</button></article>;
   const unavailable = Boolean(message.deletedAt || message.hiddenAt);
-  return <article className={`chat-message ${message.canDelete ? "mine" : ""}`}>
-    {!message.canDelete && <span className="avatar">{message.sender?.nickname.slice(0, 1) ?? "?"}</span>}
+  return <article className={`chat-message ${message.isMine ? "mine" : ""}`}>
+    {!message.isMine && <span className="avatar">{message.sender?.nickname.slice(0, 1) ?? "?"}</span>}
     <div className="chat-message-content"><header><b>{message.sender?.nickname ?? "알 수 없는 사용자"}</b><time>{formatTime(message.createdAt)}</time>{message.editedAt && !unavailable && <button onClick={onHistory}>수정됨</button>}<button className="chat-message-menu" aria-label="메시지 메뉴" onClick={onMenu}><MoreHorizontal /></button></header>
-      {message.replyTo && <button className="chat-reply-preview" onClick={onReply}><MessageCircleReply /><span><b>{message.replyTo.senderNickname ?? "메시지"}</b><small>{message.replyTo.deleted ? "삭제되거나 숨겨진 메시지" : message.replyTo.body || "사진"}</small></span></button>}
+      {message.replyTo && <button className="chat-reply-preview" onClick={onReply} disabled={!canMutate}><MessageCircleReply /><span><b>{message.replyTo.senderNickname ?? "메시지"}</b><small>{message.replyTo.deleted ? "삭제되거나 숨겨진 메시지" : message.replyTo.body || "사진"}</small></span></button>}
       {unavailable ? <p className="chat-unavailable">{message.hiddenAt ? "운영 원칙에 따라 숨겨진 메시지예요." : "삭제된 메시지예요."}</p> : <>{message.body && <p>{message.body}</p>}{message.links.map((link) => <a className="chat-link-card" href={link.url} target="_blank" rel="noreferrer" key={link.url}><ExternalLink /><span><b>{link.domain}</b><small>{link.url}</small></span></a>)}{message.media.length > 0 && <div className={`chat-media-grid count-${message.media.length}`}>{message.media.map((media, index) => <button key={media.id} onClick={() => onMedia(media.url)} aria-label={`첨부 사진 ${index + 1} 크게 보기`}><Image src={media.thumbnailUrl || media.url} alt={`대화 첨부 사진 ${index + 1}`} width={240} height={240} unoptimized /></button>)}</div>}</>}
-      {!unavailable && <div className="chat-message-actions"><button onClick={onReply}><MessageCircleReply /> 답장</button><button onClick={onReact}><SmilePlus /> 반응</button></div>}
-      {message.reactions.length > 0 && <div className="chat-reactions">{message.reactions.map((reaction) => { const meta = reactions.find((item) => item.type === reaction.type)!; return <button className={reaction.mine ? "mine" : ""} key={reaction.type} onClick={() => onReact()} aria-label={`${meta.label} ${reaction.count}명`}>{meta.emoji} {reaction.count}</button>; })}</div>}
+      {!unavailable && canMutate && <div className="chat-message-actions"><button onClick={onReply}><MessageCircleReply /> 답장</button><button onClick={onReact}><SmilePlus /> 반응</button></div>}
+      {message.reactions.length > 0 && <div className="chat-reactions">{message.reactions.map((reaction) => { const meta = reactions.find((item) => item.type === reaction.type)!; return <button className={reaction.mine ? "mine" : ""} key={reaction.type} onClick={() => onReact()} disabled={!canMutate} aria-label={`${meta.label} ${reaction.count}명`}>{meta.emoji} {reaction.count}</button>; })}</div>}
     </div>
   </article>;
 }
@@ -205,7 +205,7 @@ function ReactionUsersSheet({ challengeId, value, onClose }: { challengeId: stri
   return <Sheet title={`${value.label} 반응한 사람`} onClose={onClose}>{query.isLoading ? <ListSkeleton count={3} /> : query.isError ? <ErrorState message="반응한 사람을 불러오지 못했어요." onRetry={() => query.refetch()} /> : <div className="chat-member-list">{query.data?.map(({ user }) => <article key={user.id}><span className="avatar">{user.nickname.slice(0, 1)}</span><div><b>{user.nickname}</b><small>@{user.handle}</small></div></article>)}</div>}</Sheet>;
 }
 
-function MessageMenu({ message, onClose, onReply, onEdit, onDelete, onHistory, onReport, onModerate }: { message: ChallengeChatMessage; onClose: () => void; onReply: () => void; onEdit: () => void; onDelete: () => void; onHistory: () => void; onReport: () => void; onModerate: () => void }) { return <Sheet title="메시지 메뉴" onClose={onClose}><div className="sheet-action-list"><button onClick={onReply}><MessageCircleReply /> 답장하기</button>{message.canEdit && <button onClick={onEdit}><Pencil /> 수정하기</button>}{message.editedAt && !message.deletedAt && !message.hiddenAt && <button onClick={onHistory}><History /> 수정 기록 보기</button>}{message.canDelete && <button className="danger" onClick={onDelete}><Trash2 /> 삭제하기</button>}{!message.canDelete && <button onClick={onReport}><Flag /> 신고하기</button>}{message.canModerate && <button onClick={onModerate}><UserRound /> 방장 관리</button>}</div></Sheet>; }
+function MessageMenu({ message, canMutate, onClose, onReply, onEdit, onDelete, onHistory, onReport, onModerate }: { message: ChallengeChatMessage; canMutate: boolean; onClose: () => void; onReply: () => void; onEdit: () => void; onDelete: () => void; onHistory: () => void; onReport: () => void; onModerate: () => void }) { return <Sheet title="메시지 메뉴" onClose={onClose}><div className="sheet-action-list">{canMutate && <button onClick={onReply}><MessageCircleReply /> 답장하기</button>}{message.canEdit && <button onClick={onEdit}><Pencil /> 수정하기</button>}{message.editedAt && !message.deletedAt && !message.hiddenAt && <button onClick={onHistory}><History /> 수정 기록 보기</button>}{message.canDelete && <button className="danger" onClick={onDelete}><Trash2 /> 삭제하기</button>}{!message.isMine && <button onClick={onReport}><Flag /> 신고하기</button>}{message.canModerate && <button onClick={onModerate}><UserRound /> 방장 관리</button>}</div></Sheet>; }
 
 function ChatSettings({ challengeId, value, onClose, onSaved }: { challengeId: string; value: ChatNotificationLevel; onClose: () => void; onSaved: () => Promise<unknown> }) {
   const [selected, setSelected] = useState(value);

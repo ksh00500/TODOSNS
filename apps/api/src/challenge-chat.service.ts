@@ -39,9 +39,11 @@ export class ChallengeChatService {
     const visible = rows.slice(0, page.limit);
     const oldest = visible[visible.length - 1];
     const blocked = await this.blockedIds(userId);
+    const room = await this.summary(context, userId);
+    const writable = !room.readOnly && !room.mutedUntil;
     return {
-      room: await this.summary(context, userId),
-      items: await Promise.all(visible.reverse().map((item) => this.serialize(item, userId, role, context, blocked))),
+      room,
+      items: await Promise.all(visible.reverse().map((item) => this.serialize(item, userId, role, context, blocked, writable))),
       nextCursor: hasMore && oldest ? this.encodeCursor(oldest.createdAt, oldest.id) : null,
     };
   }
@@ -66,7 +68,7 @@ export class ChallengeChatService {
     catch (error) { await this.prisma.message.delete({ where: { id: message.id } }).catch(() => undefined); throw error; }
     await this.prisma.conversation.update({ where: { id: context.room.id }, data: { updatedAt: new Date() } });
     const fresh = await this.prisma.message.findUniqueOrThrow({ where: { id: message.id }, include: messageInclude });
-    const serialized = await this.serialize(fresh, userId, role, context, new Set());
+    const serialized = await this.serialize(fresh, userId, role, context, new Set(), true);
     await this.notifyMembers(context, fresh, replyTo?.senderId ?? null).catch(() => undefined);
     this.events.publish({ conversationId: context.room.id, type: "message.created", payload: { id: fresh.id } });
     return serialized;
@@ -85,14 +87,15 @@ export class ChallengeChatService {
       this.prisma.message.update({ where: { id: messageId }, data: { body, editedAt: new Date() } }),
     ]);
     const fresh = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId }, include: messageInclude });
-    const serialized = await this.serialize(fresh, userId, role, context, new Set());
+    const serialized = await this.serialize(fresh, userId, role, context, new Set(), true);
     this.events.publish({ conversationId: context.room.id, type: "message.updated", payload: { id: fresh.id } });
     return serialized;
   }
 
   async remove(userId: string, messageId: string) {
     const message = await this.ownedMessage(userId, messageId);
-    await this.contextByConversation(userId, message.conversationId);
+    const context = await this.contextByConversation(userId, message.conversationId);
+    await this.assertWritable(context, userId);
     await this.prisma.message.update({ where: { id: messageId }, data: { deletedAt: new Date() } });
     this.events.publish({ conversationId: message.conversationId, type: "message.deleted", payload: { id: messageId } });
     return { ok: true };
@@ -118,7 +121,7 @@ export class ChallengeChatService {
     if (current) await this.prisma.messageReaction.delete({ where: key });
     else await this.prisma.messageReaction.create({ data: { messageId, userId, type } });
     const fresh = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId }, include: messageInclude });
-    const serialized = await this.serialize(fresh, userId, role, context, new Set());
+    const serialized = await this.serialize(fresh, userId, role, context, new Set(), true);
     this.events.publish({ conversationId: message.conversationId, type: "reaction.updated", payload: { id: messageId } });
     return serialized.reactions;
   }
@@ -319,7 +322,7 @@ export class ChallengeChatService {
     if (challenge.kind !== ChallengeKind.COMMUNITY || challenge.creatorId !== actorId) throw new ForbiddenException("이 대화방을 관리할 권한이 없어요.");
   }
 
-  private async serialize(item: ChatMessageRow, viewerId: string, role: JwtRole, context: Awaited<ReturnType<ChallengeChatService["context"]>>, blockedIds: Set<string>) {
+  private async serialize(item: ChatMessageRow, viewerId: string, role: JwtRole, context: Awaited<ReturnType<ChallengeChatService["context"]>>, blockedIds: Set<string>, writable: boolean) {
     const deleted = Boolean(item.deletedAt), hidden = Boolean(item.hiddenAt), blocked = Boolean(item.senderId && blockedIds.has(item.senderId));
     const contentVisible = !deleted && !hidden;
     const reactionTypes = Object.values(ChatReactionType);
@@ -336,8 +339,9 @@ export class ChallengeChatService {
       deletedAt: item.deletedAt,
       hiddenAt: item.hiddenAt,
       blocked,
-      canEdit: item.senderId === viewerId && item.kind === MessageKind.USER && !deleted && !hidden && Date.now() - item.createdAt.getTime() <= 5 * 60_000,
-      canDelete: item.senderId === viewerId && item.kind === MessageKind.USER && !deleted,
+      isMine: item.senderId === viewerId,
+      canEdit: writable && item.senderId === viewerId && item.kind === MessageKind.USER && !deleted && !hidden && Date.now() - item.createdAt.getTime() <= 5 * 60_000,
+      canDelete: writable && item.senderId === viewerId && item.kind === MessageKind.USER && !deleted,
       canModerate: context.challenge.kind === ChallengeKind.COMMUNITY && context.challenge.creatorId === viewerId && item.senderId !== viewerId && !deleted,
       createdAt: item.createdAt,
     };

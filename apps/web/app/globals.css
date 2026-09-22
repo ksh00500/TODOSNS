@@ -313,6 +313,31 @@ svg { width: 20px; height: 20px; stroke-width: 2; }
 .todo-cluster .todo-item { box-shadow:none; }
 
 .group-todo-picker { min-width:0; margin:0; padding:0; border:0; }
+.group-selected-summary { min-width:0; padding:14px; border-radius:16px; background:var(--surface-low); }
+.group-selected-summary h3 { margin:0 0 8px; font-size:13px; }
+.group-selected-summary > div { display:grid; gap:6px; }
+.group-selected-summary > div > div { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+.group-selected-summary span { min-width:0; overflow-wrap:anywhere; font-size:13px; }
+.group-selected-summary button { flex:none; min-width:44px; min-height:44px; border:0; background:transparent; color:var(--primary); font-weight:700; }
+.group-search-dates { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.group-search-dates > * { min-width:0; }
+.blocked-user-list { display:grid; gap:10px; margin-top:18px; }
+.blocked-users-page .back-link { width:44px; height:44px; display:grid; place-items:center; flex:none; }
+.blocked-user-row { display:flex; align-items:center; gap:12px; min-width:0; padding:12px; border:1px solid var(--line); border-radius:16px; background:var(--paper); }
+.blocked-user-row > svg { width:24px; flex:none; color:var(--primary); }
+.blocked-user-row > div { min-width:0; flex:1; display:grid; gap:4px; }
+.blocked-user-row b,.blocked-user-row small { overflow-wrap:anywhere; }
+.blocked-user-row small { color:var(--muted); }
+.blocked-user-row button,.notification-read-all { min-height:44px; padding:8px 12px; border:1px solid var(--line); border-radius:12px; background:var(--paper); color:var(--primary); font-weight:700; }
+.blocked-user-row button { flex:none; }
+.notification-read-all { display:inline-flex; align-items:center; gap:5px; }
+.notification-read-all svg { width:16px; }
+.notification-list > button { width:100%; min-height:78px; padding:16px; display:flex; gap:12px; border:1px solid rgba(101,85,143,.08); border-radius:20px; background:rgba(255,255,255,.94); box-shadow:var(--shadow-sm); text-align:left; color:var(--ink); }
+.notification-list > button.unread { background:#fffafb; border-color:rgba(185,86,112,.24); }
+.notification-list > button > span { width:44px; height:44px; display:grid; place-items:center; flex:0 0 auto; border-radius:15px; background:var(--lilac); color:var(--primary); }
+.notification-list > button.unread > span { background:var(--pink); color:#7c4050; }
+.notification-list > button > div { min-width:0; flex:1; }
+.notification-list > button:focus-visible,.blocked-user-row button:focus-visible,.group-selected-summary button:focus-visible { outline:3px solid var(--primary); outline-offset:2px; }
 .group-todo-picker legend { width:100%; margin-bottom:4px; padding:0; display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .group-todo-picker legend span { font-size:13px; font-weight:800; }
 .group-todo-picker legend small { color:var(--primary); font-size:12px; font-weight:800; }

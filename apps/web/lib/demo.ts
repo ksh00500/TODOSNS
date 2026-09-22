@@ -102,23 +102,23 @@ function initialState(): DemoState {
     { id: "demo-notice-2", type: "COPY", title: "내 루틴이 새로운 하루로", body: "3명이 ‘화면 없이 잠드는 밤’을 가져갔어요.", createdAt: at(-1, 18), readAt: at(-1, 20) },
     { id: "demo-notice-3", type: "RANK", title: "조각구름이 되었어요", body: "작은 실천이 모여 새로운 뭉실 등급에 도착했어요.", createdAt: at(-3, 12), readAt: at(-3, 13) },
   ];
-  const chatMessage = (value: Partial<ChallengeChatMessage> & Pick<ChallengeChatMessage, "id" | "createdAt">): ChallengeChatMessage => ({ kind: "USER", body: null, sender: authors.sol, replyTo: null, media: [], reactions: [], links: [], editedAt: null, deletedAt: null, hiddenAt: null, blocked: false, canEdit: false, canDelete: false, canModerate: false, ...value });
+  const chatMessage = (value: Partial<ChallengeChatMessage> & Pick<ChallengeChatMessage, "id" | "createdAt">): ChallengeChatMessage => ({ kind: "USER", body: null, sender: authors.sol, replyTo: null, media: [], reactions: [], links: [], editedAt: null, deletedAt: null, hiddenAt: null, blocked: false, isMine: false, canEdit: false, canDelete: false, canModerate: false, ...value });
   const chats: Record<string, ChallengeChatMessage[]> = {
     "demo-challenge-book": [
       chatMessage({ id: "demo-chat-book-system", kind: "SYSTEM", sender: null, body: "챌린지가 시작됐어요. 서로에게 도움이 되는 팁과 경험을 나눠보세요.", createdAt: at(-3, 0) }),
       chatMessage({ id: "demo-chat-book-1", sender: authors.june, body: "전자책으로 읽을 때는 취침 모드를 켜두면 눈이 덜 피곤하더라고요.", reactions: [{ type: "HELPFUL", count: 7, mine: false }], createdAt: at(-1, 21, 10) }),
       chatMessage({ id: "demo-chat-book-2", sender: authors.sol, body: "저는 타이머보다 책갈피에 오늘 목표 쪽수를 적어두는 방식이 좋았어요. https://example.com/reading-tip", links: [{ url: "https://example.com/reading-tip", domain: "example.com" }], reactions: [{ type: "LIKE", count: 4, mine: true }, { type: "SEEN", count: 2, mine: false }], editedAt: at(0, 20, 32), createdAt: at(0, 20, 28) }),
       chatMessage({ id: "demo-chat-book-3", sender: authors.hana, body: "이 조명 밝기면 글씨가 잘 보이는지 한번 봐주세요!", media: [{ id: "demo-chat-media-1", url: "/demo/study.jpg", thumbnailUrl: "/demo/study.jpg" }], createdAt: at(0, 21, 2) }),
-      chatMessage({ id: "demo-chat-book-4", sender: { id: user.id, nickname: user.nickname, handle: user.handle, avatarUrl: user.avatarUrl, cloudRank: "조각구름", lifetimePower: user.lifetimePower }, body: "좋은 팁이네요. 오늘부터 저도 책갈피에 적어볼게요.", replyTo: { id: "demo-chat-book-2", body: "저는 타이머보다 책갈피에 오늘 목표 쪽수를 적어두는 방식이 좋았어요.", senderNickname: "솔", deleted: false }, canEdit: true, canDelete: true, createdAt: new Date(Date.now() - 120_000).toISOString() }),
+      chatMessage({ id: "demo-chat-book-4", sender: { id: user.id, nickname: user.nickname, handle: user.handle, avatarUrl: user.avatarUrl, cloudRank: "조각구름", lifetimePower: user.lifetimePower }, body: "좋은 팁이네요. 오늘부터 저도 책갈피에 적어볼게요.", replyTo: { id: "demo-chat-book-2", body: "저는 타이머보다 책갈피에 오늘 목표 쪽수를 적어두는 방식이 좋았어요.", senderNickname: "솔", deleted: false }, isMine: true, canEdit: true, canDelete: true, createdAt: new Date(Date.now() - 120_000).toISOString() }),
     ],
     "demo-challenge-official": [chatMessage({ id: "demo-chat-official-system", kind: "SYSTEM", sender: null, body: "챌린지가 시작됐어요. 걷기 팁과 안전 정보를 나눠보세요.", createdAt: at(-8, 0) }), chatMessage({ id: "demo-chat-official-1", sender: authors.hana, body: "저녁 산책할 때는 밝은 색 겉옷이 생각보다 중요해요.", reactions: [{ type: "SEEN", count: 12, mine: false }], createdAt: at(0, 19) })],
     "demo-challenge-water": [chatMessage({ id: "demo-chat-water-system", kind: "SYSTEM", sender: null, body: "챌린지가 시작됐어요. 서로의 작은 요령을 나눠보세요.", createdAt: at(-12, 0) }), chatMessage({ id: "demo-chat-water-1", sender: authors.june, body: "침대 옆에 작은 물병을 두니 잊지 않게 돼요.", canModerate: true, createdAt: at(0, 7, 40) })],
   };
-  const directMessage = (value: Partial<DirectChatMessage> & Pick<DirectChatMessage, "id" | "createdAt">): DirectChatMessage => ({ kind: "USER", body: null, sender: authors.hana, replyTo: null, media: [], reactions: [], links: [], deletedAt: null, hiddenAt: null, blocked: false, canDelete: false, ...value });
+  const directMessage = (value: Partial<DirectChatMessage> & Pick<DirectChatMessage, "id" | "createdAt">): DirectChatMessage => ({ kind: "USER", body: null, sender: authors.hana, replyTo: null, media: [], reactions: [], links: [], deletedAt: null, hiddenAt: null, blocked: false, isMine: false, canDelete: false, ...value });
   const directMessages: Record<string, DirectChatMessage[]> = {
     "demo-direct-hana": [
       directMessage({ id: "demo-direct-hana-1", body: "아침 산책 게시물 보고 저도 오늘 한 정거장 먼저 내려봤어요.", sender: authors.hana, createdAt: at(-1, 18, 20) }),
-      directMessage({ id: "demo-direct-hana-2", body: "좋네요! 퇴근길에도 무리 없이 천천히 걸어보세요.", sender: { id: user.id, nickname: user.nickname, handle: user.handle, avatarUrl: user.avatarUrl, cloudRank: "조각구름", lifetimePower: user.lifetimePower }, canDelete: true, createdAt: at(-1, 18, 28) }),
+      directMessage({ id: "demo-direct-hana-2", body: "좋네요! 퇴근길에도 무리 없이 천천히 걸어보세요.", sender: { id: user.id, nickname: user.nickname, handle: user.handle, avatarUrl: user.avatarUrl, cloudRank: "조각구름", lifetimePower: user.lifetimePower }, isMine: true, canDelete: true, createdAt: at(-1, 18, 28) }),
       directMessage({ id: "demo-direct-hana-3", body: "고마워요. 오늘은 날씨도 좋아서 기분이 더 좋았어요 ☁️", sender: authors.hana, reactions: [{ type: "LIKE", count: 1, mine: false }], createdAt: at(0, 9, 15) }),
     ],
   };
@@ -214,9 +214,12 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     const categoryId = decodeURIComponent(categoryTodosMatch[1]);
     const category = state.categories.find((item) => item.id === categoryId);
     if (!category) throw new Error("카테고리를 찾지 못했어요.");
-    return clone(state.todos
+    const all = state.todos
       .filter((todo) => todo.categoryId === category.id || (!todo.categoryId && todo.category === category.name))
-      .sort((left, right) => Number(Boolean(left.completedAt)) - Number(Boolean(right.completedAt)) || new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime())) as T;
+      .sort((left, right) => Number(Boolean(left.completedAt)) - Number(Boolean(right.completedAt)) || new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime());
+    const status = url.searchParams.get("status") ?? "ALL";
+    const items = all.filter((todo) => status === "ALL" || (status === "DONE" ? Boolean(todo.completedAt) : !todo.completedAt));
+    return clone({ items, counts: { all: all.length, open: all.filter((todo) => !todo.completedAt).length, done: all.filter((todo) => todo.completedAt).length }, nextCursor: null }) as T;
   }
   const categoryMatch = pathname.match(/^\/me\/todo-categories\/([^/]+)$/);
   if (categoryMatch && method === "PATCH") {
@@ -254,13 +257,23 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     writeState(state);
     return clone(state.user) as T;
   }
-  if (pathname === "/me/notifications" && method === "GET") return clone({ items: state.notifications, nextCursor: null, unreadCount: state.notifications.filter((item) => !item.readAt).length }) as T;
+  if (pathname === "/me/notifications" && method === "GET") {
+    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? 20)));
+    const sorted = [...state.notifications].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+    const start = url.searchParams.get("cursor") ? sorted.findIndex((item) => item.id === url.searchParams.get("cursor")) + 1 : 0;
+    const items = sorted.slice(start, start + limit);
+    return clone({ items, nextCursor: sorted.length > start + limit ? items.at(-1)?.id ?? null : null, unreadCount: state.notifications.filter((item) => !item.readAt).length }) as T;
+  }
   if (pathname === "/me/notifications/unread-count" && method === "GET") return clone({ count: state.notifications.filter((item) => !item.readAt).length }) as T;
   if (pathname === "/me/notifications/read" && method === "POST") {
-    state.notifications = state.notifications.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() }));
+    const readAt = new Date().toISOString();
+    const count = state.notifications.filter((item) => !item.readAt && item.createdAt <= readAt).length;
+    state.notifications = state.notifications.map((item) => ({ ...item, readAt: !item.readAt && item.createdAt <= readAt ? readAt : item.readAt }));
     writeState(state);
-    return {} as T;
+    return clone({ count, readAt, unreadCount: state.notifications.filter((item) => !item.readAt).length }) as T;
   }
+  const notificationReadMatch = pathname.match(/^\/me\/notifications\/([^/]+)\/read$/);
+  if (notificationReadMatch && method === "POST") { const item = state.notifications.find((value) => value.id === notificationReadMatch[1]); if (!item) throw new Error("알림을 찾을 수 없어요."); item.readAt ??= new Date().toISOString(); writeState(state); return clone({ readAt: item.readAt, unreadCount: state.notifications.filter((value) => !value.readAt).length }) as T; }
 
   if (pathname === "/messages/unread-count" && method === "GET") {
     const directCount = Object.entries(state.directMessages).reduce((sum, [conversationId, messages]) => sum + (conversationId === "demo-direct-hana" ? messages.filter((item) => item.sender?.id !== state.user.id && !item.deletedAt && !item.hiddenAt).slice(-1).length : 0), 0);
@@ -329,7 +342,7 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     const text = body.body ? String(body.body) : null;
     const reply = body.replyToId ? (state.directMessages[conversationId] ?? []).find((item) => item.id === body.replyToId) : null;
     const links = [...new Set(text?.match(/https?:\/\/[^\s<>()]+/gi) ?? [])].flatMap((link) => { try { const parsed = new URL(link); return [{ url: parsed.toString(), domain: parsed.hostname.replace(/^www\./, "") }]; } catch { return []; } });
-    const message: DirectChatMessage = { id: uid("demo-direct-message"), kind: "USER", body: text, sender: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, avatarUrl: state.user.avatarUrl, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower }, replyTo: reply ? { id: reply.id, body: reply.body, senderNickname: reply.sender?.nickname ?? null, deleted: Boolean(reply.deletedAt || reply.hiddenAt) } : null, media: (Array.isArray(body.mediaIds) ? body.mediaIds : []).slice(0, 4).map((url, index) => ({ id: uid(`demo-direct-media-${index}`), url: String(url), thumbnailUrl: String(url) })), reactions: [], links, deletedAt: null, hiddenAt: null, blocked: false, canDelete: true, createdAt: new Date().toISOString() };
+    const message: DirectChatMessage = { id: uid("demo-direct-message"), kind: "USER", body: text, sender: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, avatarUrl: state.user.avatarUrl, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower }, replyTo: reply ? { id: reply.id, body: reply.body, senderNickname: reply.sender?.nickname ?? null, deleted: Boolean(reply.deletedAt || reply.hiddenAt) } : null, media: (Array.isArray(body.mediaIds) ? body.mediaIds : []).slice(0, 4).map((url, index) => ({ id: uid(`demo-direct-media-${index}`), url: String(url), thumbnailUrl: String(url) })), reactions: [], links, deletedAt: null, hiddenAt: null, blocked: false, isMine: true, canDelete: true, createdAt: new Date().toISOString() };
     state.directMessages[conversationId] ??= []; state.directMessages[conversationId].push(message); writeState(state); return clone(message) as T;
   }
   const directMessageItemMatch = pathname.match(/^\/messages\/([^/]+)\/messages\/([^/]+)$/);
@@ -343,6 +356,16 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     return clone({ room: { conversationId, otherUser, unreadCount: 0, blocked: blockedByMe, blockedByMe, canSend: !blockedByMe }, items: state.directMessages[conversationId] ?? [], nextCursor: null }) as T;
   }
 
+  if (pathname === "/todos/search" && method === "GET") {
+    const from = new Date(url.searchParams.get("from") ?? ""); const to = new Date(url.searchParams.get("to") ?? "");
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) throw new Error("조회 기간을 확인해주세요.");
+    const term = (url.searchParams.get("query") ?? "").trim().toLocaleLowerCase();
+    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? 20)));
+    const rows = state.todos.filter((todo) => new Date(todo.dueDate) >= from && new Date(todo.dueDate) <= to && todo.title.toLocaleLowerCase().includes(term)).sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.id.localeCompare(b.id));
+    const cursor = url.searchParams.get("cursor"); const start = cursor ? rows.findIndex((todo) => todo.id === cursor) + 1 : 0;
+    const items = rows.slice(start, start + limit).map((todo) => ({ ...todo, group: state.lists.find((list) => list.items.some((item) => item.todo.id === todo.id || Boolean(todo.seriesId && item.todo.seriesId === todo.seriesId))) ? { id: state.lists.find((list) => list.items.some((item) => item.todo.id === todo.id || Boolean(todo.seriesId && item.todo.seriesId === todo.seriesId)))!.id, title: state.lists.find((list) => list.items.some((item) => item.todo.id === todo.id || Boolean(todo.seriesId && item.todo.seriesId === todo.seriesId)))!.title } : null }));
+    return clone({ items, nextCursor: rows.length > start + limit ? items.at(-1)?.id ?? null : null }) as T;
+  }
   if (pathname === "/todos" && method === "GET") {
     const from = url.searchParams.get("from"); const to = url.searchParams.get("to");
     return clone(state.todos.filter((todo) => (!from || new Date(todo.dueDate) >= new Date(from)) && (!to || new Date(todo.dueDate) <= new Date(to)))) as T;
@@ -418,9 +441,14 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
   if (pathname === "/todo-lists" && method === "GET") return clone(state.lists) as T;
   if (pathname === "/todo-lists" && method === "POST") {
     const ids = Array.isArray(body.todoIds) ? body.todoIds.map(String) : [];
+    const selectedTodos = ids.map((id) => state.todos.find((todo) => todo.id === id));
+    if (selectedTodos.some((todo) => !todo)) throw new Error("TODO를 찾지 못했어요.");
+    if (selectedTodos.some((todo) => state.lists.some((existing) => existing.items.some((item) => item.todo.id === todo!.id || Boolean(todo!.seriesId && item.todo.seriesId === todo!.seriesId))))) throw new Error("이미 다른 그룹에 담긴 TODO가 있어요.");
     const list: TodoListDto = { id: uid("demo-list"), title: String(body.title), description: body.description ? String(body.description) : null, visibility: (body.visibility as TodoListDto["visibility"]) ?? "PRIVATE", copyCount: 0, items: ids.map((id, order) => ({ order, todo: state.todos.find((todo) => todo.id === id)! })).filter((item) => item.todo) };
     state.lists.unshift(list); writeState(state); return clone(list) as T;
   }
+  const listUpdateMatch = pathname.match(/^\/todo-lists\/([^/]+)$/);
+  if (listUpdateMatch && method === "PATCH") { const list = state.lists.find((item) => item.id === listUpdateMatch[1]); if (!list) throw new Error("그룹을 찾지 못했어요."); const ids = Array.isArray(body.todoIds) ? body.todoIds.map(String) : list.items.map((item) => item.todo.id); const todos = ids.map((id) => state.todos.find((todo) => todo.id === id)); if (todos.some((todo) => !todo)) throw new Error("TODO를 찾지 못했어요."); const other = state.lists.filter((item) => item.id !== list.id); if (todos.some((todo) => other.some((item) => item.items.some((entry) => entry.todo.id === todo!.id || Boolean(todo!.seriesId && entry.todo.seriesId === todo!.seriesId))))) throw new Error("이미 다른 그룹에 담긴 TODO가 있어요."); list.title = String(body.title ?? list.title); list.description = body.description === undefined ? list.description : String(body.description); if (body.visibility) list.visibility = body.visibility as TodoListDto["visibility"]; list.items = todos.map((todo, order) => ({ order, todo: todo! })); writeState(state); return clone(list) as T; }
   const listCloneMatch = pathname.match(/^\/todo-lists\/([^/]+)\/clone$/);
   if (listCloneMatch && method === "POST") {
     const source = state.lists.find((item) => item.id === listCloneMatch[1]) ?? state.feed.map((post) => post.todoList).find((item) => item?.id === listCloneMatch[1]);
@@ -443,7 +471,8 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
 
   if ((pathname === "/feed" || pathname === "/public/feed") && method === "GET") {
     const category = url.searchParams.get("category");
-    const items = category && category !== "전체" ? state.feed.filter((post) => post.todos.some((todo) => todo.category === category)) : state.feed;
+    const visible = state.feed.filter((post) => !state.blockedUsers.includes(post.author.id));
+    const items = category && category !== "전체" ? visible.filter((post) => post.todos.some((todo) => todo.category === category)) : visible;
     return clone({ items, nextCursor: null } satisfies FeedPage) as T;
   }
   if (pathname === "/feed/posts" && method === "POST") {
@@ -458,7 +487,7 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     post.cheered = !post.cheered; post.cheerCount += post.cheered ? 1 : -1; writeState(state); return clone({ cheered: post.cheered, cheerCount: post.cheerCount }) as T;
   }
   const commentsMatch = pathname.match(/^\/(?:feed|public)\/posts\/([^/]+)\/comments$/);
-  if (commentsMatch && method === "GET") return clone(state.comments[commentsMatch[1]] ?? []) as T;
+  if (commentsMatch && method === "GET") return { items: clone(state.comments[commentsMatch[1]] ?? []), nextCursor: null } as T;
   if (commentsMatch && method === "POST") {
     const item: Comment = { id: uid("demo-comment"), body: String(body.body), createdAt: new Date().toISOString(), author: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower } };
     state.comments[commentsMatch[1]] = [...(state.comments[commentsMatch[1]] ?? []), item];
@@ -480,7 +509,7 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
   }
   const postMatch = pathname.match(/^\/(?:feed|public)\/posts\/([^/]+)$/);
   if (postMatch && method === "GET") {
-    const post = state.feed.find((item) => item.id === postMatch[1]); if (!post) throw new Error("게시물을 찾지 못했어요."); return clone(post) as T;
+    const post = state.feed.find((item) => item.id === postMatch[1] && !state.blockedUsers.includes(item.author.id)); if (!post) throw new Error("게시물을 찾지 못했어요."); return clone(post) as T;
   }
   if (postMatch && method === "DELETE") {
     state.feed = state.feed.filter((item) => item.id !== postMatch[1]);
@@ -496,7 +525,7 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     if (kind === "COMMUNITY" && state.user.availablePoints < 500) throw new Error("커뮤니티 챌린지 생성에는 500 포인트가 필요해요.");
     const challenge: Challenge = { id: uid("demo-challenge"), title: String(body.title), description: String(body.description), kind, verificationMode: body.verificationMode as Challenge["verificationMode"], verificationCriteria: Array.isArray(body.verificationCriteria) ? body.verificationCriteria.map(String) : [], minimumParticipants: 8, startsAt: String(body.startsAt), endsAt: String(body.endsAt), completionThreshold: Number(body.completionThreshold ?? 80), rewardLabel: body.rewardLabel ? String(body.rewardLabel) : null, rewardTerms: body.rewardTerms ? String(body.rewardTerms) : null, firstPlaceTitle: body.firstPlaceTitle ? String(body.firstPlaceTitle) : null, secondPlaceTitle: body.secondPlaceTitle ? String(body.secondPlaceTitle) : null, thirdPlaceTitle: body.thirdPlaceTitle ? String(body.thirdPlaceTitle) : null, creator: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle }, joined: kind === "COMMUNITY", todayCheckedIn: false, myCheckInCount: 0, successRate: 0, checkIns: [], _count: { participants: kind === "COMMUNITY" ? 1 : 0, checkIns: 0 } };
     if (kind === "COMMUNITY") state.user.availablePoints -= 500;
-    state.chats[challenge.id] = [{ id: uid("demo-system"), kind: "SYSTEM", body: "챌린지가 시작됐어요. 서로에게 도움이 되는 팁과 경험을 나눠보세요.", sender: null, replyTo: null, media: [], reactions: [], links: [], blocked: false, canEdit: false, canDelete: false, canModerate: false, createdAt: new Date().toISOString() }];
+    state.chats[challenge.id] = [{ id: uid("demo-system"), kind: "SYSTEM", body: "챌린지가 시작됐어요. 서로에게 도움이 되는 팁과 경험을 나눠보세요.", sender: null, replyTo: null, media: [], reactions: [], links: [], blocked: false, isMine: false, canEdit: false, canDelete: false, canModerate: false, createdAt: new Date().toISOString() }];
     state.challenges.unshift(challenge);
     writeState(state);
     return clone(challenge) as T;
@@ -532,7 +561,7 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     const text = body.body ? String(body.body) : null;
     const links = [...new Set(text?.match(/https?:\/\/[^\s<>()]+/gi) ?? [])].flatMap((link) => { try { const parsed = new URL(link); return [{ url: parsed.toString(), domain: parsed.hostname.replace(/^www\./, "") }]; } catch { return []; } });
     const reply = body.replyToId ? (state.chats[challenge.id] ?? []).find((item) => item.id === body.replyToId) : null;
-    const message: ChallengeChatMessage = { id: uid("demo-chat"), kind: "USER", body: text, sender: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, avatarUrl: state.user.avatarUrl, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower }, replyTo: reply ? { id: reply.id, body: reply.body, senderNickname: reply.sender?.nickname ?? null, deleted: Boolean(reply.deletedAt || reply.hiddenAt) } : null, media: (Array.isArray(body.mediaIds) ? body.mediaIds : []).slice(0, 4).map((url, index) => ({ id: uid(`demo-media-${index}`), url: String(url), thumbnailUrl: String(url) })), reactions: [], links, blocked: false, canEdit: true, canDelete: true, canModerate: false, createdAt: new Date().toISOString() };
+    const message: ChallengeChatMessage = { id: uid("demo-chat"), kind: "USER", body: text, sender: { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, avatarUrl: state.user.avatarUrl, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower }, replyTo: reply ? { id: reply.id, body: reply.body, senderNickname: reply.sender?.nickname ?? null, deleted: Boolean(reply.deletedAt || reply.hiddenAt) } : null, media: (Array.isArray(body.mediaIds) ? body.mediaIds : []).slice(0, 4).map((url, index) => ({ id: uid(`demo-media-${index}`), url: String(url), thumbnailUrl: String(url) })), reactions: [], links, blocked: false, isMine: true, canEdit: true, canDelete: true, canModerate: false, createdAt: new Date().toISOString() };
     state.chats[challenge.id] ??= []; state.chats[challenge.id].push(message); writeState(state); return clone(message) as T;
   }
   const chatMessageMatch = pathname.match(/^\/challenges\/([^/]+)\/chat\/messages\/([^/]+)$/);
@@ -577,14 +606,14 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     if (!challenge) throw new Error("챌린지를 찾지 못했어요.");
     challenge.endedAt = new Date().toISOString();
     state.chats[challenge.id] ??= [];
-    state.chats[challenge.id].push({ id: uid("demo-system"), kind: "SYSTEM", body: "챌린지가 종료됐어요. 대화는 90일 동안 읽을 수 있어요.", sender: null, replyTo: null, media: [], reactions: [], links: [], blocked: false, canEdit: false, canDelete: false, canModerate: false, createdAt: challenge.endedAt });
+    state.chats[challenge.id].push({ id: uid("demo-system"), kind: "SYSTEM", body: "챌린지가 종료됐어요. 대화는 90일 동안 읽을 수 있어요.", sender: null, replyTo: null, media: [], reactions: [], links: [], blocked: false, isMine: false, canEdit: false, canDelete: false, canModerate: false, createdAt: challenge.endedAt });
     writeState(state); return clone({ ok: true }) as T;
   }
   const joinMatch = pathname.match(/^\/challenges\/([^/]+)\/join$/);
   if (joinMatch && method === "POST") {
     const challenge = state.challenges.find((item) => item.id === joinMatch[1]); if (!challenge) throw new Error("챌린지를 찾지 못했어요.");
     if (!challenge.joined) { challenge.joined = true; challenge._count.participants += 1; }
-    state.chats[challenge.id] ??= [{ id: uid("demo-system"), kind: "SYSTEM", body: "챌린지가 시작됐어요. 서로에게 도움이 되는 팁과 경험을 나눠보세요.", sender: null, replyTo: null, media: [], reactions: [], links: [], blocked: false, canEdit: false, canDelete: false, canModerate: false, createdAt: new Date().toISOString() }];
+    state.chats[challenge.id] ??= [{ id: uid("demo-system"), kind: "SYSTEM", body: "챌린지가 시작됐어요. 서로에게 도움이 되는 팁과 경험을 나눠보세요.", sender: null, replyTo: null, media: [], reactions: [], links: [], blocked: false, isMine: false, canEdit: false, canDelete: false, canModerate: false, createdAt: new Date().toISOString() }];
     writeState(state); return clone(challenge) as T;
   }
   if (joinMatch && method === "DELETE") {
@@ -608,19 +637,20 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
   const profileMatch = pathname.match(/^\/public\/users\/([^/]+)$/);
   if (profileMatch && method === "GET") {
     const author = state.feed.map((post) => post.author).find((item) => item.handle === profileMatch[1]);
+    if (author && state.blockedUsers.includes(author.id)) throw new Error("프로필을 찾지 못했어요.");
     if (!author && profileMatch[1] !== state.user.handle) throw new Error("프로필을 찾지 못했어요.");
     const person = author ?? { id: state.user.id, nickname: state.user.nickname, handle: state.user.handle, avatarUrl: state.user.avatarUrl, cloudRank: "조각구름", lifetimePower: state.user.lifetimePower };
     return clone({ ...person, rank: person.cloudRank, recentVitality: 72, bio: "작은 실천을 내 속도로 이어가고 있어요.", _count: { followers: author ? 132 : 48, following: author ? 86 : 31, posts: author ? 24 : 12 } }) as T;
   }
   const profilePostsMatch = pathname.match(/^\/public\/users\/([^/]+)\/posts$/);
   if (profilePostsMatch && method === "GET") {
-    return clone({ items: state.feed.filter((post) => post.author.handle === profilePostsMatch[1]), nextCursor: null }) as T;
+    return clone({ items: state.feed.filter((post) => post.author.handle === profilePostsMatch[1] && !state.blockedUsers.includes(post.author.id)), nextCursor: null }) as T;
   }
   if (pathname === "/public/search" && method === "GET") {
     const query = (url.searchParams.get("query") ?? "").toLocaleLowerCase("ko");
     const text = query.replace(/^[@#]/, "");
-    const users = Array.from(new Map(state.feed.map((post) => [post.author.id, post.author])).values()).filter((user) => `${user.nickname} ${user.handle}`.toLocaleLowerCase("ko").includes(text));
-    const matched = state.feed.filter((post) => `${post.caption ?? ""} ${post.todos.map((todo) => `${todo.title} ${todo.category}`).join(" ")} ${post.todoList?.title ?? ""} ${post.hashtags.join(" ")}`.toLocaleLowerCase("ko").includes(text));
+    const users = Array.from(new Map(state.feed.map((post) => [post.author.id, post.author])).values()).filter((user) => !state.blockedUsers.includes(user.id) && `${user.nickname} ${user.handle}`.toLocaleLowerCase("ko").includes(text));
+    const matched = state.feed.filter((post) => !state.blockedUsers.includes(post.author.id) && `${post.caption ?? ""} ${post.todos.map((todo) => `${todo.title} ${todo.category}`).join(" ")} ${post.todoList?.title ?? ""} ${post.hashtags.join(" ")}`.toLocaleLowerCase("ko").includes(text));
     const posts = matched.filter((post) => !post.todoList);
     const routines = matched.filter((post) => post.todoList);
     const tagCounts = new Map<string, number>(); state.feed.flatMap((post) => post.hashtags).forEach((tag) => tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1));
@@ -645,6 +675,9 @@ export async function demoApiFetch<T>(path: string, init: RequestInit = {}): Pro
     return clone({ items, nextCursor: null }) as T;
   }
   if (pathname === "/social/block" && method === "POST") { const userId = String(body.userId); if (!state.blockedUsers.includes(userId)) state.blockedUsers.push(userId); state.following = state.following.filter((id) => id !== userId); writeState(state); return clone({ blocked: true }) as T; }
+  if (pathname === "/social/blocks" && method === "GET") { const ids = [...state.blockedUsers].sort().reverse(); const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? 20))); const cursor = url.searchParams.get("cursor"); const start = cursor ? ids.indexOf(cursor) + 1 : 0; const items = ids.slice(start, start + limit).map((userId) => ({ userId, user: [state.directPeople["demo-direct-hana"], ...state.feed.map((post) => post.author)].find((user) => user?.id === userId) ?? null, createdAt: new Date().toISOString() })); return clone({ items, nextCursor: ids.length > start + limit ? items.at(-1)?.userId ?? null : null }) as T; }
+  const unblockMatch = pathname.match(/^\/social\/blocks\/([^/]+)$/);
+  if (unblockMatch && method === "DELETE") { state.blockedUsers = state.blockedUsers.filter((id) => id !== unblockMatch[1]); writeState(state); return clone({ blocked: false }) as T; }
   if (pathname === "/social/report" && method === "POST") return {} as T;
 
   throw new Error(`체험 모드에서 준비되지 않은 요청이에요: ${method} ${pathname}`);

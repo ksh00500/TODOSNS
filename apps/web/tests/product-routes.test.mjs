@@ -91,7 +91,7 @@ test("TODO 일정·그룹·카테고리는 밀도 높은 별도 관리 화면을
   const categories = await readFile(new URL("../app/(product)/todos/categories/page.tsx", import.meta.url), "utf8");
   const nav = await readFile(new URL("../components/todo-section-nav.tsx", import.meta.url), "utf8");
   const schema = await readFile(new URL("../../api/prisma/schema.prisma", import.meta.url), "utf8");
-  const service = await readFile(new URL("../../api/src/mungsil.service.ts", import.meta.url), "utf8");
+  const service = await readFile(new URL("../../api/src/todo-category.service.ts", import.meta.url), "utf8");
   assert.match(todos, /compact-week-card/);
   assert.doesNotMatch(todos, /calendar-switch|루틴 보관함/);
   for (const label of ["일정", "그룹", "카테고리"]) assert.match(nav, new RegExp(label));
@@ -112,8 +112,8 @@ test("TODO 일정·그룹·카테고리는 밀도 높은 별도 관리 화면을
   assert.doesNotMatch(categories, /<select|type=["']date["']|window\.confirm/);
   assert.match(schema, /model TodoCategory/);
   assert.match(schema, /categoryId\s+String\?/);
-  assert.match(service, /resolveTodoCategory/);
-  assert.match(service, /listTodoCategoryTodos/);
+  assert.match(service, /async resolve/);
+  assert.match(service, /async listTodos/);
   assert.match(service, /todoSeries\.updateMany/);
   assert.match(service, /최대 12개/);
 });

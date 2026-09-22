@@ -22,7 +22,9 @@ database_tmp="$database.partial"
 media_tmp="$media.partial"
 trap 'rm -f "$database_tmp" "$media_tmp"' EXIT HUP INT TERM
 
-docker compose -f "$compose_file" exec -T postgres pg_dump -U mungsil mungsil | gzip -9 > "$database_tmp"
+docker compose -f "$compose_file" exec -T postgres /bin/sh -eu -c \
+  'export PGPASSWORD="$(cat /run/secrets/database_backup_password)"; exec pg_dump -h 127.0.0.1 -U mungsil_backup -d mungsil' \
+  | gzip -9 > "$database_tmp"
 gzip -t "$database_tmp"
 test "$(gzip -dc "$database_tmp" | wc -c)" -gt 0
 mv "$database_tmp" "$database"

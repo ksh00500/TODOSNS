@@ -189,7 +189,8 @@ export class DirectChatService {
   }
 
   async remove(userId: string, conversationId: string, messageId: string) {
-    await this.context(userId, conversationId);
+    const context = await this.context(userId, conversationId);
+    if (context.blocked) throw new ForbiddenException("차단된 사용자와의 메시지는 삭제할 수 없어요.");
     const message = await this.prisma.message.findFirst({ where: { id: messageId, conversationId, senderId: userId, kind: MessageKind.USER, deletedAt: null } });
     if (!message) throw new NotFoundException("삭제할 수 있는 메시지를 찾지 못했어요.");
     await this.prisma.message.update({ where: { id: messageId }, data: { deletedAt: new Date() } });
@@ -270,7 +271,8 @@ export class DirectChatService {
       deletedAt: item.deletedAt,
       hiddenAt: item.hiddenAt,
       blocked: blocked && item.senderId !== viewerId,
-      canDelete: item.senderId === viewerId && item.kind === MessageKind.USER && !item.deletedAt,
+      isMine: item.senderId === viewerId,
+      canDelete: !blocked && item.senderId === viewerId && item.kind === MessageKind.USER && !item.deletedAt,
       createdAt: item.createdAt,
     };
   }

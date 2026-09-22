@@ -30,6 +30,7 @@ test("1대1 메시지는 멤버십과 양방향 차단을 모든 쓰기에서 �
   assert.match(service, /members: \{ some: \{ userId \} \}/);
   assert.match(service, /private async assertNotBlocked/);
   assert.match(service, /async send[\s\S]*context\.blocked/);
+  assert.match(service, /async remove[\s\S]*context\.blocked/);
   assert.match(service, /async toggleReaction[\s\S]*context\.blocked/);
   assert.match(service, /blockerId: a, blockedId: b[\s\S]*blockerId: b, blockedId: a/);
 });

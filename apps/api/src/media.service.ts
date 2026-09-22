@@ -11,10 +11,12 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Cron } from "@nestjs/schedule";
 import { Media, MediaStatus } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import * as sharp from "sharp";
+import * as sharpModule from "sharp";
 import { CompleteMediaDto, PresignDto } from "./dtos";
 import { PrismaService } from "./prisma.service";
 import { createStorageClients } from "./storage";
+
+const sharp = sharpModule as unknown as typeof import("sharp").default;
 
 const MAX_IMAGE_BYTES = 10_000_000;
 const DEFAULT_ACCOUNT_MEDIA_BYTES = 500_000_000;

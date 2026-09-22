@@ -11,7 +11,8 @@ test("CommonJS 전용 런타임 모듈은 require 호환 import를 사용한다"
   ]);
 
   assert.match(main, /import \* as cookieParser from "cookie-parser"/);
-  assert.match(media, /import \* as sharp from "sharp"/);
+  assert.match(media, /import \* as sharpModule from "sharp"/);
+  assert.match(media, /const sharp = sharpModule as unknown as typeof import\("sharp"\)\.default/);
   assert.match(email, /import \* as nodemailer from "nodemailer"/);
   assert.equal(typeof require("cookie-parser"), "function");
   assert.equal(typeof require("sharp"), "function");
