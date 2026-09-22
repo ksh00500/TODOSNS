@@ -87,6 +87,13 @@ test("배포 경로는 이미지 준비 후 migration 성공 전까지 API를 �
   assert.match(deploy, /Existing API remains unchanged on failure/);
 });
 
+test("migration runner는 hoist된 Prisma CLI를 Node로 실행한다", () => {
+  const runner = file("apps/api/scripts/run-migrations.cjs");
+  assert.match(runner, /require\.resolve\("prisma\/build\/index\.js"\)/);
+  assert.match(runner, /spawnSync\(process\.execPath/);
+  assert.doesNotMatch(runner, /node_modules\/\.bin\/prisma/);
+});
+
 test("백업은 bootstrap 계정 대신 전용 read-only LOGIN을 사용한다", () => {
   for (const path of ["infra/backup.sh", "infra/backup-to-s3.sh", "infra/backup.ps1"]) {
     const script = file(path);

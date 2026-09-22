@@ -10,8 +10,8 @@ async function main() {
     process.env.EXPECTED_DB_SESSION_ROLE,
     process.env.EXPECTED_DB_CURRENT_ROLE,
   );
-  const prisma = resolve(__dirname, "../node_modules/.bin/prisma");
-  const result = spawnSync(prisma, ["migrate", "deploy", "--schema", resolve(__dirname, "../prisma/schema.prisma")], {
+  const prisma = require.resolve("prisma/build/index.js");
+  const result = spawnSync(process.execPath, [prisma, "migrate", "deploy", "--schema", resolve(__dirname, "../prisma/schema.prisma")], {
     env: process.env,
     stdio: "inherit",
     shell: process.platform === "win32",
