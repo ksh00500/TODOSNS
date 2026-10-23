@@ -59,7 +59,7 @@ class PublishSearchFlowTest {
         val restoration = StateRestorationTester(compose)
         restoration.setContent {
             var open by rememberSaveable { mutableStateOf(true) }
-            MungsilTheme { if(open) PublishSheet(api, json("id" to "todo", "title" to "산책을 마쳤어요"), { open = false }, {}, photoPicker = { _, media, update, enabled, pending, draft ->
+            MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides "account-a") { if(open) PublishSheet(api, json("id" to "todo", "title" to "산책을 마쳤어요"), { open = false }, {}, photoPicker = { _, media, update, enabled, pending, draft ->
                 val selected = draft.selectedUri != null
                 if(media == null) {
                     TextButton({ draft.selectedUri = "synthetic-selected-photo"; update(null); pending(true) }, enabled = enabled) { Text("사진 첨부 실패 재현") }
@@ -69,7 +69,7 @@ class PublishSearchFlowTest {
                     }
                 } else Text("사진 첨부 완료")
                 if(selected || media != null) TextButton({ draft.selectedUri = null; update(null); pending(false) }, enabled = enabled) { Text("사진 제외") }
-            }) else Text("게시 완료") }
+            }) else Text("게시 완료") } }
         }
         waitText("실천 게시하기")
         compose.onNodeWithContentDescription("오늘의 한마디").performScrollTo().performTextInput("작은 실천을 오래 이어가요")
@@ -84,34 +84,38 @@ class PublishSearchFlowTest {
         screenshot("publish-pending-restored")
         click("사진 업로드 다시 시도")
         click("피드에 게시하기")
-        waitText("서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해주세요.")
+        waitText("게시 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해주세요.")
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithContentDescription("오늘의 한마디").assertTextContains("작은 실천을 오래 이어가요")
         compose.onNodeWithContentDescription("abc_산책 해시태그 삭제").assertExists()
         compose.onNode(hasText("팔로워") and hasClickAction()).assertIsSelected()
-        click("피드에 게시하기")
-        waitText("서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해주세요.")
+        compose.onNodeWithContentDescription("오늘의 한마디").assertIsNotEnabled()
+        compose.onNode(hasText("팔로워") and hasClickAction()).assertIsNotEnabled()
+        click("게시 결과 확인")
+        waitText("게시 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해주세요.")
         assertEquals(1, uploads.get())
         val first = received[0]; val second = received[1]
         assertEquals(first.getHeader("Idempotency-Key"), second.getHeader("Idempotency-Key"))
         assertEquals(first.body.clone().readUtf8(), second.body.clone().readUtf8())
         assertEquals("synthetic-media", JsonParser.parseString(first.body.clone().readUtf8()).asJsonObject.text("mediaId"))
-        click("사진 제외")
-        compose.onNodeWithContentDescription("abc_산책 해시태그 삭제").performScrollTo().performClick()
-        click("피드에 게시하기")
+        click("게시 결과 확인")
         waitText("게시 중…")
         compose.onNodeWithContentDescription("오늘의 한마디").assertIsNotEnabled()
         compose.onNodeWithContentDescription("해시태그 입력").assertIsNotEnabled()
         compose.onNode(hasText("팔로워") and hasClickAction()).assertIsNotEnabled()
         waitText("게시 완료")
-        assertEquals(3, received.size); assertNotEquals(first.getHeader("Idempotency-Key"), received[2].getHeader("Idempotency-Key"))
-        val changed = JsonParser.parseString(received[2].body.clone().readUtf8()).asJsonObject
-        assertFalse(changed.has("mediaId")); assertEquals(emptyList<String>(), changed.strings("hashtags")); assertEquals("FOLLOWERS", changed.text("visibility"))
+        assertEquals(3, received.size)
+        val confirmed = received[2]
+        assertEquals(first.getHeader("Idempotency-Key"), confirmed.getHeader("Idempotency-Key"))
+        assertEquals(first.body.clone().readUtf8(), confirmed.body.clone().readUtf8())
+        val payload = JsonParser.parseString(confirmed.body.clone().readUtf8()).asJsonObject
+        assertEquals("synthetic-media", payload.text("mediaId")); assertEquals(listOf("abc_산책"), payload.strings("hashtags")); assertEquals("FOLLOWERS", payload.text("visibility"))
+
     }
     @Test fun onlyVisibilityChangeNeedsDiscardConfirmationAndTagErrorsStayInline() {
         dispatch { response("{}") }
         var closed = false
-        compose.setContent { MungsilTheme { PublishSheet(api, json("id" to "group", "title" to "작은 루틴"), { closed = true }, {}, group = true) } }
+        compose.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides "account-a") { PublishSheet(api, json("id" to "group", "title" to "작은 루틴"), { closed = true }, {}, group = true) } } }
         waitText("실천 게시하기")
         click("나만 보기")
         compose.onNodeWithContentDescription("닫기").performClick()
@@ -127,6 +131,37 @@ class PublishSearchFlowTest {
         waitText("작성을 그만둘까요?")
         click("작성 내용 버리기")
         assertTrue(closed); assertTrue(received.isEmpty())
+    }
+    @Test fun publicationAccountChangeClearsPreviousCaptionAndVisibility() {
+        dispatch { response("{}") }
+        var owner by mutableStateOf("account-a")
+        compose.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides owner) {
+            PublishSheet(api, json("id" to "source", "title" to "작은 실천"), {}, {})
+        } } }
+        compose.onNodeWithContentDescription("오늘의 한마디").performScrollTo().performTextInput("A 계정의 비공개 초안")
+        click("팔로워")
+        compose.runOnIdle { owner = "account-b" }
+        compose.onNodeWithContentDescription("오늘의 한마디").performScrollTo().assertTextEquals("")
+        click("전체 공개")
+        compose.onNode(hasText("전체 공개") and hasClickAction()).assertIsSelected()
+        assertTrue(received.isEmpty())
+    }
+    @Test fun closingUncertainPublicationWarnsAndNeverUndoesTheCompletedTodo() {
+        dispatch { response("{}",503) }
+        var closed = false
+        val todo = json("id" to "source", "title" to "마친 실천", "completedAt" to "2026-10-23T01:00:00Z", "visibility" to "PRIVATE")
+        compose.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides "account-a") {
+            PublishSheet(api, todo, { closed = true }, {})
+        } } }
+        click("피드에 게시하기")
+        waitText("게시 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해주세요.")
+        compose.onNodeWithContentDescription("닫기").performClick()
+        waitText("게시 요청이 이미 반영됐을 수 있어요. 닫아도 게시는 취소되지 않아요. 마이의 게시 기록을 확인해주세요.")
+        click("작성 내용 버리기")
+        assertTrue(closed)
+        assertEquals("2026-10-23T01:00:00Z",todo.text("completedAt")); assertEquals("PRIVATE",todo.text("visibility"))
+        assertEquals(1,received.size); assertEquals("POST",received.single().method)
+        assertEquals("/api/v1/feed/posts",received.single().requestUrl!!.encodedPath)
     }
     @Test fun actualPhotoPickerClearsFailedUploadAfterExclusionAndAllowsNewSelection() {
         dispatch { response("{}", 503) }

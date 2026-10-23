@@ -9,7 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.*
@@ -17,57 +16,66 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.google.gson.JsonObject
 import kr.kro.mungsil.data.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 @Composable fun PublishSheet(api: Api, todo: JsonObject, close: () -> Unit, saved: () -> Unit, group: Boolean = false,
     photoPicker: @Composable (Api, String?, (String?) -> Unit, Boolean, (Boolean) -> Unit, PhotoDraft) -> Unit = { source, media, update, enabled, pending, draft ->
         PhotoPicker(source, media, update, enabled, pending, draft = draft)
     }) {
-    val id = todo.text("id")
-    var caption by rememberSaveable(id, group) { mutableStateOf("") }
-    var tagDraft by rememberSaveable(id, group) { mutableStateOf("") }
-    var tags by rememberSaveable(id, group) { mutableStateOf(arrayListOf<String>()) }
-    var visibility by rememberSaveable(id, group) { mutableStateOf("PUBLIC") }
-    var media by rememberSaveable(id, group) { mutableStateOf<String?>(null) }
-    var photoPending by rememberSaveable(id, group) { mutableStateOf(false) }
-    val photoDraft = rememberPhotoDraft(id, group)
-    val incompletePhoto = photoPending || (photoDraft.selectedUri != null && media == null)
-    var tagError by rememberSaveable(id, group) { mutableStateOf<String?>(null) }
-    val submission = rememberDraftSubmission(id, group)
-    val action = rememberAction()
-    fun addTag(value: String = tagDraft) {
-        if(action.busy) return
-        val result = addPublishTag(tags, value)
-        tags = ArrayList(result.tags); tagDraft = result.draft; tagError = result.error
-    }
-    val payload = publishPayload(id, group, caption, tags, visibility, media)
-    NativeSheet("실천 게시하기", close, !action.busy,
-        dirty = caption.isNotBlank() || tags.isNotEmpty() || tagDraft.isNotBlank() || media != null || incompletePhoto || visibility != "PUBLIC") {
+    val owner = LocalTodoDraftOwner.current
+    key(owner, todo.text("id"), group) { PublishSheetContent(api, todo, owner, close, saved, group, photoPicker) }
+}
+
+@Composable private fun PublishSheetContent(api: Api, todo: JsonObject, owner: String, close: () -> Unit, saved: () -> Unit, group: Boolean,
+    photoPicker: @Composable (Api, String?, (String?) -> Unit, Boolean, (Boolean) -> Unit, PhotoDraft) -> Unit) {
+    val form = rememberPublishFormState(owner, todo.text("id"), group)
+    val draft = form.draft
+    val scope = rememberCoroutineScope()
+    val sessionVersion = remember(api, owner) { api.sessionVersion }
+    NativeSheet("실천 게시하기", close, !form.busy, dirty = form.dirty,
+        discardDetail = if(form.uncertain) "게시 요청이 이미 반영됐을 수 있어요. 닫아도 게시는 취소되지 않아요. 마이의 게시 기록을 확인해주세요." else "작성한 게시 내용이 사라져요. 원래 실천은 그대로 유지돼요.") {
         CloudCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Rounded.CloudUpload, null, tint = Brand)
                 Column { Text("이 실천을 게시할까요?", style = MaterialTheme.typography.titleMedium); Text(todo.text("title"), color = Muted) }
             }
         }
+        Text(if(group) "그룹의 현재 내용을 루틴으로 게시해요. 원본 그룹의 공개 범위는 바뀌지 않아요."
+            else "게시는 선택이에요. 닫아도 완료는 유지되며 원래 TODO의 공개 범위는 바뀌지 않아요.", color = Muted)
+        if(!group) Text("게시한 TODO는 게시 기록이 연결된 동안 완료 취소가 제한돼요.", color = Muted)
         Text("인증 사진 추가", style = MaterialTheme.typography.titleMedium)
         Text("선택 사항 · 최대 10MB", color = Muted)
-        key(id, group) { photoPicker(api, media, { media = it }, !action.busy, { photoPending = it }, photoDraft) }
-        Field("오늘의 한마디", caption, { caption = it }, 180, multiline = true, hint = "실천하면서 어떤 기분이었나요?", enabled = !action.busy)
-        Text("해시태그 ${tags.size}/5 · 선택 사항", style = MaterialTheme.typography.titleMedium)
-        Field("해시태그 입력", tagDraft, { if(it.endsWith(',')) addTag(it.dropLast(1)) else tagDraft = it.take(30) }, 31,
-            enabled = !action.busy, hint = "예: 아침루틴 · 최대 30자", imeAction = ImeAction.Done, onSubmit = { addTag() })
-        OutlinedButton({ addTag() }, enabled = !action.busy && tagDraft.isNotBlank()) { Text("추가") }
-        ErrorNotice(tagError)
-        if(tags.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { tags.forEach { tag ->
-            TextButton({ tags = ArrayList(tags.filter { it != tag }); tagError = null }, enabled = !action.busy,
+        photoPicker(api, draft.mediaId, { value -> form.update { it.copy(mediaId = value) } }, form.editable, form::photoPending, form.photo)
+        Field("오늘의 한마디", draft.caption, { value ->
+            if(value.codePointCount(0, value.length) <= 180) form.update { it.copy(caption = value) }
+        }, 360, multiline = true, hint = "실천하면서 어떤 기분이었나요? · 최대 180자", enabled = form.editable)
+        Text("해시태그 ${draft.tags.size}/5 · 선택 사항", style = MaterialTheme.typography.titleMedium)
+        Field("해시태그 입력", draft.tagInput, { value ->
+            if(value.endsWith(',')) form.addTag(value.dropLast(1)) else form.update { it.copy(tagInput = value.take(30)) }
+        }, 31, enabled = form.editable, hint = "예: 아침루틴 · 최대 30자", imeAction = ImeAction.Done, onSubmit = { form.addTag() })
+        OutlinedButton({ form.addTag() }, enabled = form.editable && draft.tagInput.isNotBlank()) { Text("추가") }
+        ErrorNotice(form.tagError)
+        if(draft.tags.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { draft.tags.forEach { tag ->
+            TextButton({ form.update { it.copy(tags = it.tags.filter { value -> value != tag }) } }, enabled = form.editable,
                 modifier = Modifier.heightIn(min = 44.dp).semantics { contentDescription = "$tag 해시태그 삭제" }) { Text("#$tag ×") }
         } }
         Text("Enter 또는 쉼표로 추가할 수 있어요.", color = Muted)
-        PublishVisibility(visibility, !action.busy) { visibility = it }
-        ActionFeedback(action)
-        Primary(if(action.busy) "게시 중…" else "피드에 게시하기", !action.busy && !incompletePhoto) {
-            action.run { api.request("feed/posts", "POST", payload, key = submission.keyFor(payload)); submission.succeeded(); saved(); close() }
+        PublishVisibility(draft.visibility, form.editable) { value -> form.update { it.copy(visibility = value) } }
+        ErrorNotice(form.error)
+        if(owner.isBlank()) ErrorNotice("로그인 상태를 확인한 뒤 다시 열어주세요.")
+        if(form.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Primary(if(form.busy) "게시 중…" else if(form.uncertain) "게시 결과 확인" else "피드에 게시하기",
+            !form.busy && !form.denied && owner.isNotBlank() && (form.uncertain || !form.incompletePhoto)) {
+            form.begin()?.let { request -> scope.launch {
+                val completed = try { sendPublication(api, request, sessionVersion); form.succeeded(request) }
+                    catch(e: CancellationException) { form.cancelled(request); throw e }
+                    catch(e: Exception) { form.failed(request, e); false }
+                if(completed) { saved(); close() }
+            } }
         }
-        if(incompletePhoto) Text("사진 첨부를 완료하거나 사진을 제외하면 게시할 수 있어요.", color = Muted)
+        if(form.incompletePhoto) Text("사진 첨부를 완료하거나 사진을 제외하면 게시할 수 있어요.", color = Muted)
+
     }
 }
 

@@ -359,6 +359,11 @@ private fun categoryIcon(value: String) = when(value) {
 }
 
 @Composable fun GroupsScreen(api: Api, zone: ZoneId, revision: Int, changed: () -> Unit, navigate: (String) -> Unit = {}) {
+    val owner = LocalTodoDraftOwner.current
+    key(owner, api.sessionVersion) { GroupsScreenContent(api, zone, revision, changed, navigate) }
+}
+
+@Composable private fun GroupsScreenContent(api: Api, zone: ZoneId, revision: Int, changed: () -> Unit, navigate: (String) -> Unit) {
     val remote = rememberRemote(revision) {
         val response = api.request("todo-lists")
         if(!response.isJsonArray) throw ApiException(502, "그룹 목록을 확인하지 못했어요. 다시 시도해주세요.")
