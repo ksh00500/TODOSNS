@@ -17,8 +17,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
@@ -26,35 +28,56 @@ import com.google.gson.*
 import kr.kro.mungsil.data.*
 import java.time.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 
-@Composable fun TodosScreen(api: Api, zone: ZoneId, today: Boolean, revision: Int, changed: () -> Unit, navigate: (String) -> Unit, initialDate: String? = null, nickname: String = "뭉실") {
-    var selectedDate by rememberSaveable(today) { mutableStateOf(initialDate ?: LocalDate.now(zone).toString()) }
-    val date = LocalDate.parse(selectedDate)
-    val model: TodoModel = viewModel(key = "todos-$today", factory = object : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T = TodoModel(TodoRepository(api)) as T
+@Composable fun TodosScreen(api: Api, zone: ZoneId, today: Boolean, revision: Int, changed: () -> Unit, navigate: (String) -> Unit, initialDate: String? = null, nickname: String = "뭉실", clock: Clock = Clock.systemUTC()) {
+    val owner = LocalTodoDraftOwner.current
+    key(owner) { TodosScreenContent(api, zone, today, revision, changed, navigate, initialDate, nickname, clock, owner) }
+}
+
+@Composable private fun TodosScreenContent(api: Api, zone: ZoneId, today: Boolean, revision: Int, changed: () -> Unit, navigate: (String) -> Unit, initialDate: String?, nickname: String, clock: Clock, owner: String) {
+    var selectedDate by rememberSaveable(today) { mutableStateOf(initialDate ?: accountToday(clock, zone).toString()) }
+    val date = if(today) rememberAccountToday(zone, clock) else LocalDate.parse(selectedDate)
+    val model: TodoModel = viewModel(key = "todos-$today-$owner-${api.sessionVersion}", factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T = TodoModel(TodoRepository(api), clock) as T
     })
-    val state = model.state.collectAsStateWithLifecycle().value
-    LaunchedEffect(date, zone, revision) { model.load(date, zone) }
-    val groups = rememberRemote(revision) { api.request("todo-lists") }
-    val todos = state.rows.map { it.source }
-    fun groupFor(todo: JsonObject) = groups.data?.rows()?.firstOrNull { group -> group.list("items").any { val member = it.child("todo"); member.text("id") == todo.text("id") || todo.text("seriesId").isNotBlank() && member.text("seriesId") == todo.text("seriesId") } }
-    val next = if(today) todos.firstOrNull { it.text("completedAt").isBlank() } else null
-    val clusters = todos.filterNot { it.text("id") == next?.text("id") }.groupBy { groupFor(it)?.text("id") ?: "todo/${it.text("id")}" }
+    val state = model.state.collectAsStateWithLifecycle().value.forQuery(date, zone)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(date, zone, revision, lifecycle, model) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { model.load(date, zone); awaitCancellation() }
+    }
+    val groups = rememberRemote(api, owner) { api.request("todo-lists").also {
+        if(!it.isJsonArray) throw ApiException(502, "그룹을 확인하지 못했어요.")
+    } }
+    var groupsRevision by remember { mutableIntStateOf(revision) }
+    LaunchedEffect(revision) { if(groupsRevision != revision) { groupsRevision = revision; groups.reload() } }
+    val day = todoDayPresentation(state, groups.data?.rows().orEmpty(), today)
+    val todos = day.rows.map { it.source }
+    val next = day.next?.source
     var ended by rememberJsonState()
     var removed by rememberJsonState()
     val restoreSubmission = rememberDraftSubmission("restore")
     var collapsedGroups by rememberSaveable { mutableStateOf(listOf<String>()) }
+    val collapsedSnapshot = collapsedGroups.toSet()
     var edit by rememberJsonState()
     var creating by rememberSaveable { mutableStateOf(false) }
     var publish by rememberJsonState()
     var delete by rememberJsonState()
     var menu by rememberJsonState()
     val action = rememberAction()
+    val canWrite = state.canWrite && !action.busy
     PageList {
         item {
             if(today) {
                 Text(date.format(java.time.format.DateTimeFormatter.ofPattern("M월 d일 E요일", java.util.Locale.KOREAN)), color = Muted, style = MaterialTheme.typography.bodySmall)
-                Heading("${nickname}님의 오늘", if(todos.any { it.text("completedAt").isBlank() }) "지금 할 수 있는 ${todos.count { it.text("completedAt").isBlank() }}개의 작은 실천이 있어요." else "오늘도 내 리듬만큼 잘 해냈어요.")
+                Heading("${nickname}님의 오늘", when {
+                    !state.hasLoaded -> "오늘의 작은 실천을 확인해요."
+                    state.pending.isNotEmpty() -> "변경 결과를 확인하고 있어요."
+                    state.loadError != null -> "마지막으로 확인한 실천을 보여드려요."
+                    day.allDone -> "오늘 담은 실천을 모두 마쳤어요."
+                    day.remaining > 0 -> "${day.remaining}개의 작은 실천이 남았어요."
+                    else -> "가볍게 시작할 실천 하나를 담아보세요."
+                })
             } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Text("날짜별로 가볍게 확인해요", color = Muted, style = MaterialTheme.typography.bodySmall); Heading("내 TODO") }
                 FilledIconButton({ creating = true }, Modifier.size(48.dp)) { Icon(Icons.Rounded.Add, "TODO 추가") }
@@ -81,41 +104,52 @@ import kotlinx.coroutines.launch
                 }
                 }
             }
-            item { Heading(date.format(java.time.format.DateTimeFormatter.ofPattern("M월 d일 E요일", java.util.Locale.KOREAN))); Text("${todos.size}개의 할 일", color = Muted, style = MaterialTheme.typography.bodySmall) }
+            item { Heading(date.format(java.time.format.DateTimeFormatter.ofPattern("M월 d일 E요일", java.util.Locale.KOREAN))); if(state.hasLoaded) Text("${todos.size}개의 할 일", color = Muted, style = MaterialTheme.typography.bodySmall) }
         }
-        if(today && !state.loading && state.error == null) item {
-            val completed = todos.count { it.text("completedAt").isNotEmpty() }
-            val progress = if(todos.isEmpty()) 0f else completed.toFloat() / todos.size
-            Surface(color = Lavender, shape = MaterialTheme.shapes.large) {
-                Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if(today) "오늘의 흐름" else "선택한 날의 흐름", color = Muted)
-                        Text("$completed / ${todos.size} 완료", style = MaterialTheme.typography.titleLarge)
-                        Text(if(todos.isEmpty()) "첫 TODO를 담아 오늘을 시작해보세요." else if(completed == todos.size) "모든 실천을 마쳤어요." else "하나씩 가볍게 이어가요.", color = Muted)
-                        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-                    }
-                    Box(Modifier.size(84.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxSize(), strokeWidth = 8.dp, trackColor = MaterialTheme.colorScheme.surface)
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) { CloudMark(Modifier.size(28.dp, 20.dp)); Text("${(progress * 100).toInt()}%", fontWeight = FontWeight.Bold, color = Brand) }
-                    }
-                }
+        if(state.loading) item {
+            CloudCard {
+                Text(if(state.hasLoaded) "목록을 새로 확인하고 있어요." else "할 일을 불러오고 있어요.", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+        }
+        if(state.loadError != null) item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if(state.hasLoaded) Text("마지막으로 확인한 목록이에요. ${state.lastLoadedAt?.atZone(zone)?.format(java.time.format.DateTimeFormatter.ofPattern("M월 d일 HH:mm")) ?: ""}", color = Muted)
+                ErrorNotice(state.loadError) { model.retry() }
+            }
+        }
+        if(state.mutationError != null) item { ErrorNotice(state.mutationError) { model.retry() } }
+        if(groups.error != null) item { ErrorNotice("그룹을 확인하지 못했어요. 할 일과 기존 소속은 유지돼요.") { groups.reload() } }
+        if(groups.loading && groups.data == null) item { Text("그룹을 확인하고 있어요.", color = Muted, style = MaterialTheme.typography.bodySmall) }
+        if(state.pending.isNotEmpty()) item { Text("변경 결과를 확인하고 있어요.", Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = Brand) }
+        if(today && state.hasLoaded) item {
+            val progress = if(todos.isEmpty()) 0f else day.completed.toFloat() / todos.size
+            CloudCard {
+                Text(if(state.pending.isNotEmpty()) "변경 중인 진행 상황" else "오늘의 흐름", color = Muted, style = MaterialTheme.typography.labelLarge)
+                Text("${day.completed} / ${todos.size} 완료", style = MaterialTheme.typography.titleMedium)
+                Text("${day.remaining}개 남았어요", color = Muted)
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
             }
         }
         if(next != null) item {
             Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large, border = androidx.compose.foundation.BorderStroke(2.dp, Brand)) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("✧ 지금 할 일", color = Brand); Text(localTime(next.text("dueDate"), zone), color = Muted, style = MaterialTheme.typography.bodySmall) }
+                    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { Text("지금 할 일", color = Brand); Text("예정 · ${localTime(next.text("dueDate"), zone)}", color = Muted, style = MaterialTheme.typography.bodySmall) }
                     Surface(color = Aqua, shape = CircleShape) { Text(next.child("categoryRef").text("name", next.text("category")), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = Brand, style = MaterialTheme.typography.bodySmall) }
-                    TextButton({ edit = next }, enabled = state.pending.isEmpty() && !action.busy, contentPadding = PaddingValues(0.dp)) { Text(next.text("title"), style = MaterialTheme.typography.titleLarge, color = Ink) }
+                    day.featuredGroup?.let { Text("그룹 · ${it.group!!.text("title")} · ${it.completed}/${it.total} 완료", color = Muted) }
+                    TextButton({ edit = next }, enabled = canWrite, contentPadding = PaddingValues(0.dp)) { Text(next.text("title"), style = MaterialTheme.typography.titleLarge, color = Ink) }
                     if(next.text("notes").isNotBlank()) Text(next.text("notes"))
-                    Primary("이 실천 완료하기", state.pending.isEmpty() && !action.busy) { model.toggle(next.text("id")) { changed(); publish = it.source } }
+                    Primary(if(state.pending.isNotEmpty()) "변경 확인 중…" else "이 실천 완료하기", canWrite) { model.toggle(next.text("id")) { changed(); publish = it.source } }
                 }
             }
         }
-        if(today && todos.isNotEmpty()) item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("오늘의 목록", style = MaterialTheme.typography.titleLarge)
-            OutlinedButton({ creating = true }) { Text("+ TODO 추가") }
-        } }
+        if(today) item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("오늘의 목록", style = MaterialTheme.typography.titleLarge)
+                if(day.empty) Primary("TODO 추가", !action.busy && state.pending.isEmpty()) { creating = true }
+                else OutlinedButton({ creating = true }, enabled = !action.busy && state.pending.isEmpty()) { Text("+ TODO 추가") }
+            }
+        }
         item { ActionFeedback(action); removed?.let { todo ->
             Text("TODO를 삭제했어요. 연결된 게시물과 사진은 되돌리기로 복구되지 않아요.", color = Muted)
             TextButton({ action.run {
@@ -123,40 +157,41 @@ import kotlinx.coroutines.launch
                 restoreSubmission.succeeded(); removed = null; changed()
             } }, enabled = !action.busy) { Text("삭제한 TODO 되돌리기") }
         } }
-        if(state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        if(state.error != null) item { ErrorNotice(state.error) { model.retry() } }
-        if(groups.error != null) item { ErrorNotice("그룹 이름을 불러오지 못했어요.") { groups.reload() } }
-        if(!state.loading && state.error == null && todos.isEmpty()) item { EmptyState("아직 비어 있는 하루예요", "가볍게 시작할 TODO 하나를 적어보세요.") }
-        clusters.forEach { (clusterId, entries) ->
-            val group = groupFor(entries.first())
+        if(day.empty) item { EmptyState(if(today) "오늘은 아직 담긴 실천이 없어요" else "아직 비어 있는 하루예요", "가볍게 시작할 TODO 하나를 적어보세요.") }
+        day.clusters.forEach { cluster ->
+            val clusterId = cluster.id
+            val entries = cluster.entries
+            val group = cluster.group
             if(group != null) item(key = "group/$clusterId") {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     HorizontalDivider()
-                    val summary = "${group.text("title")} · ${entries.count { it.text("completedAt").isNotBlank() }}/${entries.size} 완료"
-                    if(today) TextButton({ collapsedGroups = if(clusterId in collapsedGroups) collapsedGroups - clusterId else collapsedGroups + clusterId }) { Text(summary + if(clusterId in collapsedGroups) " · 펼치기" else " · 접기") }
+                    val summary = "${group.text("title")} · ${cluster.completed}/${cluster.total} 완료"
+                    if(today) TextButton({ collapsedGroups = if(clusterId in collapsedGroups) collapsedGroups - clusterId else collapsedGroups + clusterId }) { Text(summary + if(clusterId in collapsedSnapshot) " · 펼치기" else " · 접기") }
                     else Text(summary, style = MaterialTheme.typography.labelMedium, color = Muted)
-                    Text("다음: ${entries.firstOrNull { it.text("completedAt").isBlank() }?.text("title") ?: "모두 완료"}", color = Muted)
+                    Text("다음: ${cluster.nextTitle ?: if(state.pending.isNotEmpty()) "변경 확인 중" else "모두 완료"}", color = Muted)
                 }
             }
-            if(!today || clusterId !in collapsedGroups) items(entries, key = { it.text("id") }) { todo ->
+            if(!today || clusterId !in collapsedSnapshot) items(entries, key = { it.id }) { record ->
+            val todo = record.source
             val completed = todo.text("completedAt").isNotBlank()
             Surface(color = if(completed) Aqua else MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium, border = if(completed) null else BorderStroke(1.dp, Brand), modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Surface(color = MaterialTheme.colorScheme.surface, shape = CircleShape, border = BorderStroke(2.dp, if(completed) androidx.compose.ui.graphics.Color.Transparent else Brand), modifier = Modifier.size(48.dp).toggleable(completed, enabled = !action.busy && state.pending.isEmpty(), role = Role.Checkbox, onValueChange = { model.toggle(todo.text("id")) { changed(); if(it.completedAt != null) publish = it.source } }).semantics { contentDescription = "${todo.text("title")} ${if(completed) "완료 취소" else "완료하기"}" }) {
+                    Surface(color = MaterialTheme.colorScheme.surface, shape = CircleShape, border = BorderStroke(2.dp, if(completed) androidx.compose.ui.graphics.Color.Transparent else Brand), modifier = Modifier.size(48.dp).toggleable(completed, enabled = canWrite, role = Role.Checkbox, onValueChange = { model.toggle(todo.text("id")) { changed(); if(it.completedAt != null) publish = it.source } }).semantics { contentDescription = "${todo.text("title")} ${if(completed) "완료 취소" else "완료하기"}"; stateDescription = if(record.id in state.pending) "변경 확인 중" else if(completed) "완료" else "미완료" }) {
                         Box(contentAlignment = Alignment.Center) { if(completed) Icon(Icons.Rounded.Check, null, tint = Brand) }
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(todo.child("categoryRef").text("name", todo.text("category")), color = Brand, style = MaterialTheme.typography.bodySmall)
                         Text(todo.text("title"), style = MaterialTheme.typography.titleMedium, color = if(completed) Muted else Ink, textDecoration = if(completed) TextDecoration.LineThrough else TextDecoration.None)
+                        if(record.id in state.pending) Text("변경 확인 중", color = Brand, style = MaterialTheme.typography.bodySmall)
+                        else if(completed) Text("완료 · ${Instant.parse(record.completedAt).atZone(zone).format(java.time.format.DateTimeFormatter.ofPattern("M월 d일 HH:mm"))}", color = Muted, style = MaterialTheme.typography.bodySmall)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) { Icon(Icons.Rounded.Schedule, null, Modifier.size(14.dp), tint = Muted); Text(localTime(todo.text("dueDate"), zone), color = Muted, style = MaterialTheme.typography.bodySmall) }
                     }
-                    ActionIcon("${todo.text("title")} 메뉴", Icons.Rounded.MoreHoriz, !action.busy && state.pending.isEmpty()) { menu = todo }
+                    ActionIcon("${todo.text("title")} 메뉴", Icons.Rounded.MoreHoriz, canWrite) { menu = todo }
                 }
             }
             }
         }
-        if(today && todos.isEmpty()) item { Primary("TODO 추가") { creating = true } }
-        item { TextButton({ model.retry(); groups.reload() }) { Text("새로고침") } }
+        item { TextButton({ model.retry(); groups.reload() }, enabled = !state.loading && !action.busy && state.pending.isEmpty()) { Text("새로고침") } }
     }
     menu?.let { todo -> NativeSheet(todo.text("title"), { menu = null }) {
         if(todo.text("notes").isNotBlank()) Text(todo.text("notes"))
@@ -166,7 +201,7 @@ import kotlinx.coroutines.launch
         if(todo.text("seriesId").isNotBlank()) TextButton({ menu = null; ended = todo }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("반복 종료") }
     } }
     ended?.let { todo -> ConfirmSheet("반복을 종료할까요?", "이 일정 이후의 반복을 종료해요. 이미 완료한 기록은 유지돼요.", "반복 종료", { ended = null }) { api.request("todos/${todo.text("id")}/series", "DELETE"); changed() } }
-    if(creating || edit != null) TodoForm(api, zone, edit, selectedDate, false, { creating = false; edit = null }) { changed() }
+    if(creating || edit != null) TodoForm(api, zone, edit, date.toString(), false, { creating = false; edit = null }) { changed() }
     publish?.let { todo -> PublishSheet(api, todo, { publish = null }, changed) }
     delete?.let { todo -> ConfirmSheet("TODO를 삭제할까요?", "선택한 할 일과 연결된 게시물·사진이 삭제돼요. 반복 일정의 다른 날짜는 유지돼요. TODO를 되돌려도 게시물과 사진은 복구되지 않아요.", "삭제", { delete = null }) { api.request("todos/${todo.text("id")}", "DELETE"); removed = todo; changed() } }
 }

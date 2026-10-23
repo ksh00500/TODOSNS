@@ -2,7 +2,7 @@
 
 기준일: 2026-10-23 (Asia/Seoul). 검사 대상: `codex/beta-core@6ab768782d52458c39c9c9a7716dd6bb42b876aa`와 로컬 정책/설계 문서 추가. 앱 코드·manifest·lockfile·workflow 변경은 없다.
 
-이 문서는 최초 개발 준비의 기준선 이력이다. 이후 코드 변경과 검사 결과는 [Android M-01](android-v1/implementation-m01.md)·[M-02 구현·검증 보고서](android-v1/implementation-m02.md)를 따른다.
+이 문서는 최초 개발 준비의 기준선 이력이다. 이후 코드 변경과 검사 결과는 [Android M-01](android-v1/implementation-m01.md)·[M-02](android-v1/implementation-m02.md)·[M-03 구현·검증 보고서](android-v1/implementation-m03.md)를 따른다.
 
 ## 1. 최초 준비 시 Codex 실행 결과
 

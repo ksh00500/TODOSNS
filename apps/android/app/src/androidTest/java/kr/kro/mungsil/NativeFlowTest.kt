@@ -891,6 +891,7 @@ class NativeFlowTest {
             }
         }
         compose.setContent { MungsilTheme { NativeApp(api, 2, me, null, {}, {}, {}) } }
+        waitText("오늘은 아직 담긴 실천이 없어요")
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("TODO 추가"))
         compose.onNodeWithText("TODO 추가").performScrollTo().performClick()
         compose.onNodeWithContentDescription("할 일").performTextInput("점심 산책 10분")
@@ -914,6 +915,80 @@ class NativeFlowTest {
         compose.waitUntil(15_000) { received.any { it.method == "POST" && it.requestUrl!!.encodedPath == "/api/v1/feed/posts" } }
         assertTrue(received.first { it.method == "POST" && it.requestUrl!!.encodedPath == "/api/v1/feed/posts" }.body.readUtf8().contains("작은 실천을 마쳤어요"))
         screenshot("today-native")
+    }
+
+    @Test fun todayDistinguishesFirstFailureFromEmptyAndKeepsSummaryAfterRefreshFailure() {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val reads = AtomicInteger(0)
+        val a = com.google.gson.JsonParser.parseString(todo).asJsonObject.apply { addProperty("id","a"); addProperty("title","먼저 할 일") }
+        val b = a.deepCopy().apply { addProperty("id","b"); addProperty("title","다음 할 일"); addProperty("dueDate","2026-09-22T04:00:00Z") }
+        val done = a.deepCopy().apply { addProperty("id","done"); addProperty("title","마친 할 일"); addProperty("completedAt","2026-09-22T02:00:00Z") }
+        dispatch { request -> if(request.requestUrl!!.encodedPath == "/api/v1/todos") when(reads.incrementAndGet()) {
+            1 -> { check(gate.await(10, java.util.concurrent.TimeUnit.SECONDS)); response("{}",503) }
+            2 -> response("[$b,$done,$a]")
+            else -> response("{}",503)
+        } else response("[]") }
+        compose.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides me.text("id")) {
+            TodosScreen(api,ZoneId.of("Asia/Seoul"),true,0,{}, {},clock = java.time.Clock.fixed(java.time.Instant.parse("2026-09-22T00:00:00Z"),java.time.ZoneOffset.UTC))
+        } } }
+        try {
+            waitText("할 일을 불러오고 있어요.")
+            compose.onNodeWithText("0 / 0 완료").assertDoesNotExist()
+            compose.onNodeWithText("오늘은 아직 담긴 실천이 없어요").assertDoesNotExist()
+        } finally { gate.countDown() }
+        waitText("서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해주세요.")
+        compose.onNodeWithText("오늘 담은 실천을 모두 마쳤어요.").assertDoesNotExist()
+        compose.onNodeWithText("다시 시도").performScrollTo().performClick()
+        waitText("1 / 3 완료")
+        compose.onNodeWithText("먼저 할 일").performScrollTo().assertExists()
+        assertEquals(1,compose.onAllNodesWithText("먼저 할 일").fetchSemanticsNodes().size)
+        compose.onNodeWithText("새로고침").performScrollTo().performClick()
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("마지막으로 확인한 목록이에요.", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("1 / 3 완료"))
+        compose.onNodeWithText("1 / 3 완료").assertExists()
+        compose.onNodeWithText("오늘은 아직 담긴 실천이 없어요").assertDoesNotExist()
+        compose.onNodeWithText("이 실천 완료하기").performScrollTo().assertIsNotEnabled()
+        assertFalse(received.any { it.method != "GET" })
+    }
+
+    @Test fun accountContextChangeDoesNotDisplayPreviousAccountsTodayRows() {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val reads = AtomicInteger(0)
+        val a = com.google.gson.JsonParser.parseString(todo).asJsonObject.apply { addProperty("title","A 계정의 비공개 실천") }
+        val b = a.deepCopy().apply { addProperty("id","b"); addProperty("title","B 계정의 실천") }
+        dispatch { request -> if(request.requestUrl!!.encodedPath == "/api/v1/todos") {
+            if(reads.incrementAndGet() == 1) response("[$a]")
+            else { check(gate.await(10,java.util.concurrent.TimeUnit.SECONDS)); response("[$b]") }
+        } else response("[]") }
+        var owner by mutableStateOf("account-a")
+        compose.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides owner) {
+            TodosScreen(api,ZoneId.of("Asia/Seoul"),true,0,{}, {})
+        } } }
+        waitText("A 계정의 비공개 실천")
+        compose.runOnIdle { owner = "account-b" }
+        try {
+            waitText("할 일을 불러오고 있어요.")
+            compose.onNodeWithText("A 계정의 비공개 실천").assertDoesNotExist()
+        } finally { gate.countDown() }
+        waitText("B 계정의 실천")
+        compose.onNodeWithText("A 계정의 비공개 실천").assertDoesNotExist()
+    }
+
+    @Test fun todayDateChangeKeepsOpenDraftsOriginalDateAndText() {
+        dispatch { response("[]") }
+        var clock by mutableStateOf<java.time.Clock>(java.time.Clock.fixed(java.time.Instant.parse("2026-09-22T14:59:59Z"),java.time.ZoneOffset.UTC))
+        compose.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides me.text("id")) {
+            TodosScreen(api,ZoneId.of("Asia/Seoul"),true,0,{}, {},clock = clock)
+        } } }
+        waitText("오늘은 아직 담긴 실천이 없어요")
+        compose.onNodeWithText("TODO 추가").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("할 일").performTextInput("자정을 넘어도 남을 초안")
+        compose.runOnIdle { clock = java.time.Clock.fixed(java.time.Instant.parse("2026-09-22T15:00:01Z"),java.time.ZoneOffset.UTC) }
+        compose.onNodeWithContentDescription("할 일").assertTextEquals("자정을 넘어도 남을 초안")
+        compose.onNodeWithText("날짜 · 2026-09-22").assertExists()
+        compose.waitUntil(10_000) { received.any { it.requestUrl!!.queryParameter("from") == "2026-09-22T15:00:00Z" } }
+        assertFalse(received.any { it.method != "GET" })
     }
 
     @Test fun completionRollbackKeepsRetryKeyButNewCompletionUsesNewKey() {

@@ -7,15 +7,25 @@ import kotlinx.coroutines.flow.*
 import kr.kro.mungsil.data.*
 import java.time.*
 
-data class TodoUiState(val rows: List<TodoRecord> = emptyList(), val loading: Boolean = true, val error: String? = null, val pending: Set<String> = emptySet())
-class TodoModel(private val repository: TodoSource) : ViewModel() {
+data class TodoUiState(
+    val rows: List<TodoRecord> = emptyList(), val loading: Boolean = true,
+    val loadError: String? = null, val mutationError: String? = null,
+    val pending: Set<String> = emptySet(), val hasLoaded: Boolean = false,
+    val lastLoadedAt: Instant? = null, val date: LocalDate? = null, val zoneId: String? = null,
+) {
+    val error: String? get() = listOfNotNull(mutationError, loadError).distinct().joinToString("\n").ifEmpty { null }
+    val canWrite: Boolean get() = hasLoaded && !loading && loadError == null && pending.isEmpty()
+    // A recomposition can precede the load effect for the new heading.
+    fun forQuery(date: LocalDate, zone: ZoneId): TodoUiState =
+        if(this.date == date && zoneId == zone.id) this else TodoUiState(date = date, zoneId = zone.id)
+}
+class TodoModel(private val repository: TodoSource, private val clock: Clock = Clock.systemUTC()) : ViewModel() {
     private val mutable = MutableStateFlow(TodoUiState())
     val state = mutable.asStateFlow()
     private var query: Pair<LocalDate, ZoneId>? = null
     private var queuedRefresh: Pair<LocalDate, ZoneId>? = null
     private var job: Job? = null
     private var epoch = 0L
-    private var mutationError: String? = null
     private val retryKeys = mutableMapOf<Pair<String, Boolean>, String>()
     fun load(date: LocalDate, zone: ZoneId) {
         val requested = date to zone
@@ -26,7 +36,7 @@ class TodoModel(private val repository: TodoSource) : ViewModel() {
                 epoch++
                 job?.cancel()
                 // Do not display the previous day's rows under a new date heading.
-                mutable.value = TodoUiState(pending = mutable.value.pending)
+                mutable.value = TodoUiState(pending = mutable.value.pending, date = date, zoneId = zone.id)
             }
             return
         }
@@ -34,29 +44,33 @@ class TodoModel(private val repository: TodoSource) : ViewModel() {
         query = requested
         val generation = ++epoch
         job?.cancel()
-        mutable.value = TodoUiState(rows = if(same) mutable.value.rows else emptyList(), error = mutationError)
+        mutable.value = if(same) mutable.value.copy(loading = true, loadError = null)
+            else TodoUiState(date = date, zoneId = zone.id)
         job = viewModelScope.launch {
             try {
                 val rows = repository.list(date, zone)
                 currentCoroutineContext().ensureActive()
-                if(generation == epoch) mutable.value = TodoUiState(rows.toList(), false, mutationError)
+                if(generation == epoch) mutable.value = mutable.value.copy(rows = rows.toList(), loading = false,
+                    loadError = null, hasLoaded = true, lastLoadedAt = clock.instant())
             } catch(e: CancellationException) { throw e }
             catch(e: Exception) {
-                if(generation == epoch) mutable.value = mutable.value.copy(loading = false,
-                    error = listOfNotNull(mutationError, friendlyError(e)).distinct().joinToString("\n"))
+                if(generation == epoch) {
+                    val denied = e is ApiException && e.status in listOf(401, 403)
+                    mutable.value = if(denied) TodoUiState(loading = false, loadError = friendlyError(e), date = date, zoneId = zone.id)
+                        else mutable.value.copy(loading = false, loadError = friendlyError(e))
+                }
             }
         }
     }
-    fun retry() { mutationError = null; query?.let { load(it.first, it.second) } }
+    fun retry() { mutable.value = mutable.value.copy(mutationError = null); query?.let { load(it.first, it.second) } }
     fun toggle(id: String, saved: (TodoRecord) -> Unit) {
         val before = mutable.value.rows.firstOrNull { it.id == id } ?: return
-        if(mutable.value.pending.isNotEmpty() || mutable.value.loading) return
+        if(!mutable.value.canWrite) return
         val generation = epoch
         val operation = id to (before.completedAt == null)
         val key = retryKeys.getOrPut(operation) { newKey() }
-        mutationError = null
         val optimistic = before.withCompletion(before.completedAt == null)
-        mutable.value = mutable.value.copy(rows = mutable.value.rows.map { if(it.id == id) optimistic else it }, pending = setOf(id), error = null)
+        mutable.value = mutable.value.copy(rows = mutable.value.rows.map { if(it.id == id) optimistic else it }, pending = setOf(id), mutationError = null)
         viewModelScope.launch {
             var confirmed: TodoRecord? = null
             try {
@@ -72,8 +86,7 @@ class TodoModel(private val repository: TodoSource) : ViewModel() {
                 throw e
             } catch(e: Exception) {
                 if(generation == epoch) {
-                    mutationError = friendlyError(e)
-                    mutable.value = mutable.value.copy(rows = mutable.value.rows.map { if(it.id == id) before else it }, error = mutationError)
+                    mutable.value = mutable.value.copy(rows = mutable.value.rows.map { if(it.id == id) before else it }, mutationError = friendlyError(e))
                 }
             } finally {
                 mutable.value = mutable.value.copy(pending = emptySet())

@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
 import kr.kro.mungsil.data.*
 import kr.kro.mungsil.ui.TodoModel
+import kr.kro.mungsil.ui.todoDayPresentation
 import org.junit.*
 import org.junit.Assert.*
 import java.io.IOException
@@ -145,5 +146,89 @@ class TodoModelTest {
         source.write = { row() }
         model.toggle("todo") {}; advanceUntilIdle()
         assertNotEquals(uncertainUndoKey, source.keys.last())
+    }
+    @Test fun firstFailureIsUnknownAndSuccessfulEmptyReadIsKnownEmpty() = runTest(dispatcher) {
+        val source = Source(); val model = TodoModel(source)
+        source.read = { throw IOException() }
+        model.load(date, zone); advanceUntilIdle()
+        assertFalse(model.state.value.hasLoaded); assertNotNull(model.state.value.loadError)
+        assertNull(model.state.value.lastLoadedAt); assertFalse(todoDayPresentation(model.state.value, emptyList(), true).empty)
+        source.read = { emptyList() }
+        model.retry(); advanceUntilIdle()
+        assertTrue(model.state.value.hasLoaded); assertNull(model.state.value.error)
+        assertTrue(todoDayPresentation(model.state.value, emptyList(), true).empty)
+    }
+    @Test fun refreshFailureKeepsRowsAndLastConfirmationAndBlocksStaleWrites() = runTest(dispatcher) {
+        val checked = Instant.parse("2026-10-23T01:02:03Z")
+        val source = Source(listOf(row(), row("done", serverTime)))
+        val model = TodoModel(source, Clock.fixed(checked, ZoneOffset.UTC))
+        model.load(date, zone); advanceUntilIdle()
+        val original = model.state.value.rows
+        val response = CompletableDeferred<List<TodoRecord>>()
+        source.read = { response.await() }
+        model.retry(); runCurrent()
+        assertTrue(model.state.value.hasLoaded); assertTrue(model.state.value.loading)
+        assertEquals(original, model.state.value.rows); assertFalse(model.state.value.canWrite)
+        response.completeExceptionally(IOException()); advanceUntilIdle()
+        assertEquals(original, model.state.value.rows); assertEquals(checked, model.state.value.lastLoadedAt)
+        assertTrue(model.state.value.hasLoaded); assertNotNull(model.state.value.loadError)
+        model.toggle("todo") { fail("Stale rows must be refreshed before writing") }; runCurrent()
+        assertTrue(source.keys.isEmpty())
+        source.read = { listOf(row("fresh")) }
+        model.retry(); advanceUntilIdle()
+        assertNull(model.state.value.loadError); assertTrue(model.state.value.canWrite)
+        assertEquals("fresh", model.state.value.rows.single().id)
+    }
+    @Test fun refreshFailureOfPreviouslyEmptyListIsNotFreshEmptyState() = runTest(dispatcher) {
+        val source = Source(emptyList()); val model = TodoModel(source)
+        model.load(date, zone); advanceUntilIdle()
+        source.read = { throw IOException() }
+        model.retry(); advanceUntilIdle()
+        assertTrue(model.state.value.hasLoaded); assertTrue(model.state.value.rows.isEmpty())
+        assertNotNull(model.state.value.loadError)
+        assertFalse(todoDayPresentation(model.state.value, emptyList(), true).empty)
+    }
+    @Test fun permissionLossClearsPreviouslyLoadedPrivateRows() = runTest(dispatcher) {
+        for(status in listOf(401, 403)) {
+            val source = Source(); val model = TodoModel(source)
+            model.load(date, zone); advanceUntilIdle()
+            source.read = { throw ApiException(status, "다시 확인해주세요.") }
+            model.retry(); advanceUntilIdle()
+            assertTrue(model.state.value.rows.isEmpty()); assertFalse(model.state.value.hasLoaded)
+            assertNull(model.state.value.lastLoadedAt); assertFalse(model.state.value.canWrite)
+            assertNotNull(model.state.value.loadError)
+        }
+    }
+    @Test fun newHeadingHidesPreviousDateOrTimezoneBeforeLoadEffectRuns() = runTest(dispatcher) {
+        val source = Source(); val model = TodoModel(source)
+        model.load(date, zone); advanceUntilIdle()
+        val known = model.state.value
+        assertEquals(known, known.forQuery(date, zone))
+        for(hidden in listOf(known.forQuery(date.plusDays(1), zone), known.forQuery(date, ZoneId.of("UTC")))) {
+            assertTrue(hidden.rows.isEmpty()); assertFalse(hidden.hasLoaded)
+            assertNull(hidden.lastLoadedAt); assertFalse(hidden.canWrite)
+        }
+    }
+    @Test fun dateChangeClearsPreviousFailureAndConfirmationWhileNewReadWaits() = runTest(dispatcher) {
+        val source = Source(); val model = TodoModel(source)
+        model.load(date, zone); advanceUntilIdle()
+        source.read = { throw IOException() }; model.retry(); advanceUntilIdle()
+        val response = CompletableDeferred<List<TodoRecord>>(); source.read = { response.await() }
+        model.load(date.plusDays(1), zone); runCurrent()
+        assertFalse(model.state.value.hasLoaded); assertNull(model.state.value.error)
+        assertNull(model.state.value.lastLoadedAt); assertEquals(date.plusDays(1), model.state.value.date)
+        response.complete(emptyList()); advanceUntilIdle()
+        assertTrue(model.state.value.hasLoaded)
+    }
+    @Test fun queuedRefreshKeepsMutationAndReadFailuresDistinct() = runTest(dispatcher) {
+        val source = Source(listOf(row(completed = serverTime))); val model = TodoModel(source)
+        model.load(date, zone); advanceUntilIdle()
+        val response = CompletableDeferred<TodoRecord>(); source.write = { response.await() }
+        model.toggle("todo") {}; runCurrent(); model.load(date, zone)
+        source.read = { throw IOException() }
+        response.completeExceptionally(ApiException(400, "게시물을 먼저 삭제해주세요.")); advanceUntilIdle()
+        assertEquals("게시물을 먼저 삭제해주세요.", model.state.value.mutationError)
+        assertNotNull(model.state.value.loadError); assertEquals(serverTime, model.state.value.rows.single().completedAt)
+        assertTrue(model.state.value.error!!.contains("게시물")); assertFalse(model.state.value.canWrite)
     }
 }
