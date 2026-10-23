@@ -19,6 +19,7 @@ GitHub에서 PDF를 열어 확인하거나 파일 화면의 다운로드 버튼�
 
 | 문서 | 내용 |
 | --- | --- |
+| [Android V1 상세 설계·화면 초안](android-v1/README.md) | 오늘·작성·완료·기록 화면, API/상태 계약과 검수 시나리오 |
 | [설계 계획](design-plan.md) | 단계별 산출물·완료 조건, 핵심 구현 순서, UX·API·데이터 설계 원칙 |
 | [결정 로그](decision-log.md) | 사용자 확정 결정과 합의가 필요한 정책 |
 | [Android 우선 백로그](android-first-backlog.md) | 사용자 흐름, 재사용 코드, 첫 구현 작업·검증 기준 |
