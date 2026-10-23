@@ -107,22 +107,39 @@ class HistoryFlowTest {
             else -> response("""{"count":0}""")
         } }
         compose.setContent { MungsilTheme { NativeApp(api,2,fixture.child("user"),null,{},{},{}) } }
-        waitText("오늘은 아직 담긴 실천이 없어요")
+        compose.onNode(hasText("오늘") and hasClickAction()).assertIsSelected()
         compose.onNode(hasText("마이") and hasClickAction()).performClick()
         waitText("테스트 구름")
         scrollTo("완료 기록 보기"); compose.onNodeWithText("완료 기록 보기").performClick()
+        waitText("조회 기간 · 2026-10-17 ~ 2026-10-23")
+        scrollTo("기간 전체 1개 완료")
         waitText("기간 전체 1개 완료")
+        capture("history-list")
         listOf("오늘","탐색","TODO","챌린지","마이").forEach { compose.onNode(hasText(it) and hasClickAction()).assertExists() }
         compose.onNode(hasText("마이") and hasClickAction()).assertIsSelected()
         scrollTo("마친 실천 h-001"); compose.onNodeWithText("마친 실천 h-001").performClick()
         waitText("완료 기록 상세")
-        compose.onNodeWithText("예정 · 2026년 10월 9일 21:00").assertExists()
-        compose.onNodeWithText("일정에서 보기").performScrollTo().performClick()
+        compose.onNode(hasText("예정 · 2026년 10월 9일 21:00") and hasAnyAncestor(isDialog())).assertExists()
+        capture("history-detail")
+        compose.onNodeWithText("일정에서 보기").performScrollTo().assertIsDisplayed()
+        capture("history-detail-action")
+        compose.onNodeWithText("일정에서 보기").performClick()
         waitText("TODO 일정")
         compose.onNode(hasText("TODO") and hasClickAction()).assertIsSelected()
         compose.waitUntil(10_000) { received.any { it.requestUrl!!.encodedPath == "/api/v1/todos" && it.requestUrl!!.queryParameter("from") == "2026-10-09T04:00:00Z" } }
         val schedule = received.last { it.requestUrl!!.encodedPath == "/api/v1/todos" }.requestUrl!!
         assertEquals("2026-10-10T03:59:59.999Z",schedule.queryParameter("to"))
         assertTrue(received.all { it.method == "GET" })
+        capture("history-schedule")
+    }
+    private fun capture(name: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val label = InstrumentationRegistry.getArguments().getString("screenshotLabel") ?: return
+        compose.mainClock.advanceTimeByFrame(); compose.waitForIdle()
+        Thread.sleep(300)
+        val image = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val dir = java.io.File(instrumentation.targetContext.getExternalFilesDir(null),"native-verification/$label").apply { mkdirs() }
+        java.io.File(dir,"$name.png").outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        image.recycle()
     }
 }

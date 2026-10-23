@@ -4,6 +4,8 @@
 
 이 문서는 최초 개발 준비의 기준선 이력이다. 이후 코드 변경과 검사 결과는 [Android M-01](android-v1/implementation-m01.md)·[M-02](android-v1/implementation-m02.md)·[M-03](android-v1/implementation-m03.md)·[M-04](android-v1/implementation-m04.md)·[M-05 구현·검증 보고서](android-v1/implementation-m05.md)를 따른다. M-04에서는 격리 PostgreSQL의 기록 API 검사를 실제 실행했고 M-05에서는 Android 기록 화면과 unit117·빌드/lint를 확인했다. M-05의 연결 UI·실제 DB는 미실행이며 최초 준비 당시의 이력과 구분한다.
 
+최신 [M-06 연결·통합 검증](android-v1/implementation-m06.md)에서는 격리 PostgreSQL/Redis/MinIO와 API138·Web53을 skip 없이 실행하고 컨테이너 ADB·AOSP API29 연결 UI를 준비했다. 아래 ADB/에뮬레이터 미준비 기록은 **최초 시점 이력**이다. API35의 System UI ANR과 최종 API29의 실행 결과를 구분한다. 재현은 [M-06 도구](../../infra/verification/android-v1/README.md)를 따른다.
+
 ## 1. 최초 준비 시 Codex 실행 결과
 
 | 항목 | 현재 결과 | 근거·범위 |

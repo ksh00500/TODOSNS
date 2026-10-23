@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.time.*
 import java.util.UUID
@@ -46,7 +45,13 @@ class Api(val baseUrl: String, private val store: SessionStore) {
     private val root = baseUrl.toHttpUrl()
     private val http = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS).callTimeout(45, TimeUnit.SECONDS)
+        // A write must not reuse an idle socket or replay an uncertain request.
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.MINUTES))
         .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build()
+    // Reads may recover when the server has already closed a pooled connection.
+    // Keep write/auth/upload transport and their explicit retry keys separate.
+    private val readHttp = http.newBuilder().connectionPool(ConnectionPool())
+        .retryOnConnectionFailure(true).build()
     private val sessionMutex = Mutex()
     @Volatile var accessToken: String? = null
         private set
@@ -65,8 +70,16 @@ class Api(val baseUrl: String, private val store: SessionStore) {
         if (token != null) builder.header("Authorization", "Bearer $token")
         if (cookie != null) builder.header("Cookie", "mungsil_refresh=$cookie")
         if (key != null) builder.header("Idempotency-Key", key)
-        builder.method(method, if (method == "GET") null else (body ?: json()).toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
-        http.newCall(builder.build()).execute().use { response ->
+        val payload = if(method == "GET") null else object : RequestBody() {
+            private val bytes = (body ?: json()).toString().toByteArray(Charsets.UTF_8)
+            override fun contentType() = "application/json; charset=utf-8".toMediaType()
+            override fun contentLength() = bytes.size.toLong()
+            override fun isOneShot() = true
+            override fun writeTo(sink: okio.BufferedSink) { sink.write(bytes) }
+        }
+        builder.method(method,payload)
+        val client = if(method == "GET") readHttp else http
+        client.newCall(builder.build()).execute().use { response ->
             val raw = response.body?.string().orEmpty()
             val value = runCatching { JsonParser.parseString(raw) }.getOrDefault(JsonNull.INSTANCE)
             if (!response.isSuccessful) {
@@ -173,6 +186,7 @@ class Api(val baseUrl: String, private val store: SessionStore) {
             val body = object : RequestBody() {
                 override fun contentType() = mime.toMediaType()
                 override fun contentLength() = bytes.size.toLong()
+                override fun isOneShot() = true
                 override fun writeTo(sink: okio.BufferedSink) {
                     var offset = 0
                     while(offset < bytes.size) { val count = minOf(8192, bytes.size-offset); sink.write(bytes, offset, count); offset += count; progress(offset.toFloat()/bytes.size) }

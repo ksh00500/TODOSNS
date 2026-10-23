@@ -21,6 +21,55 @@ class ApiTest {
     private fun session(token: String, refresh: String) = MockResponse().setBody("""{"accessToken":"$token","user":{"id":"u"}}""")
         .addHeader("Set-Cookie", "mungsil_refresh=$refresh; HttpOnly; Path=/api/v1/auth")
 
+    @Test fun disconnectedReusedReadConnectionRecoversWithoutLosingTheQuery() = runBlocking {
+        server.enqueue(MockResponse().setBody("{}"))
+        api.request("todos/history",authenticated = false)
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+        server.enqueue(MockResponse().setBody("""{"total":55}"""))
+        val query = mapOf("fromDate" to "2026-10-17", "toDate" to "2026-10-23", "cursor" to "synthetic-position", "limit" to "20")
+        assertEquals(55,api.request("todos/history",query = query,authenticated = false).obj().number("total"))
+        server.takeRequest()
+        val interrupted = server.takeRequest(); val recovered = server.takeRequest()
+        assertEquals("GET",recovered.method); assertEquals(interrupted.requestUrl,recovered.requestUrl)
+        assertEquals("synthetic-position",recovered.requestUrl!!.queryParameter("cursor"))
+        assertEquals(3,server.requestCount)
+    }
+
+    @Test fun disconnectedWriteIsNotAutomaticallyReplayed() = runBlocking {
+        server.enqueue(MockResponse().setBody("{}"))
+        api.request("todos/history",authenticated = false)
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+        server.enqueue(MockResponse().setBody("""{"id":"unexpected-replay"}"""))
+        val failure = runCatching { api.request("todos","POST",json("title" to "한 번만 전송"),key = "same-request-key") }.exceptionOrNull()
+        assertTrue(failure is java.io.IOException)
+        assertEquals(2,server.requestCount)
+        server.takeRequest(); val sent = server.takeRequest()
+        assertEquals("POST",sent.method); assertEquals("same-request-key",sent.getHeader("Idempotency-Key"))
+    }
+
+    @Test fun laterWritesUseFreshConnectionsInsteadOfIdlePooledSockets() = runBlocking {
+        server.enqueue(MockResponse().setBody("{}")); server.enqueue(MockResponse().setBody("{}"))
+        api.request("todos","POST",json("title" to "첫 실천"),key = "first-write")
+        api.request("todos","POST",json("title" to "다음 실천"),key = "next-write")
+        val first = server.takeRequest(); val next = server.takeRequest()
+        assertEquals(0,first.sequenceNumber); assertEquals(0,next.sequenceNumber)
+        assertEquals("first-write",first.getHeader("Idempotency-Key")); assertEquals("next-write",next.getHeader("Idempotency-Key"))
+        assertEquals(2,server.requestCount)
+    }
+
+    @Test fun serverRetryHintCannotReplayAWriteBeforeExplicitResultConfirmation() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(503).setHeader("Retry-After","0").setBody("{}"))
+        server.enqueue(MockResponse().setBody("""{"id":"confirmed"}"""))
+        val body = json("title" to "결과를 확인할 실천")
+        val error = runCatching { api.request("todos","POST",body,key = "unchanged-key") }.exceptionOrNull() as ApiException
+        assertEquals(503,error.status); assertEquals(1,server.requestCount)
+        val first = server.takeRequest()
+        assertEquals("confirmed",api.request("todos","POST",body,key = "unchanged-key").obj().text("id"))
+        val confirmed = server.takeRequest()
+        assertEquals(first.getHeader("Idempotency-Key"),confirmed.getHeader("Idempotency-Key"))
+        assertEquals(first.body.readUtf8(),confirmed.body.readUtf8()); assertEquals(2,server.requestCount)
+    }
+
     @Test fun googleProfileRequiredDoesNotPersistTokenAndCompletionUsesServerSession() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(400).setBody("""{"code":"GOOGLE_PROFILE_REQUIRED","message":"가입 정보를 확인해주세요."}"""))
         val error = runCatching { api.signInGoogle("synthetic-google-token") }.exceptionOrNull() as ApiException

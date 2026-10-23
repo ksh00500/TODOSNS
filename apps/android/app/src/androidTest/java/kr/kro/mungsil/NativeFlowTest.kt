@@ -942,6 +942,7 @@ class NativeFlowTest {
         waitText("1 / 3 완료")
         compose.onNodeWithText("먼저 할 일").performScrollTo().assertExists()
         assertEquals(1,compose.onAllNodesWithText("먼저 할 일").fetchSemanticsNodes().size)
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("새로고침"))
         compose.onNodeWithText("새로고침").performScrollTo().performClick()
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
         compose.waitUntil(10_000) { compose.onAllNodesWithText("마지막으로 확인한 목록이에요.", substring = true).fetchSemanticsNodes().isNotEmpty() }

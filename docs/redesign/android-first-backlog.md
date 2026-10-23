@@ -38,11 +38,11 @@
 | A-02 | 개인 실천 흐름 상세 | [V1 화면/상태·와이어프레임](android-v1/README.md) | A-01의 미정 항목은 가정 표시 | 상세 초안 작성·합의 대기 |
 | A-03 | 공통 네이티브 계약 | [NativeSheet·복원·접근성 초안](android-v1/screen-spec.md) | A-02 | 초안 작성·연결 검증 미실행 |
 | A-04 | 권한·API·데이터 변화표 | [현행/추가 API·상태 계약](android-v1/contracts-and-state.md) | A-02 | 초안 작성·기록 API는 제안 |
-| A-05 | 개인 실천 구현 묶음 | F-03~05/13의 정상·실패·권한 검증 | A-03~04 | M-01~05 완료·취소/폼 복원/오늘/기록 API·Android 구현·검사. M-06 연결/통합 검증 미착수 |
+| A-05 | 개인 실천 구현 묶음 | F-03~05/13의 정상·실패·권한 검증 | A-03~04 | M-01~05 구현·검사. M-06 실제 DB/S3·API/Web·API29 연결 실행, 상세 범위/미검증은 보고서 |
 | A-06 | 선택적 게시 설계·구현 | 공개 범위·미디어·완료 취소 정책을 반영한 F-08~09 | A-05, P-03~04 | 구현 미착수 |
 | A-07 | 응원·가져오기 설계·구현 | F-10/12와 원본 비공개/삭제·중복 처리 검사 | A-06, P-05 | 구현 미착수 |
 | A-08 | 공개 안전·통합 | 신고·차단·탈퇴와 합성 DB/S3/소켓 통합, 웹 계약 회귀 | A-05~07 | 공개 전 필수 |
-| A-09 | 기기·출시 검증 계획 | 연결 시험·실기기·실제 Google/FCM·release 서명 별도 결과 | 해당 환경·키·승인 | 미검증 |
+| A-09 | 기기·출시 검증 계획 | 연결 시험·실기기·실제 Google/FCM·release 서명 별도 결과 | 해당 환경·키·승인 | API29 일부 연결 검사. API35/실기기·Google/FCM·release 미검증 |
 
 ## 4. 기능별 검증 기준
 
@@ -55,3 +55,5 @@
 | 배포·릴리스 | 정확한 SHA·서명 산출물·대상별 검증 | Debug 성공으로 Play 배포 완료 판정 |
 
 현재 화면·API 설계 조사는 `887fdef`의 정적 코드 기준이다. [M-01](android-v1/implementation-m01.md)·[M-02](android-v1/implementation-m02.md)·[M-03](android-v1/implementation-m03.md)·[M-04](android-v1/implementation-m04.md)·[M-05 구현·검증 결과](android-v1/implementation-m05.md)는 후속 코드 결과다. M-04 기록 API의 실제 PostgreSQL/HTTP, M-05 Android unit·빌드/lint 검사는 수행했고, M-06·다른 DB/스토리지·연결 UI 시나리오는 별도다. A-01의 정책 합의 완료를 의미하지 않는다.
+
+최신 실제 서비스/연결 실행 범위는 [M-06 보고서](android-v1/implementation-m06.md)를 따른다. 위 M-04/05의 미검증 표현은 각 시점 이력으로 보존한다.
