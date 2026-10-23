@@ -2,7 +2,7 @@
 
 문서 ID: AND-V1-QA-001 · v0.1 · 2026-10-23 (Asia/Seoul)
 
-이 문서는 상세 설계에서 정의한 시험과 작업이다. 원래 초안 작성 당시에는 실행하지 않았다. 후속 구현의 실제 실행 범위는 [M-01](implementation-m01.md)·[M-02](implementation-m02.md)·[M-03](implementation-m03.md)·[M-04](implementation-m04.md) 보고서를 따르며, 전체 AT 시나리오의 통과를 의미하지 않는다. 이전 54개 Android unit 결과는 `887fdef`의 기준선이다.
+이 문서는 상세 설계에서 정의한 시험과 작업이다. 원래 초안 작성 당시에는 실행하지 않았다. 후속 구현의 실제 실행 범위는 [M-01](implementation-m01.md)·[M-02](implementation-m02.md)·[M-03](implementation-m03.md)·[M-04](implementation-m04.md)·[M-05](implementation-m05.md) 보고서를 따르며, 전체 AT 시나리오의 통과를 의미하지 않는다. 이전 54개 Android unit 결과는 `887fdef`의 기준선이다.
 
 ## 1. 요구사항 추적
 
@@ -51,10 +51,10 @@
 | M-02 | `TodoForm` 초안 모델·dirty·제출 복원과 재시도 | AT-04~08/17/19. 날짜 정밀도·반복/관계 보존 | 구현·unit/합성 HTTP 통과, 실제 DB/기기 복원·연결 UI 미검증 |
 | M-03 | 오늘 정보 위계·날짜·빈/오류/갱신/처리 중 UI | AT-01~03/09/18/21, 기존 5탭/그룹 계약 유지 | 구현·unit/빌드/lint 통과, 연결 UI·실제 복귀/자정·접근성 미검증 |
 | M-04 | 공유 `TodoHistoryPageDto`·server history 조회·권한/커서/total | AT-14~16/20. 실제 DB와 기간·커서 의미 확인 | E-001 개발 기본값으로 구현, 실제 PostgreSQL/HTTP 검사 통과. Android 연결·운영 별도 |
-| M-05 | `me` 내부 기록 진입·History Repository/Model·화면 | AT-14~16/18~21, 새 6번째 탭 없음 | M-04 이후, 미착수 |
+| M-05 | `me` 내부 기록 진입·History Repository/Model·화면 | AT-14~16/18~21, 새 6번째 탭 없음 | 구현·검사 범위는 M-05 보고서. 연결 UI·실제 계정 전환·접근성은 미검증 |
 | M-06 | Compose·실제 합성 서비스 통합·웹 회귀 | 실제 실행 결과·환경 부족을 구분해 보고 | 연결 기기·합성 DB/스토리지 필요 |
 
-M-01~04의 후속 구현은 위 보고서와 결정 로그를 따른다. M-04는 새 읽기 endpoint와 공용 DTO를 추가했으며 인덱스/migration을 생성하지 않았다. 미정 제품 정책과 이번 개발 기본값을 구분한다.
+M-01~05의 후속 구현은 위 보고서와 결정 로그를 따른다. M-04는 새 읽기 endpoint와 공용 DTO를 추가했으며 인덱스/migration을 생성하지 않았다. M-05는 이 endpoint에 Android 화면을 연결한다. 미정 제품 정책과 이번 개발 기본값을 구분한다.
 
 ## 4. 변경 단위의 완료 정의
 

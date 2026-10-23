@@ -80,4 +80,4 @@ GET /api/v1/todos/history?fromDate=2026-10-17&toDate=2026-10-23&limit=20
 
 ## 5. 구현 범위
 
-새 endpoint·DTO·전용 서비스·기록 조회만 추가한다. schema/migration·게시·완료/취소·포인트·파기 정책을 변경하지 않는다. 서명 키는 기존 서버 설정을 사용하고 새 비밀값을 코드/Git에 저장하지 않는다. 현재 API 코드와 실제 PostgreSQL 검증이 존재하며 Android 화면은 M-05 후속이다.
+M-04에서 새 endpoint·DTO·전용 서비스·기록 조회를 추가했다. schema/migration·게시·완료/취소·포인트·파기 정책은 변경하지 않았다. 서명 키는 기존 서버 설정을 사용하고 새 비밀값을 코드/Git에 저장하지 않는다. API 코드와 실제 PostgreSQL 검증이 존재하며, [M-05](implementation-m05.md)에서 Android 화면을 연결했다. 운영 endpoint 배포와 연결 기기 검증은 별도다.

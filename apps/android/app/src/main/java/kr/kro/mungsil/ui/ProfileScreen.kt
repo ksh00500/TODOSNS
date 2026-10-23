@@ -53,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
         } }
         if(state.profile.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         if(state.profile.error != null) item { ErrorNotice(state.profile.error, model::load) }
+        if(profile == null) item { HistoryEntry(navigate) }
         if(profile != null) {
             item { Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.padding(top = 8.dp, bottom = 8.dp).size(96.dp), contentAlignment = Alignment.Center) {
@@ -104,6 +105,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
                     } }
                 } }
             }
+            item { HistoryEntry(navigate) }
             item { ProfileSectionHeading("나의 TODO 그룹", state.groups.data?.let { "${it.size}개의 그룹" }) { TextButton({ navigate("groups") }) { Text("그룹 관리") } } }
             if(state.groups.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if(state.groups.error != null) item { ErrorNotice(state.groups.error, model::retryGroups) }
@@ -180,6 +182,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
         }
     }
 
+}
+
+@Composable private fun HistoryEntry(navigate: (String) -> Unit) {
+    CloudCard {
+        Text("실천 기록", style = MaterialTheme.typography.titleMedium)
+        Text("완료한 날짜별로 나의 실천을 확인해요.", color = Muted)
+        Primary("완료 기록 보기") { navigate("history") }
+    }
 }
 
 @Composable private fun ProfileNumber(label: String, count: Int, modifier: Modifier, open: () -> Unit) {

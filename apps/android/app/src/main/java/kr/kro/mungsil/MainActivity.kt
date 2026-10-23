@@ -92,7 +92,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     var pendingPush by rememberSaveable { mutableStateOf("") }
     var emailLink by remember { mutableStateOf<AppLink?>(null) }
     var previousSession by remember { mutableIntStateOf(session) }
-    LaunchedEffect(pattern) { roots.indexOf(pattern).takeIf { it >= 0 }?.let { tab = it } }
+    LaunchedEffect(pattern) { roots.indexOf(when { pattern == "history" -> "me"; pattern.startsWith("schedule/") -> "todos"; else -> pattern }).takeIf { it >= 0 }?.let { tab = it } }
     val authenticated = session == 2
     val zone = remember(user.text("timezone")) { runCatching { ZoneId.of(user.text("timezone", "Asia/Seoul")) }.getOrDefault(ZoneId.of("Asia/Seoul")) }
     val changed: () -> Unit = { revision++ }
@@ -161,17 +161,25 @@ class AppModel(application: Application) : AndroidViewModel(application) {
                         } } } }
                     } }) { padding ->
                         NavHost(nav, startDestination = "today", modifier = Modifier.padding(padding).consumeWindowInsets(padding).imePadding()) {
-                            val destinations = roots + listOf("push/{id}", "search?query={query}", "post/{id}", "challenge/{id}", "profile/{handle}", "chat/{kind}/{id}", "inbox", "notifications", "blocks", "settings", "categories", "groups", "rank", "onboarding", "connections/{id}/{direction}", "legal/{kind}", "schedule/{date}")
-                            destinations.forEach { destination -> composable(destination, arguments = if(destination.startsWith("search?")) listOf(androidx.navigation.navArgument("query") { defaultValue = "" }) else emptyList()) { backStack ->
+                            val destinations = roots + listOf("push/{id}", "search?query={query}", "post/{id}", "challenge/{id}", "profile/{handle}", "chat/{kind}/{id}", "inbox", "notifications", "blocks", "settings", "categories", "groups", "rank", "onboarding", "connections/{id}/{direction}", "legal/{kind}", "schedule/{date}?zone={zone}", "history")
+                            destinations.forEach { destination -> composable(destination, arguments = when {
+                                destination.startsWith("search?") -> listOf(androidx.navigation.navArgument("query") { defaultValue = "" })
+                                destination.startsWith("schedule/") -> listOf(androidx.navigation.navArgument("zone") { defaultValue = "" })
+                                else -> emptyList()
+                            }) { backStack ->
                                 val id = backStack.arguments?.getString("id").orEmpty()
                                 val public = destination in listOf("explore", "challenges", "push/{id}", "search?query={query}", "post/{id}", "challenge/{id}", "profile/{handle}", "legal/{kind}")
                                 if(!authenticated && !public) Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) { EmptyState("나의 실천을 시작해볼까요?", "로그인하면 이 화면으로 돌아와 기록을 이어갈 수 있어요."); Primary("로그인", onClick = requireLogin) }
                                 else when(destination) {
-                                    "today", "todos", "schedule/{date}" -> TodosScreen(api, zone, destination == "today", revision, changed, navigate, backStack.arguments?.getString("date"), user.text("nickname", "뭉실"))
+                                    "today", "todos", "schedule/{date}?zone={zone}" -> {
+                                        val scheduleZone = backStack.arguments?.getString("zone")?.takeIf(String::isNotBlank)?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: zone
+                                        TodosScreen(api, scheduleZone, destination == "today", revision, changed, navigate, backStack.arguments?.getString("date"), user.text("nickname", "뭉실"))
+                                    }
                                     "explore" -> FeedScreen(api, authenticated, revision, navigate, requireLogin, zone)
                                     "search?query={query}" -> SearchScreen(api, authenticated, backStack.arguments?.getString("query").orEmpty(), zone, navigate, requireLogin, user.text("id"))
                                     "challenges" -> ChallengesScreen(api, authenticated, revision, navigate, zone)
                                     "me" -> ProfileScreen(api, revision, changed, navigate)
+                                    "history" -> HistoryScreen(api, zone, revision, navigate)
                                     "post/{id}" -> PostScreen(api, id, authenticated, user, zone, revision, changed, navigate, requireLogin)
                                     "challenge/{id}" -> ChallengeDetailScreen(api, id, authenticated, revision, changed, navigate, requireLogin, zone)
                                     "profile/{handle}" -> PublicProfileScreen(api, backStack.arguments?.getString("handle").orEmpty(), authenticated, user, revision, changed, navigate, requireLogin)
@@ -200,5 +208,5 @@ class AppModel(application: Application) : AndroidViewModel(application) {
 private fun routeTitle(route: String): String = when(route.substringBefore('/')) {
     "post" -> "실천 기록"; "challenge" -> "챌린지"; "profile" -> "프로필"; "chat" -> "대화"; "inbox" -> "대화함"
     "push", "notifications" -> "알림"; "blocks" -> "차단한 사용자"; "settings" -> "설정"; "categories" -> "카테고리"; "groups" -> "그룹"
-    "rank" -> "뭉실 등급"; "connections" -> "함께하는 사람들"; "onboarding" -> "나의 관심사"; "legal" -> "이용 안내"; else -> "뭉실"
+    "history" -> "완료 기록"; "schedule" -> "TODO 일정"; "rank" -> "뭉실 등급"; "connections" -> "함께하는 사람들"; "onboarding" -> "나의 관심사"; "legal" -> "이용 안내"; else -> "뭉실"
 }

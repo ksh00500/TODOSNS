@@ -2,7 +2,7 @@
 
 기준일: 2026-10-23 (Asia/Seoul). 검사 대상: `codex/beta-core@6ab768782d52458c39c9c9a7716dd6bb42b876aa`와 로컬 정책/설계 문서 추가. 앱 코드·manifest·lockfile·workflow 변경은 없다.
 
-이 문서는 최초 개발 준비의 기준선 이력이다. 이후 코드 변경과 검사 결과는 [Android M-01](android-v1/implementation-m01.md)·[M-02](android-v1/implementation-m02.md)·[M-03](android-v1/implementation-m03.md)·[M-04 구현·검증 보고서](android-v1/implementation-m04.md)를 따른다. M-04에서는 격리 PostgreSQL의 기록 API 검사를 실제 실행했으며 최초 준비 당시의 DB 미검증 이력과 구분한다.
+이 문서는 최초 개발 준비의 기준선 이력이다. 이후 코드 변경과 검사 결과는 [Android M-01](android-v1/implementation-m01.md)·[M-02](android-v1/implementation-m02.md)·[M-03](android-v1/implementation-m03.md)·[M-04](android-v1/implementation-m04.md)·[M-05 구현·검증 보고서](android-v1/implementation-m05.md)를 따른다. M-04에서는 격리 PostgreSQL의 기록 API 검사를 실제 실행했고 M-05에서는 Android 기록 화면과 unit117·빌드/lint를 확인했다. M-05의 연결 UI·실제 DB는 미실행이며 최초 준비 당시의 이력과 구분한다.
 
 ## 1. 최초 준비 시 Codex 실행 결과
 
