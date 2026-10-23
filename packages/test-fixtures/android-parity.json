@@ -1,0 +1,408 @@
+{
+  "user": {
+    "id": "parity-user",
+    "email": "parity@mungsil.test",
+    "nickname": "테스트 구름",
+    "handle": "parity.cloud",
+    "role": "USER",
+    "timezone": "Asia/Seoul",
+    "lifetimePower": 120,
+    "cloudRank": "조각구름",
+    "avatarUrl": null,
+    "interests": [
+      "생활",
+      "건강"
+    ],
+    "onboardingCompleted": true
+  },
+  "profile": {
+    "id": "parity-user",
+    "handle": "parity.cloud",
+    "nickname": "테스트 구름",
+    "avatarUrl": null,
+    "bio": "작은 실천을 오래 이어가는 중이에요.",
+    "interests": [
+      "생활",
+      "건강"
+    ],
+    "timezone": "Asia/Seoul",
+    "rank": "조각구름",
+    "lifetimePower": 120,
+    "availablePoints": 90,
+    "_count": {
+      "posts": 1,
+      "followers": 3,
+      "following": 2
+    },
+    "stats": {
+      "completedCount": 12,
+      "receivedCheers": 7,
+      "copiedCount": 4
+    },
+    "earnedTitles": [
+      {
+        "titleAwarded": "산책 친구",
+        "finalRank": 1,
+        "challenge": {
+          "id": "parity-challenge",
+          "title": "함께 걷는 일주일",
+          "description": "하루 한 번 바깥 공기를 마시며 걸어요.",
+          "kind": "COMMUNITY",
+          "creator": {
+            "nickname": "산책 구름"
+          }
+        }
+      }
+    ]
+  },
+  "groups": [
+    {
+      "id": "parity-group",
+      "title": "가벼운 하루",
+      "description": "산책과 독서로 하루를 채워요.",
+      "items": [
+        {
+          "todoId": "parity-todo-1",
+          "todo": {
+            "id": "parity-todo-1",
+            "title": "점심 산책 10분",
+            "notes": "바깥 공기를 마시며 천천히 걸어요.",
+            "category": "건강",
+            "categoryId": null,
+            "categoryRef": null,
+            "dueDate": "2026-09-24T03:00:00Z",
+            "completedAt": null,
+            "visibility": "PRIVATE",
+            "repeatRule": null,
+            "seriesId": null,
+            "kind": "SINGLE"
+          }
+        },
+        {
+          "todoId": "parity-todo-2",
+          "todo": {
+            "id": "parity-todo-2",
+            "title": "책 다섯 쪽 읽기",
+            "notes": "",
+            "category": "독서",
+            "categoryId": null,
+            "categoryRef": null,
+            "dueDate": "2026-09-24T12:00:00Z",
+            "completedAt": "2026-09-24T00:00:00Z",
+            "visibility": "PUBLIC",
+            "repeatRule": null,
+            "seriesId": null,
+            "kind": "SINGLE"
+          }
+        }
+      ],
+      "_count": {
+        "copies": 2
+      }
+    }
+  ],
+  "todos": [
+    {
+      "id": "parity-todo-1",
+      "title": "점심 산책 10분",
+      "notes": "바깥 공기를 마시며 천천히 걸어요.",
+      "category": "건강",
+      "categoryId": null,
+      "categoryRef": null,
+      "dueDate": "2026-09-24T03:00:00Z",
+      "completedAt": null,
+      "visibility": "PRIVATE",
+      "repeatRule": null,
+      "seriesId": null,
+      "kind": "SINGLE"
+    },
+    {
+      "id": "parity-todo-2",
+      "title": "책 다섯 쪽 읽기",
+      "notes": "",
+      "category": "독서",
+      "categoryId": null,
+      "categoryRef": null,
+      "dueDate": "2026-09-24T12:00:00Z",
+      "completedAt": "2026-09-24T00:00:00Z",
+      "visibility": "PUBLIC",
+      "repeatRule": null,
+      "seriesId": null,
+      "kind": "SINGLE"
+    }
+  ],
+  "post": {
+    "id": "parity-post",
+    "author": {
+      "id": "parity-user",
+      "email": "parity@mungsil.test",
+      "nickname": "테스트 구름",
+      "handle": "parity.cloud",
+      "role": "USER",
+      "timezone": "Asia/Seoul",
+      "lifetimePower": 120,
+      "cloudRank": "조각구름",
+      "avatarUrl": null,
+      "interests": [
+        "생활",
+        "건강"
+      ],
+      "onboardingCompleted": true
+    },
+    "caption": "잠깐의 산책으로 오후를 가볍게 시작했어요.",
+    "todos": [
+      {
+        "id": "parity-todo-1",
+        "title": "점심 산책 10분",
+        "notes": "바깥 공기를 마시며 천천히 걸어요.",
+        "category": "건강",
+        "categoryId": null,
+        "categoryRef": null,
+        "dueDate": "2026-09-24T03:00:00Z",
+        "completedAt": null,
+        "visibility": "PRIVATE",
+        "repeatRule": null,
+        "seriesId": null,
+        "kind": "SINGLE"
+      }
+    ],
+    "todoList": null,
+    "createdAt": "2026-09-24T03:00:00Z",
+    "cheered": false,
+    "cheerCount": 2,
+    "commentCount": 0,
+    "copyCount": 1,
+    "hashtags": [
+      "작은실천"
+    ],
+    "mediaUrl": null,
+    "thumbnailUrl": null
+  },
+  "categories": [
+    {
+      "id": "health",
+      "name": "건강",
+      "baseCategory": "건강",
+      "icon": "heart",
+      "color": "blush",
+      "isDefault": true,
+      "todoCount": 1,
+      "archivedAt": null
+    },
+    {
+      "id": "reading",
+      "name": "독서",
+      "baseCategory": "독서",
+      "icon": "book",
+      "color": "lilac",
+      "isDefault": true,
+      "todoCount": 1,
+      "archivedAt": null
+    }
+  ],
+  "connections": [
+    {
+      "id": "walk-user",
+      "nickname": "산책 구름",
+      "handle": "walk.cloud",
+      "cloudRank": "조각구름",
+      "avatarUrl": null,
+      "lifetimePower": 120
+    },
+    {
+      "id": "reading-user",
+      "nickname": "독서 구름",
+      "handle": "book.cloud",
+      "cloudRank": "구름씨앗",
+      "avatarUrl": null,
+      "lifetimePower": 50
+    }
+  ],
+  "searchResults": {
+    "query": "실천",
+    "users": [
+      {
+        "id": "walk-user",
+        "nickname": "산책 구름",
+        "handle": "walk.cloud",
+        "cloudRank": "조각구름",
+        "avatarUrl": null,
+        "lifetimePower": 120
+      },
+      {
+        "id": "reading-user",
+        "nickname": "독서 구름",
+        "handle": "book.cloud",
+        "cloudRank": "구름씨앗",
+        "avatarUrl": null,
+        "lifetimePower": 50
+      }
+    ],
+    "posts": [
+      {
+        "id": "parity-post",
+        "author": {
+          "id": "parity-user",
+          "email": "parity@mungsil.test",
+          "nickname": "테스트 구름",
+          "handle": "parity.cloud",
+          "role": "USER",
+          "timezone": "Asia/Seoul",
+          "lifetimePower": 120,
+          "cloudRank": "조각구름",
+          "avatarUrl": null,
+          "interests": [
+            "생활",
+            "건강"
+          ],
+          "onboardingCompleted": true
+        },
+        "caption": "잠깐의 산책으로 오후를 가볍게 시작했어요.",
+        "todos": [
+          {
+            "id": "parity-todo-1",
+            "title": "점심 산책 10분",
+            "notes": "바깥 공기를 마시며 천천히 걸어요.",
+            "category": "건강",
+            "categoryId": null,
+            "categoryRef": null,
+            "dueDate": "2026-09-24T03:00:00Z",
+            "completedAt": null,
+            "visibility": "PRIVATE",
+            "repeatRule": null,
+            "seriesId": null,
+            "kind": "SINGLE"
+          }
+        ],
+        "todoList": null,
+        "createdAt": "2026-09-24T03:00:00Z",
+        "cheered": false,
+        "cheerCount": 2,
+        "commentCount": 0,
+        "copyCount": 1,
+        "hashtags": [
+          "작은실천"
+        ],
+        "mediaUrl": null,
+        "thumbnailUrl": null
+      }
+    ],
+    "routines": [
+      {
+        "id": "parity-routine-post",
+        "author": {
+          "id": "parity-user",
+          "email": "parity@mungsil.test",
+          "nickname": "테스트 구름",
+          "handle": "parity.cloud",
+          "role": "USER",
+          "timezone": "Asia/Seoul",
+          "lifetimePower": 120,
+          "cloudRank": "조각구름",
+          "avatarUrl": null,
+          "interests": [
+            "생활",
+            "건강"
+          ],
+          "onboardingCompleted": true
+        },
+        "caption": "작은 실천을 모아 만든 루틴이에요.",
+        "todos": [
+          {
+            "id": "parity-todo-1",
+            "title": "점심 산책 10분",
+            "notes": "바깥 공기를 마시며 천천히 걸어요.",
+            "category": "건강",
+            "categoryId": null,
+            "categoryRef": null,
+            "dueDate": "2026-09-24T03:00:00Z",
+            "completedAt": null,
+            "visibility": "PRIVATE",
+            "repeatRule": null,
+            "seriesId": null,
+            "kind": "SINGLE"
+          }
+        ],
+        "todoList": {
+          "id": "parity-group",
+          "title": "가벼운 하루",
+          "description": "산책과 독서로 하루를 채워요.",
+          "items": [
+            {
+              "todoId": "parity-todo-1",
+              "todo": {
+                "id": "parity-todo-1",
+                "title": "점심 산책 10분",
+                "notes": "바깥 공기를 마시며 천천히 걸어요.",
+                "category": "건강",
+                "categoryId": null,
+                "categoryRef": null,
+                "dueDate": "2026-09-24T03:00:00Z",
+                "completedAt": null,
+                "visibility": "PRIVATE",
+                "repeatRule": null,
+                "seriesId": null,
+                "kind": "SINGLE"
+              }
+            },
+            {
+              "todoId": "parity-todo-2",
+              "todo": {
+                "id": "parity-todo-2",
+                "title": "책 다섯 쪽 읽기",
+                "notes": "",
+                "category": "독서",
+                "categoryId": null,
+                "categoryRef": null,
+                "dueDate": "2026-09-24T12:00:00Z",
+                "completedAt": "2026-09-24T00:00:00Z",
+                "visibility": "PUBLIC",
+                "repeatRule": null,
+                "seriesId": null,
+                "kind": "SINGLE"
+              }
+            }
+          ],
+          "_count": {
+            "copies": 2
+          }
+        },
+        "createdAt": "2026-09-24T03:00:00Z",
+        "cheered": false,
+        "cheerCount": 2,
+        "commentCount": 0,
+        "copyCount": 1,
+        "hashtags": [
+          "작은실천"
+        ],
+        "mediaUrl": null,
+        "thumbnailUrl": null
+      }
+    ],
+    "tags": [
+      {
+        "id": "parity-tag",
+        "name": "산책",
+        "postCount": 2
+      }
+    ],
+    "challenges": [],
+    "counts": {
+      "all": 5,
+      "users": 2,
+      "posts": 1,
+      "routines": 1,
+      "tags": 1,
+      "challenges": 0
+    }
+  },
+  "searchSuggestions": {
+    "trendingTags": [
+      {
+        "id": "parity-tag",
+        "name": "산책",
+        "postCount": 2
+      }
+    ]
+  }
+}

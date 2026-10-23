@@ -1,11 +1,14 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "kr.kro.mungsil",
       "sha256_cert_fingerprints": [
-        "E0:D5:6B:F0:10:CF:16:E9:AF:CF:5F:13:FD:26:5C:B0:E9:E5:E8:B0:FC:E8:5E:63:B4:9A:EA:D7:AC:D9:DA:27"
+        "E0:D5:6B:F0:10:CF:16:E9:AF:CF:5F:13:FD:26:5C:B0:E9:E5:E8:B0:FC:E8:5E:63:B4:9A:EA:D7:AC:D9:DA:27",
+        "9D:E8:08:B0:08:8F:11:9E:37:FB:2F:F5:F4:C8:61:E2:F2:58:FD:6C:94:31:EE:E9:24:8E:8A:9A:67:DB:6E:B2"
       ]
     }
   }

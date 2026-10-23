@@ -189,6 +189,7 @@ model User {
 }
 
 model Session {
+  pushDevices PushDevice[]
   id         String    @id @default(cuid())
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -218,6 +219,23 @@ model VerificationToken {
   createdAt DateTime              @default(now())
 
   @@index([userId, type, expiresAt])
+}
+
+model PushDevice {
+  id            String   @id
+  token         String   @db.VarChar(4096)
+  tokenHash     String   @unique @db.Char(64)
+  sessionId     String
+  session       Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  cursorAt      DateTime @default(now())
+  cursorId      String   @default("")
+  nextAttemptAt DateTime @default(now())
+  failures      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([nextAttemptAt])
+  @@index([sessionId])
 }
 
 model InviteCode {
@@ -750,6 +768,7 @@ model Notification {
 
   @@unique([userId, chatConversationId])
   @@index([userId, readAt, createdAt])
+  @@index([userId, updatedAt, id])
 }
 
 model Media {

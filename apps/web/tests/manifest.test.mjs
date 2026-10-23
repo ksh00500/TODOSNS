@@ -29,7 +29,7 @@ test("웹 문서는 프레이밍·object·base URI 보안 헤더를 제공한다
   assert.match(config, /Referrer-Policy/);
 });
 
-test("Android TWA는 운영 도메인과 필수 런타임 컴포넌트를 검증한다", async () => {
+test("Android 앱은 기존 패키지의 네이티브 액티비티를 실행한다", async () => {
   const assetLinks = JSON.parse(
     await readFile(new URL("../public/.well-known/assetlinks.json", import.meta.url), "utf8"),
   );
@@ -44,9 +44,10 @@ test("Android TWA는 운영 도메인과 필수 런타임 컴포넌트를 검증
 
   assert.equal(assetLinks[0].target.package_name, "kr.kro.mungsil");
   assert.match(assetLinks[0].target.sha256_cert_fingerprints[0], /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/);
-  assert.match(androidManifest, /android:manageSpaceActivity="com\.google\.androidbrowserhelper\.trusted\.ManageDataLauncherActivity"/);
-  assert.match(androidManifest, /android:name="com\.google\.androidbrowserhelper\.trusted\.LauncherActivity"/);
-  assert.match(androidManifest, /android:autoVerify="true"/);
-  assert.match(androidManifest, /android:host="mungsil\.kro\.kr"/);
+  assert.match(androidManifest, /android:name="\.MainActivity"/);
+  assert.doesNotMatch(androidManifest, /androidbrowserhelper|WebView|customtabs/);
+  assert.doesNotMatch(androidBuild, /androidbrowserhelper/);
+  assert.match(androidBuild, /applicationId "kr\.kro\.mungsil"/);
+  assert.match(androidManifest, /android:usesCleartextTraffic="false"/);
   assert.match(androidBuild, /targetSdk 36/);
 });

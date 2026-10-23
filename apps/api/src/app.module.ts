@@ -22,11 +22,14 @@ import { ChatEvents } from "./chat.events";
 import { DirectChatService } from "./direct-chat.service";
 import { DataGovernanceService } from "./data-governance.service";
 import { TodoCategoryService } from "./todo-category.service";
+import { FcmSender, PushController, PushService } from "./push.service";
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../../.env")], validate: validateEnvironment }), JwtModule.register({}), ScheduleModule.forRoot(), ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
-  controllers: [HealthController, AuthController, PublicController, TodoController, TodoListController, FeedController, ChallengeController, ChallengeChatController, ChallengeVerificationController, SocialController, MessageController, MeController, AdminController],
+  controllers: [PushController, HealthController, AuthController, PublicController, TodoController, TodoListController, FeedController, ChallengeController, ChallengeChatController, ChallengeVerificationController, SocialController, MessageController, MeController, AdminController],
   providers: [
+    FcmSender,
+    PushService,
     PrismaService,
     JwtAuthGuard,
     OptionalJwtAuthGuard,

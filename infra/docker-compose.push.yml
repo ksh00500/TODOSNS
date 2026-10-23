@@ -1,0 +1,15 @@
+# Opt-in overlay for servers using a service account file. Never copy this key into an image.
+# Apply with the base compose file; FIREBASE_SERVICE_ACCOUNT_FILE is a host file path.
+services:
+  api:
+    environment:
+      PUSH_ENABLED: "true"
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Set the Firebase project ID}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase_service_account
+    secrets:
+      - source: firebase_service_account
+        target: firebase_service_account
+
+secrets:
+  firebase_service_account:
+    file: ${FIREBASE_SERVICE_ACCOUNT_FILE:?Set the server credential file path}

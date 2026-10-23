@@ -92,6 +92,9 @@ export function validateEnvironment(config: Record<string, unknown>) {
     ["MEDIA_PROCESS_TIMEOUT_MS", 5_000, 120_000],
     ["MEDIA_READ_URL_TTL_SECONDS", 60, 900],
   ];
+  if (env.PUSH_ENABLED === "true" && !/^[a-z][a-z0-9-]{4,62}$/.test(env.FIREBASE_PROJECT_ID ?? "")) {
+    throw new Error("PUSH_ENABLED requires a valid FIREBASE_PROJECT_ID");
+  }
   for (const [name, minimum, maximum] of numericLimits) {
     if (env[name] !== undefined && (!/^\d+$/.test(env[name]!) || Number(env[name]) < minimum || Number(env[name]) > maximum)) {
       throw new Error(`${name} must be an integer from ${minimum} to ${maximum}`);

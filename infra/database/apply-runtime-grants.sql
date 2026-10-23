@@ -123,6 +123,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
   public."Notification",
   public."Media"
 TO mungsil_runtime;
+-- Keep role setup usable both before and after the push migration.
+DO $$
+BEGIN
+  IF to_regclass('public."PushDevice"') IS NOT NULL THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public."PushDevice" TO mungsil_runtime;
+  END IF;
+END $$;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO mungsil_runtime;
 REVOKE USAGE ON TYPE
   public."Role",

@@ -783,6 +783,7 @@ export class MungsilService {
     const privileged = ["ADMIN", "MODERATOR"].includes(role);
     if (challenge.creatorId !== userId && !privileged) throw new ForbiddenException("챌린지 작성자만 수정할 수 있어요.");
     if (challenge.kind === ChallengeKind.OFFICIAL && !privileged) throw new ForbiddenException("공식 챌린지는 운영자만 수정할 수 있어요.");
+    this.assertChallengeVerificationOpen(challenge, false);
     if (challenge._count.checkIns > 0 && ((dto.startsAt && new Date(dto.startsAt).getTime() !== challenge.startsAt.getTime()) || dto.verificationMode && dto.verificationMode !== challenge.verificationMode)) throw new BadRequestException("인증이 시작된 뒤에는 시작일과 인증 방식을 바꿀 수 없어요.");
     const startsAt = dto.startsAt ? new Date(dto.startsAt) : challenge.startsAt;
     const endsAt = dto.endsAt ? new Date(dto.endsAt) : challenge.endsAt;
@@ -867,7 +868,7 @@ export class MungsilService {
         hiddenAt: null,
         userId: { not: userId },
         ...(query.challengeId ? { challengeId: query.challengeId } : {}),
-        challenge: { hiddenAt: null, verificationMode: VerificationMode.PEER_PHOTO, participants: { some: { userId } } },
+        challenge: { hiddenAt: null, endedAt: null, startsAt: { lte: new Date() }, endsAt: { gte: new Date() }, verificationMode: VerificationMode.PEER_PHOTO, participants: { some: { userId } } },
         user: { suspendedAt: null, deletionRequestedAt: null, blocksInitiated: { none: { blockedId: userId } }, blocksReceived: { none: { blockerId: userId } } },
       },
       orderBy: { submittedAt: "asc" },
@@ -901,6 +902,7 @@ export class MungsilService {
         include: { challenge: { include: { _count: { select: { participants: true } } } } },
       });
       if (!checkIn || checkIn.status !== CheckInStatus.PENDING || checkIn.hiddenAt || checkIn.challenge.hiddenAt) throw new ConflictException("이미 판정이 끝났거나 더 이상 확인할 수 없는 인증이에요.");
+      this.assertChallengeVerificationOpen(checkIn.challenge);
       if (checkIn.challenge.verificationMode !== VerificationMode.PEER_PHOTO) throw new BadRequestException("참여자 확인 대상이 아닌 인증이에요.");
       if (checkIn.userId === userId) throw new ForbiddenException("내 인증에는 투표할 수 없어요.");
       const [reviewer, blocked, eligibleParticipantCount] = await Promise.all([
@@ -909,8 +911,11 @@ export class MungsilService {
         tx.challengeParticipant.count({ where: { challengeId: checkIn.challengeId, user: { emailVerifiedAt: { not: null }, suspendedAt: null, deletionRequestedAt: null } } }),
       ]);
       if (!reviewer || blocked) throw new ForbiddenException("이 인증을 확인할 수 없어요.");
-      const participant = await tx.challengeParticipant.findUnique({ where: { challengeId_userId: { challengeId: checkIn.challengeId, userId } }, select: { userId: true } });
-      if (!participant || eligibleParticipantCount < checkIn.challenge.minimumParticipants) throw new ForbiddenException("같은 챌린지의 참여자만 사진 인증을 도울 수 있어요.");
+      const [participant, authorParticipant] = await Promise.all([
+        tx.challengeParticipant.findUnique({ where: { challengeId_userId: { challengeId: checkIn.challengeId, userId } }, select: { userId: true } }),
+        tx.challengeParticipant.findUnique({ where: { challengeId_userId: { challengeId: checkIn.challengeId, userId: checkIn.userId } }, select: { userId: true } }),
+      ]);
+      if (!participant || !authorParticipant || eligibleParticipantCount < checkIn.challenge.minimumParticipants) throw new ForbiddenException("같은 챌린지의 참여자만 사진 인증을 도울 수 있어요.");
       const expected = checkIn.challenge.verificationCriteria.map((_, index) => index);
       const received = [...new Set(dto.answers.map((item) => item.criterionIndex))].sort((a, b) => a - b);
       if (received.length !== expected.length || received.some((value, index) => value !== expected[index])) throw new BadRequestException("모든 인증 기준에 한 번씩 답해주세요.");
@@ -952,8 +957,8 @@ export class MungsilService {
 
   async resubmitChallengeVerification(userId: string, checkInId: string, dto: CheckInDto) {
     if (!dto.mediaId) throw new BadRequestException("새 인증 사진을 선택해주세요.");
-    await this.media.readyOwned(userId, dto.mediaId);
     const current = await this.retryableCheckIn(userId, checkInId);
+    await this.media.readyOwned(userId, dto.mediaId);
     await this.media.attachToCheckIn(userId, dto.mediaId, checkInId);
     const updated = await this.prisma.challengeCheckIn.updateMany({
       where: { id: checkInId, userId, attempt: current.attempt, status: CheckInStatus.REJECTED },
@@ -977,12 +982,22 @@ export class MungsilService {
   }
 
   private async retryableCheckIn(userId: string, checkInId: string) {
-    const current = await this.prisma.challengeCheckIn.findFirst({ where: { id: checkInId, userId }, include: { challenge: { select: { verificationMode: true } } } });
+    const current = await this.prisma.challengeCheckIn.findFirst({ where: { id: checkInId, userId, hiddenAt: null }, include: { challenge: { select: { id: true, verificationMode: true, startsAt: true, endsAt: true, endedAt: true, hiddenAt: true, creatorId: true } } } });
     if (!current || current.challenge.verificationMode !== VerificationMode.PEER_PHOTO) throw new NotFoundException("다시 인증할 기록을 찾을 수 없어요.");
+    this.assertChallengeVerificationOpen(current.challenge);
+    await this.assertNotBlocked(userId, current.challenge.creatorId);
+    const participant = await this.prisma.challengeParticipant.findUnique({ where: { challengeId_userId: { challengeId: current.challenge.id, userId } }, select: { userId: true } });
+    if (!participant) throw new ForbiddenException("참여 중인 챌린지에서만 다시 인증할 수 있어요.");
     if (current.status !== CheckInStatus.REJECTED) throw new ConflictException("다시 인증할 수 있는 상태가 아니에요.");
     if (!current.retryUntil || current.retryUntil <= new Date()) throw new BadRequestException("24시간의 다시 인증 시간이 지났어요.");
     if (current.attempt >= PEER_VERIFICATION.maxAttempts) throw new BadRequestException("오늘의 사진 인증 기회를 모두 사용했어요.");
     return current;
+  }
+
+  private assertChallengeVerificationOpen(challenge: { startsAt: Date; endsAt: Date; endedAt: Date | null; hiddenAt: Date | null }, requireStarted = true) {
+    const now = new Date();
+    if (challenge.hiddenAt || challenge.endedAt || challenge.endsAt < now) throw new BadRequestException("종료되었거나 이용할 수 없는 챌린지예요.");
+    if (requireStarted && challenge.startsAt > now) throw new BadRequestException("아직 인증을 시작할 수 없는 챌린지예요.");
   }
 
   private verificationCriteria(mode: VerificationMode, values?: string[]) {
@@ -1078,6 +1093,9 @@ export class MungsilService {
 
   async toggleFollow(userId: string, targetId: string) {
     if (userId === targetId) throw new BadRequestException("자기 자신은 팔로우할 수 없어요.");
+    const target = await this.prisma.user.findFirst({ where: { id: targetId, suspendedAt: null, deletionRequestedAt: null }, select: { id: true } });
+    if (!target) throw new NotFoundException("사용자를 찾을 수 없어요.");
+    await this.assertNotBlocked(userId, targetId);
     const key = { followerId_followingId: { followerId: userId, followingId: targetId } };
     const found = await this.prisma.follow.findUnique({ where: key });
     if (found) {
