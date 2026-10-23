@@ -19,7 +19,8 @@
 | 실제 API→Android | **1 통과 / 0 실패**. 실제 로그인·20→40→55개, 취소/삭제 후53개, B계정1개, 타 계정 cursor400·로그아웃 세션401 |
 | 핵심 Compose 회귀 | **6 통과 / 0 실패**. 작성·정밀 일정/관계·저장 상태·완료/취소·조회 실패·자정/계정 경계 |
 | 화면 폭·글자 | 로그인·5탭: **360/390/430dp 글자100%, 360dp 글자200%의 4회 실행 통과**. 기록 목록·상세·일정 글자200% **1회 추가 통과**. 모두 동작/semantic 검사 범위 |
-| 최종 연결 합계 | **15회 통과 / 0 실패**, 서로 다른 시험 메서드11개. 폭·글자 조건을 바꾼 반복 실행을 포함하며 위 항목과 중복 합산하지 않음 |
+| 확정 연결 묶음 | **15회 통과 / 0 실패**, 서로 다른 시험 메서드11개. 폭·글자 조건을 바꾼 반복 실행을 포함하며 위 항목과 중복 합산하지 않음 |
+| 추가 시각 복구 실행 | **1회 실패**. 콜드 재시작 후 System UI ANR을 다시 확인했고 `No compose hierarchies found`로 실패. 앞의15회와 별개이며 성공으로 제외·치환하지 않음 |
 | 문서·변경 | 상대 링크·`git diff --check` 검사 |
 
 연결 실행은 ADB `am instrument -w -r`로 AndroidJUnitRunner를 직접 호출했다. Gradle `connectedDebugAndroidTest` 작업을 실행했다는 의미가 아니다. 예상 실행 수·각 status0·JUnit `OK (N tests)`·최종 instrumentation code를 함께 확인했다. 셸 exit0만으로 성공을 판정하지 않았다.
@@ -64,7 +65,7 @@ API138에는 위 실제 조건부 시험5개가 포함된다. 준비 단계의 �
 | MinIO Quay 접근 거부·공식 archive410 | 앱/테스트 결함과 구분. 동일 공식 release의 Go source를 checksum/TLS 검증과 함께 빌드. 런타임 CA를 image에 복사하지 않음 |
 | AOSP API35 초기 종료 | 저속 부팅/초기화 ANR 및 **System UI 응답 없음**을 관찰. AOT 후 일부 시험은 진행했지만 이 환경의 API35 통과로 처리하지 않음. 최종 API29 실행과 분리 |
 | 장시간 API29 실행 중 단절 | 컨테이너6GiB의 `oom_kill=1`·`OOMKilled=true`와 qemu 종료를 확인. 호스트 여유 자원 안에서10GiB로 늘려 재시작하고 미완료 검사를 재실행. 단절된 실행을 통과로 처리하지 않음 |
-| 최종 API29 캡처의 System UI ANR | 동작 검사는 통과했지만 일부 최종 이미지에 OS 경고창이 포함됨. 이미지를 게시하지 않고 실제 터치/시각 검수와 결과를 구분. 콜드 재시작 후에도 dumpsys에서 `Application Not Responding: com.android.systemui` 재확인. 추가 시각 검사 실행은 환경 복구 실패로 중단했으며 최종15회 합계에 포함하지 않음 |
+| 최종 API29 캡처의 System UI ANR | 동작 검사는 통과했지만 일부 최종 이미지에 OS 경고창이 포함됨. 이미지를 게시하지 않고 실제 터치/시각 검수와 결과를 구분. 콜드 재시작 후에도 dumpsys에서 `Application Not Responding: com.android.systemui` 재확인. 추가 시각 검사1회는 `No compose hierarchies found`로 실패. System UI ANR도 재발해 복구를 중단했으며 실패를 별도 보존. 이 추가 실패의 직접 원인을 앱과 OS 사이에서 완전히 분리하지 못했으므로 시각 검수 통과로 처리하지 않음 |
 | 실제 긴 목록의 추가 조회 오류 | 모델의 버튼 처리 뒤 IOException, 서버에는 다음 GET 미도착. 빠른 Repository 직접20/20/15 호출은 성공. 끊긴 pooled read 연결의 EOF 회귀를 재현해 GET 복구와 쓰기 보호를 수정 |
 | 상세의 예정일 문구2개 | 목록과 dialog에 같은 문구가 존재하는 시험 선택자 오류. dialog 범위로 한정해 날짜 의미에 대한 assertion 유지 |
 | 비동기/화면 밖 항목 검색 | 실제 HTTP 완료 전 count 검색과 미합성 LazyColumn의 새로고침 검색을 보완. 응답 뒤 갱신 수치를 기다리고 목록을 먼저 스크롤. assertion 삭제/우회 없음 |
