@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Max, Min, ValidateNested } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min, ValidateNested } from "class-validator";
 import { ChallengeKind, ChatNotificationLevel, ChatReactionType, ReportStatus, ReportTarget, RewardStatus, VerificationMode, Visibility } from "@prisma/client";
 
 export enum RecurrenceEditScope {
@@ -16,6 +16,13 @@ export class TodoSearchDto extends PageDto {
   @IsOptional() @IsString() @Length(0, 120) query = "";
   @IsDateString() from!: string;
   @IsDateString() to!: string;
+}
+
+export class TodoHistoryQueryDto {
+  @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) fromDate?: string;
+  @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) toDate?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = 20;
+  @IsOptional() @IsString() @Length(1, 2048) cursor?: string;
 }
 
 export class TodoCategoryTodosQueryDto extends PageDto {

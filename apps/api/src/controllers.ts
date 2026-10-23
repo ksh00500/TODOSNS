@@ -8,13 +8,16 @@ import { DirectChatService } from "./direct-chat.service";
 import { ChatReactionType } from "@prisma/client";
 import { Throttle } from "@nestjs/throttler";
 import { TodoCategoryService } from "./todo-category.service";
+import { TodoHistoryQueryDto } from "./dtos";
+import { TodoHistoryService } from "./todo-history.service";
 
 type JwtUser = { sub: string; role: string; email: string };
 
 @UseGuards(JwtAuthGuard)
 @Controller("todos")
 export class TodoController {
-  constructor(private readonly service: MungsilService) {}
+  constructor(private readonly service: MungsilService, private readonly historyService: TodoHistoryService) {}
+  @Get("history") history(@CurrentUser() u: JwtUser, @Query() query: TodoHistoryQueryDto) { return this.historyService.list(u.sub, query); }
   @Get("search") search(@CurrentUser() u: JwtUser, @Query() query: TodoSearchDto) { return this.service.searchTodos(u.sub, query); }
   @Get() list(@CurrentUser() u: JwtUser, @Query("from") from?: string, @Query("to") to?: string) { return this.service.listTodos(u.sub, from, to); }
   @Post() create(@CurrentUser() u: JwtUser, @Body() dto: CreateTodoDto) { return this.service.createTodo(u.sub, dto); }

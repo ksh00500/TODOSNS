@@ -40,6 +40,20 @@ export interface TodoDto {
   occurrenceKey?: string | null;
 }
 
+/** Current, undeleted completions owned by the authenticated account. */
+export interface TodoHistoryItemDto extends TodoDto {
+  completedAt: string;
+}
+
+export interface TodoHistoryPageDto {
+  items: TodoHistoryItemDto[];
+  nextCursor: string | null;
+  total: number;
+  timezone: string;
+  fromDate: string;
+  toDate: string;
+}
+
 export interface TodoCategoryDto {
   id: string;
   name: string;

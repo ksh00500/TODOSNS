@@ -47,11 +47,11 @@
 | `TodoForm.originalDraft` / dirty | 원본 list와 별도로 `chosenGroup != null`, scope 변경을 감지하므로 그룹 변경 감지가 이미 있음 | 현재 보호 동작 보존. 같은 그룹 재선택을 무조건 변경으로 보는 보수적 판정을 의미 비교로 개선할지 검토 |
 | 기록 | 현행 프로필 완료 수와 dueDate 목록으로는 completedAt 기간 기록 제공 불가 | 별도 기록 계약 구현 후 UI 연결 |
 
-이는 정적 코드 차이 목록이다. 실패를 실제 재현한 결과와 혼동하지 않으며 구현 시 행위 시험으로 확인한다.
+이 표는 최초 `887fdef`의 정적 코드 차이 목록이다. 후속 M-01~03에서 완료 응답·조회/폼 처리를 구현했고 M-04에서 기록 API를 추가했다. 각 구현 보고서의 실제 실행 범위를 따르며 과거 차이를 현재 미구현 목록으로 취급하지 않는다.
 
 ## 3. 완료 기록 API 추가 설계안
 
-새 API는 아직 존재하지 않는다. 기본 정의는 ‘지금 완료 상태인 본인 항목을 실제 완료일로 조회’다. 전체 이벤트 감사 원장이나 파기한 기록의 재보유 기능을 추가하지 않는다.
+M-04에서 아래 API를 구현했다. 개발 기본값 선택은 [E-001](../decision-log.md), 정확한 현재 요청·응답·오류는 [기록 API 계약](history-api.md), 실제 검증 범위는 [M-04 보고서](implementation-m04.md)를 따른다. 기본 정의는 ‘지금 완료 상태인 본인 항목을 실제 완료일로 조회’다. 전체 이벤트 감사 원장이나 파기한 기록의 재보유 기능을 추가하지 않는다. Android 기록 화면과 운영 배포는 아직 수행하지 않았다.
 
 ```text
 GET /api/v1/todos/history
@@ -62,21 +62,21 @@ GET /api/v1/todos/history
 Authorization: <기존 자체 세션>
 ```
 
-| 항목 | 제안 계약 |
+| 항목 | M-04 구현 계약 |
 | --- | --- |
-| 날짜 | 계정 timezone 기준 YYYY-MM-DD 양 끝 날짜 포함. fromDate ≤ toDate. 기본 UI 범위 오늘 포함 최근 7일 |
+| 날짜 | 계정 timezone 기준 YYYY-MM-DD 양 끝 날짜 포함. fromDate ≤ toDate. 날짜 쌍 생략 시 첫 페이지는 오늘 포함 최근 7일. cursor 요청은 날짜 쌍 필수 |
 | 서버 범위 | 서버가 계정 timezone으로 시작일 자정과 종료일 다음 날 자정을 계산해 `completedAt >= start AND completedAt < endExclusive` 적용 |
-| 허용 기간 | 1~90개 현지 날짜 제안. 역순·불가능한 날짜·범위 초과·잘못된 cursor/limit는 400 |
+| 허용 기간 | 1~90개 현지 날짜. 역순·불가능한 날짜·범위 초과·잘못된 cursor/limit는 400 |
 | 필터 | userId=인증 사용자, deletedAt=null, completedAt not null. 다른 계정 ID를 query로 받지 않음 |
 | 정렬 | completedAt DESC, id DESC |
-| 페이지 | 기본 limit 20, 최대 50 제안. limit+1 조회로 nextCursor 계산, 안정 복합 커서. 서버가 cursor의 필드·범위·버전을 검사 |
-| 커서 범위 | 사용자·기간·timezone·필터와 연결. 조건 변경 시 cursor/누적 목록 초기화. 다른 조건의 cursor 재사용 거부 |
-| total | 전체 조건의 완료 항목 수. 페이지 길이로 계산하지 않음. items/total을 같은 조회 단위로 산출하되 다음 페이지까지 고정된 snapshot은 아님을 정의 |
+| 페이지 | 기본 limit 20, 최대 50. limit+1 조회로 nextCursor 계산, 안정 복합 커서. 서버가 서명·필드·범위·버전을 검사 |
+| 커서 범위 | 사용자·기간·canonical timezone·limit·필터와 연결. 조건 변경 시 cursor/누적 목록 초기화. 다른 조건의 cursor 재사용 거부 |
+| total | 커서 위치와 무관한 전체 조건의 완료 항목 수. 페이지 길이로 계산하지 않음. 계정 시간대/items/total을 같은 RepeatableRead transaction에서 산출. 다음 페이지까지 고정된 snapshot은 아님 |
 | 변경 중 | 페이지 사이 완료 취소·삭제가 가능. 클라이언트 ID 중복 제거·재조회 제공. 과거 페이지가 완전 불변이라고 보장하지 않음 |
 | 응답 | `{items: TodoHistoryItemDto[], nextCursor: string|null, total: number, timezone: string, fromDate: string, toDate: string}` |
 | item | 기존 TodoDto의 필요한 필드 재사용, completedAt은 필수 string. title, dueDate, visibility, category/관계 등 기존 이름을 중복 정의하지 않음 |
 | 오류 | 기존 401/403·세션 오류 체계 유지. 다른 사람의 항목 존재나 메모가 오류에 노출되지 않음 |
-| 인덱스 | userId/completedAt/id와 deletedAt 필터의 실제 query plan 검토 뒤 결정. 미리 migration을 생성하지 않음 |
+| 인덱스 | 합성 6천 행의 목록·count 계획에서 기존 userId/dueDate 인덱스 사용 확인. 운영 규모의 completedAt 인덱스 필요성은 후속 성능 검토. 이번 schema/migration 변경 없음 |
 | 호환 | GET /todos의 예정일 의미·응답을 바꾸지 않는 추가 endpoint. 정적 `history` 경로를 동적 `:id` 경로보다 먼저 검토·등록 |
 
 예시: Asia/Seoul의 `2026-10-23` 하루는 UTC `2026-10-22T15:00:00Z ≤ completedAt < 2026-10-23T15:00:00Z`. DST 지역도 단순 24시간 덧셈 대신 local date의 자정을 사용한다.

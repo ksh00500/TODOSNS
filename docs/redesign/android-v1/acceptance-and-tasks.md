@@ -2,7 +2,7 @@
 
 문서 ID: AND-V1-QA-001 · v0.1 · 2026-10-23 (Asia/Seoul)
 
-이 문서는 상세 설계에서 정의한 시험과 작업이다. 원래 초안 작성 당시에는 실행하지 않았다. 후속 구현의 실제 실행 범위는 [M-01](implementation-m01.md)·[M-02](implementation-m02.md)·[M-03](implementation-m03.md) 보고서를 따르며, 전체 AT 시나리오의 통과를 의미하지 않는다. 이전 54개 Android unit 결과는 `887fdef`의 기준선이다.
+이 문서는 상세 설계에서 정의한 시험과 작업이다. 원래 초안 작성 당시에는 실행하지 않았다. 후속 구현의 실제 실행 범위는 [M-01](implementation-m01.md)·[M-02](implementation-m02.md)·[M-03](implementation-m03.md)·[M-04](implementation-m04.md) 보고서를 따르며, 전체 AT 시나리오의 통과를 의미하지 않는다. 이전 54개 Android unit 결과는 `887fdef`의 기준선이다.
 
 ## 1. 요구사항 추적
 
@@ -50,11 +50,11 @@
 | M-01 | `TodoRepository` 완료/취소 응답 모델, `TodoModel` canonical 교체·원복·재조회 | AT-10~13/18~19. 성공 응답과 에러 형식 분리, 기존 API 호환 | 구현 완료·로컬 검사, 실제 DB/연결 UI 별도 |
 | M-02 | `TodoForm` 초안 모델·dirty·제출 복원과 재시도 | AT-04~08/17/19. 날짜 정밀도·반복/관계 보존 | 구현·unit/합성 HTTP 통과, 실제 DB/기기 복원·연결 UI 미검증 |
 | M-03 | 오늘 정보 위계·날짜·빈/오류/갱신/처리 중 UI | AT-01~03/09/18/21, 기존 5탭/그룹 계약 유지 | 구현·unit/빌드/lint 통과, 연결 UI·실제 복귀/자정·접근성 미검증 |
-| M-04 | 공유 `TodoHistoryPageDto`·server history 조회·권한/커서/total | AT-14~16/20. 실제 DB와 기간·커서 의미 확인 | 기록 의미·기간 수치 결정 후, 계약 초안 |
+| M-04 | 공유 `TodoHistoryPageDto`·server history 조회·권한/커서/total | AT-14~16/20. 실제 DB와 기간·커서 의미 확인 | E-001 개발 기본값으로 구현, 실제 PostgreSQL/HTTP 검사 통과. Android 연결·운영 별도 |
 | M-05 | `me` 내부 기록 진입·History Repository/Model·화면 | AT-14~16/18~21, 새 6번째 탭 없음 | M-04 이후, 미착수 |
 | M-06 | Compose·실제 합성 서비스 통합·웹 회귀 | 실제 실행 결과·환경 부족을 구분해 보고 | 연결 기기·합성 DB/스토리지 필요 |
 
-현행 API를 보존하는 M-01부터 구현 단위를 작게 시작할 수 있다. M-04의 새 endpoint·인덱스·수치 제안은 이번 문서 작업에서 생성하지 않는다. 미정 정책은 구현 전에 결정 로그에서 상태를 갱신한다.
+M-01~04의 후속 구현은 위 보고서와 결정 로그를 따른다. M-04는 새 읽기 endpoint와 공용 DTO를 추가했으며 인덱스/migration을 생성하지 않았다. 미정 제품 정책과 이번 개발 기본값을 구분한다.
 
 ## 4. 변경 단위의 완료 정의
 

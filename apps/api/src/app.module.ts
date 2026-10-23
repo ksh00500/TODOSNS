@@ -23,6 +23,7 @@ import { DirectChatService } from "./direct-chat.service";
 import { DataGovernanceService } from "./data-governance.service";
 import { TodoCategoryService } from "./todo-category.service";
 import { FcmSender, PushController, PushService } from "./push.service";
+import { TodoHistoryService } from "./todo-history.service";
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: [resolve(process.cwd(), ".env"), resolve(process.cwd(), "../../.env")], validate: validateEnvironment }), JwtModule.register({}), ScheduleModule.forRoot(), ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }])],
@@ -44,6 +45,7 @@ import { FcmSender, PushController, PushService } from "./push.service";
     DirectChatService,
     DataGovernanceService,
     TodoCategoryService,
+    TodoHistoryService,
     ChatEvents,
     ChatGateway,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
