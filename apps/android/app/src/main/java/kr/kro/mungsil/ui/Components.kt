@@ -120,7 +120,7 @@ val CloudTypography = Typography(
 }
 
 /** All native sheets share IME/inset handling, one body scroll and modal focus semantics. */
-@Composable fun NativeSheet(title: String, close: () -> Unit, dismissible: Boolean = true, dirty: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+@Composable fun NativeSheet(title: String, close: () -> Unit, dismissible: Boolean = true, dirty: Boolean = false, discardDetail: String = "저장하지 않은 내용이 사라져요.", content: @Composable ColumnScope.() -> Unit) {
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     DisposableEffect(Unit) { onDispose { focus.clearFocus(); keyboard?.hide() } }
@@ -136,7 +136,7 @@ val CloudTypography = Typography(
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
         }
     }
-    if(discard) ConfirmSheet("작성을 그만둘까요?", "저장하지 않은 내용이 사라져요.", "작성 내용 버리기", { discard = false }) { discard = false; close() }
+    if(discard) ConfirmSheet("작성을 그만둘까요?", discardDetail, "작성 내용 버리기", { discard = false }) { discard = false; close() }
 }
 
 /** Non-sensitive product drafts only. Never use for credentials or authentication links. */

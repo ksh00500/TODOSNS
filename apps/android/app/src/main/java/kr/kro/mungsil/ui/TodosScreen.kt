@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.google.gson.*
 import kr.kro.mungsil.data.*
 import java.time.*
+import kotlinx.coroutines.launch
 
 @Composable fun TodosScreen(api: Api, zone: ZoneId, today: Boolean, revision: Int, changed: () -> Unit, navigate: (String) -> Unit, initialDate: String? = null, nickname: String = "뭉실") {
     var selectedDate by rememberSaveable(today) { mutableStateOf(initialDate ?: LocalDate.now(zone).toString()) }
@@ -171,64 +172,68 @@ import java.time.*
 }
 
 @Composable fun TodoForm(api: Api, zone: ZoneId, source: JsonObject?, initialDate: String, clone: Boolean, close: () -> Unit, saved: () -> Unit) {
-    var title by rememberSaveable { mutableStateOf(source?.text("title").orEmpty()) }
-    var notes by rememberSaveable { mutableStateOf(source?.text("notes").orEmpty()) }
-    var date by rememberSaveable { mutableStateOf(if(source != null && !clone) localDate(source.text("dueDate"), zone).toString() else initialDate) }
-    var time by rememberSaveable { mutableStateOf(source?.let { localTime(it.text("dueDate"), zone) } ?: "09:00") }
-    var category by rememberSaveable { mutableStateOf(source?.text("category", "생활") ?: "생활") }
-    var categoryId by rememberSaveable { mutableStateOf(if(clone) "" else source?.text("categoryId").orEmpty()) }
-    var repeat by rememberSaveable { mutableStateOf(source?.text("repeatRule").orEmpty()) }
+    val owner = LocalTodoDraftOwner.current
+    key(owner, source?.text("id"), clone) { TodoFormContent(api, zone, source, initialDate, clone, owner, close, saved) }
+}
+
+@Composable private fun TodoFormContent(api: Api, zone: ZoneId, input: JsonObject?, initialDate: String, clone: Boolean, owner: String, close: () -> Unit, saved: () -> Unit) {
+    val form = rememberTodoFormState(owner, input, clone, initialDate, zone)
+    val source = form.source()
+    val draft = form.draft
+    val scope = rememberCoroutineScope()
+    val sessionVersion = remember(api, owner) { api.sessionVersion }
     val categories = rememberRemote(api) { api.request("me/todo-categories").also {
         if(!it.isJsonArray) throw ApiException(502, "카테고리를 확인하지 못했어요. 기존 분류는 유지돼요.")
     } }
     val lists = rememberRemote(api) { api.request("todo-lists").also {
         if(!it.isJsonArray) throw ApiException(502, "그룹을 확인하지 못했어요. 기존 관계는 유지돼요.")
     } }
-    var chosenGroup by rememberSaveable { mutableStateOf<String?>(null) }
-    val currentGroup = lists.data?.rows()?.firstOrNull { list -> list.list("items").any { val todo = it.child("todo"); source != null && (todo.text("id") == source.text("id") || source.text("seriesId").isNotBlank() && todo.text("seriesId") == source.text("seriesId")) } }?.text("id").orEmpty()
-    val groupId = chosenGroup ?: if(clone) "" else currentGroup
-    var visibility by rememberSaveable { mutableStateOf(if(clone) "PRIVATE" else source?.text("visibility", "PRIVATE") ?: "PRIVATE") }
-    val originalDraft = rememberSaveable { listOf(title, notes, date, time, category, categoryId, repeat, visibility) }
-    val action = rememberAction()
+    val currentGroup = if(clone) "" else lists.data?.rows()?.firstOrNull { list -> list.list("items").any { val todo = it.child("todo"); source != null && (todo.text("id") == source.text("id") || source.text("seriesId").isNotBlank() && todo.text("seriesId") == source.text("seriesId")) } }?.text("id").orEmpty()
+    LaunchedEffect(lists.data, lists.error) { if(lists.data != null && lists.error == null) form.observeGroup(currentGroup) }
+    val groupId = if(form.chosenGroup) draft.groupId else form.originalGroup ?: currentGroup
     var validation by remember { mutableStateOf<String?>(null) }
-    var scope by rememberSaveable { mutableStateOf("THIS") }
-    val submission = rememberDraftSubmission(source?.text("id"), clone)
     val loadedOptions = categories.data?.rows().orEmpty()
     val originalCategory = if(!clone) source?.child("categoryRef") else null
     val options = if(originalCategory?.text("id")?.isNotBlank() == true && loadedOptions.none { it.text("id") == originalCategory.text("id") }) listOf(originalCategory) + loadedOptions else loadedOptions
-    val selectedCategoryId = categoryId.ifBlank { options.firstOrNull { it.text("name") == category || it.text("baseCategory") == category }?.text("id").orEmpty() }
-    NativeSheet(if(clone) "내 TODO로 가져오기" else if(source == null) "TODO 추가" else "TODO 편집", close, !action.busy, dirty = listOf(title, notes, date, time, category, categoryId, repeat, visibility) != originalDraft || chosenGroup != null || scope != "THIS") {
-        Field("할 일", title, { title = it }, 120, enabled = !action.busy)
-        Field("메모 (선택)", notes, { notes = it }, 500, multiline = true, enabled = !action.busy)
-        DateControl(date, { date = it }, enabled = !action.busy)
-        TimeControl(time, !action.busy) { time = it }
+    val selectedCategoryId = draft.categoryId.ifBlank { options.firstOrNull { it.text("name") == draft.category || it.text("baseCategory") == draft.category }?.text("id").orEmpty() }
+    NativeSheet(if(clone) "내 TODO로 가져오기" else if(source == null) "TODO 추가" else "TODO 편집", close, !form.busy, dirty = form.dirty,
+        discardDetail = if(form.uncertain) "저장 요청이 이미 반영됐을 수 있어요. 닫아도 서버의 저장은 취소되지 않아요. 나중에 목록을 확인해주세요." else "저장하지 않은 내용이 사라져요.") {
+        Field("할 일", draft.title, { value -> form.update { it.copy(title = value) } }, 120, enabled = form.editable)
+        Field("메모 (선택)", draft.notes, { value -> form.update { it.copy(notes = value) } }, 500, multiline = true, enabled = form.editable)
+        DateControl(draft.date, { value -> form.update { it.copy(date = value) } }, enabled = form.editable)
+        TimeControl(draft.time, form.editable) { value -> form.update { it.copy(time = value) } }
+        Text("시간대 · ${form.zoneId}", color = Muted, style = MaterialTheme.typography.bodySmall)
         if(categories.loading) Text("카테고리를 확인하고 있어요. 기존 분류는 유지돼요.", color = Muted)
-        if(source == null || clone || categories.data != null && categories.error == null) ChoiceControl("카테고리", if(options.isEmpty()) baseCategories.map { it to it } else options.map { it.text("id") to it.text("name") }, if(options.isEmpty()) category else selectedCategoryId, !action.busy && !categories.loading) { selected ->
-            if(!action.busy) { if(options.isEmpty()) { category = selected; categoryId = "" } else { categoryId = selected; category = options.first { it.text("id") == selected }.text("baseCategory") } }
+        if(source == null || clone || categories.data != null && categories.error == null) ChoiceControl("카테고리", if(options.isEmpty()) baseCategories.map { it to it } else options.map { it.text("id") to it.text("name") }, if(options.isEmpty()) draft.category else selectedCategoryId, form.editable && !categories.loading) { selected ->
+            form.update { if(options.isEmpty()) it.copy(category = selected, categoryId = "") else it.copy(categoryId = selected, category = options.first { option -> option.text("id") == selected }.text("baseCategory")) }
         }
         ErrorNotice(categories.error) { categories.reload() }
-        ChoiceControl("반복", repeatChoices(repeat), repeat, !action.busy) { repeat = it }
-        if(repeatLabel(repeat) == "원본 반복 유지") Text("현재의 세부 반복 규칙을 그대로 유지해요. 다른 반복을 고르면 새 설정으로 바뀌어요.", color = Muted)
+        ChoiceControl("반복", repeatChoices(draft.repeatRule), draft.repeatRule, form.editable) { value -> form.update { it.copy(repeatRule = value) } }
+        if(repeatLabel(draft.repeatRule) == "원본 반복 유지") Text("현재의 세부 반복 규칙을 그대로 유지해요. 다른 반복을 고르면 새 설정으로 바뀌어요.", color = Muted)
         if(lists.loading) Text("현재 그룹을 확인하고 있어요. 기존 관계는 유지돼요.", color = Muted)
         ErrorNotice(lists.error) { lists.reload() }
-        if(lists.data != null && lists.error == null) ChoiceControl("그룹", listOf("" to "그룹 없음") + lists.data.rows().map { it.text("id") to it.text("title") }, groupId, !action.busy && !lists.loading) { chosenGroup = it }
-        ChoiceControl("공개 범위", listOf("PRIVATE" to "나만 보기", "FOLLOWERS" to "팔로워", "PUBLIC" to "전체 공개"), visibility, !action.busy) { visibility = it }
+        if(lists.data != null && lists.error == null) ChoiceControl("그룹", listOf("" to "그룹 없음") + lists.data.rows().map { it.text("id") to it.text("title") }, groupId, form.editable && !lists.loading) { form.selectGroup(it) }
+        ChoiceControl("공개 범위", listOf("PRIVATE" to "나만 보기", "FOLLOWERS" to "팔로워", "PUBLIC" to "전체 공개"), draft.visibility, form.editable) { value -> form.update { it.copy(visibility = value) } }
         if(source?.text("seriesId")?.isNotBlank() == true && !clone) {
-            Choices("변경할 일정", listOf("THIS" to "이번 일정만", "FUTURE" to "이후 일정도"), scope, !action.busy) { scope = it }
+            Choices("변경할 일정", listOf("THIS" to "이번 일정만", "FUTURE" to "이후 일정도"), draft.recurrenceScope, form.editable) { value -> form.update { it.copy(recurrenceScope = value) } }
             Text("선택한 날짜의 일정만 바꾸거나 이후 일정 전체에 적용할 수 있어요.", color = Muted)
         }
         ErrorNotice(validation)
-        ActionFeedback(action)
-        Primary(if(action.busy) "저장 중…" else if(clone) "가져오기" else "저장", !action.busy && title.isNotBlank()) {
-            val payload = runCatching { todoWritePayload(TodoDraft(title, notes, date, time, category, selectedCategoryId, repeat, visibility, groupId, scope), source, clone, zone,
-                categoriesReady = categories.data != null && categories.error == null,
-                groupsReady = lists.data != null && lists.error == null) }.getOrNull()
-            validation = if(payload == null) "날짜와 시간을 확인해주세요. 시간은 HH:mm 형식이에요." else null
-            if(payload != null) action.run {
-                api.request(if(source == null) "todos" else "todos/${source.text("id")}${if(clone) "/clone" else ""}", if(source != null && !clone) "PATCH" else "POST", payload, key = submission.keyFor(payload))
-                submission.succeeded()
-                saved(); close()
-            }
+        ErrorNotice(form.error)
+        if(owner.isBlank()) ErrorNotice("로그인 상태를 확인한 뒤 다시 열어주세요.")
+        Primary(if(form.busy) "저장 중…" else if(form.uncertain) "저장 결과 확인" else if(clone) "가져오기" else "저장", !form.busy && owner.isNotBlank() && (form.uncertain || draft.title.isNotBlank())) {
+            val payload = if(form.uncertain) null else runCatching {
+                require(draft.title.trim().isNotEmpty() && draft.title.codePointCount(0, draft.title.length) <= 120 && draft.notes.codePointCount(0, draft.notes.length) <= 500)
+                todoWritePayload(draft.copy(categoryId = selectedCategoryId, groupId = groupId), source, clone, ZoneId.of(form.zoneId),
+                    categoriesReady = categories.data != null && categories.error == null, groupsReady = lists.data != null && lists.error == null)
+            }.getOrNull()
+            validation = if(!form.uncertain && payload == null) "제목·메모 길이와 날짜·시간을 확인해주세요. 시간은 HH:mm 형식이에요." else null
+            if(form.uncertain || payload != null) form.begin(payload)?.let { request -> scope.launch {
+                val completed = try { sendTodoForm(api, request, sessionVersion); form.succeeded(request) }
+                    catch(e: kotlinx.coroutines.CancellationException) { form.cancelled(request); throw e }
+                    catch(e: Exception) { form.failed(request, e); false }
+                if(completed) { saved(); close() }
+            } }
         }
     }
 }

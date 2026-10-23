@@ -51,6 +51,7 @@ class Api(val baseUrl: String, private val store: SessionStore) {
     @Volatile var accessToken: String? = null
         private set
     @Volatile private var epoch = 0L
+    internal val sessionVersion: Long get() = epoch
     var onExpired: (() -> Unit)? = null
     private val lock = Any()
     private var refreshToken: String? = store.read()
@@ -130,9 +131,11 @@ class Api(val baseUrl: String, private val store: SessionStore) {
         }
     }
 
-    suspend fun request(path: String, method: String = "GET", body: JsonObject? = null, query: Map<String, String> = emptyMap(), authenticated: Boolean = true, key: String? = null): JsonElement {
-        val generation = epoch
-        val token = if (authenticated) accessToken else null
+    suspend fun request(path: String, method: String = "GET", body: JsonObject? = null, query: Map<String, String> = emptyMap(), authenticated: Boolean = true, key: String? = null, expectedSessionVersion: Long? = null): JsonElement {
+        val (generation, token) = synchronized(lock) {
+            if(authenticated && expectedSessionVersion != null && expectedSessionVersion != epoch) throw ApiException(401, "로그인 상태가 바뀌었어요. 다시 로그인해주세요.")
+            epoch to if(authenticated) accessToken else null
+        }
         val mutationKey = if (method != "GET" && authenticated) key ?: newKey() else null
         try {
             val reply = exchange(path, method, body, query, token, key = mutationKey)
@@ -141,7 +144,11 @@ class Api(val baseUrl: String, private val store: SessionStore) {
         } catch (error: ApiException) {
             if (error.status != 401 || !authenticated || generation != epoch) throw error
             sessionMutex.withLock { if (accessToken == token && generation == epoch) refreshLocked() }
-            val reply = exchange(path, method, body, query, accessToken, key = mutationKey)
+            val refreshedToken = synchronized(lock) {
+                if(generation != epoch) throw ApiException(401, "로그인 상태가 바뀌었어요. 다시 로그인해주세요.")
+                accessToken
+            }
+            val reply = exchange(path, method, body, query, refreshedToken, key = mutationKey)
             if (generation != epoch) throw ApiException(401, "다시 로그인해주세요.")
             return reply.value
         }

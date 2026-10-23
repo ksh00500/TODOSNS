@@ -128,6 +128,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     val badge = if(authenticated) rememberRemote(revision, pattern) { api.request("me/notifications/unread-count") } else null
     val chatBadge = if(authenticated) rememberRemote(revision, pattern) { api.request("messages/unread-count") } else null
     BackHandler(emailLink != null || loginRequested) { if(emailLink != null) emailLink = null else loginRequested = false }
+    CompositionLocalProvider(LocalTodoDraftOwner provides if(authenticated) user.text("id") else "") {
     Surface(Modifier.fillMaxSize(), color = Canvas) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Surface(Modifier.widthIn(max = 430.dp).fillMaxSize(), color = Cream) {
@@ -193,6 +194,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
     }
 }
 private fun routeTitle(route: String): String = when(route.substringBefore('/')) {

@@ -535,18 +535,18 @@ class NativeFlowTest {
         val attempts = AtomicInteger(0); var saved = 0
         dispatch { request -> if(request.method == "PATCH" && attempts.incrementAndGet() == 2) response("{}") else response("{}", 503) }
         val restoration = StateRestorationTester(compose)
-        restoration.setContent { MungsilTheme { TodoForm(api, ZoneId.of("Asia/Seoul"), source, "2026-09-28", false, {}, { saved++ }) } }
+        restoration.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides "synthetic-user") { TodoForm(api, ZoneId.of("Asia/Seoul"), source, "2026-09-28", false, {}, { saved++ }) } } }
         waitText("원본 반복 유지")
         compose.onNodeWithContentDescription("할 일").performScrollTo().performTextClearance()
         compose.onNodeWithContentDescription("할 일").performTextInput("편집한 반복 일정")
         compose.onNodeWithText("이후 일정도").performScrollTo().performClick()
         compose.onNodeWithText("저장").performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.waitUntil(10_000) { attempts.get() == 1 }
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText("저장") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("저장 결과 확인") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         restoration.emulateSavedInstanceStateRestore()
         waitText("편집한 반복 일정")
         screenshot("todo-repeat-editor", sheetTitle = "TODO 편집")
-        compose.onNodeWithText("저장").performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("저장 결과 확인").performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.waitUntil(10_000) { saved == 1 }
         val writes = received.filter { it.method == "PATCH" }
         assertEquals(2, writes.size)
@@ -884,7 +884,7 @@ class NativeFlowTest {
             val path = request.requestUrl!!.encodedPath
             when {
                 path == "/api/v1/todos" && request.method == "POST" -> if(creates.incrementAndGet() == 1) response("{}", 503) else { created = true; response(todo) }
-                path.endsWith("/complete") -> { completed = true; response("{}") }
+                path.endsWith("/complete") -> { completed = true; response("{\"todo\":${todo.replace("\"completedAt\":null", "\"completedAt\":\"2026-09-22T04:00:00Z\"")}}") }
                 path == "/api/v1/todos" -> response(if(created) "[${if(completed) todo.replace("\"completedAt\":null", "\"completedAt\":\"2026-09-22T04:00:00Z\"") else todo}]" else "[]")
                 path == "/api/v1/feed/posts" -> response("{\"id\":\"post-1\"}")
                 else -> response("[]")
@@ -897,10 +897,10 @@ class NativeFlowTest {
         // Invoke the same accessibility action after scrolling: IME inset animation can
         // move a coordinate tap outside the sheet between scroll and injection.
         compose.onNode(hasText("저장") and hasClickAction()).performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
-        waitText("서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해주세요.")
+        waitText("저장 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해주세요.")
         compose.onNodeWithText("점심 산책 10분", useUnmergedTree = true).assertExists()
         screenshot("todo-failure-draft")
-        compose.onNode(hasText("저장") and hasClickAction()).performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
+        compose.onNode(hasText("저장 결과 확인") and hasClickAction()).performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
         compose.waitUntil(15_000) { received.count { it.method == "POST" && it.requestUrl!!.encodedPath == "/api/v1/todos" } == 2 }
         val writes = received.filter { it.method == "POST" && it.requestUrl!!.encodedPath == "/api/v1/todos" }
         assertEquals(writes[0].getHeader("Idempotency-Key"), writes[1].getHeader("Idempotency-Key"))
@@ -919,8 +919,8 @@ class NativeFlowTest {
     @Test fun completionRollbackKeepsRetryKeyButNewCompletionUsesNewKey() {
         val completions = AtomicInteger(0)
         dispatch { request -> when {
-            request.requestUrl!!.encodedPath.endsWith("/complete") -> if(completions.incrementAndGet() == 1) response("{}", 503) else response("{}")
-            request.requestUrl!!.encodedPath.endsWith("/uncomplete") -> response("{}")
+            request.requestUrl!!.encodedPath.endsWith("/complete") -> if(completions.incrementAndGet() == 1) response("{}", 503) else response("{\"todo\":${todo.replace("\"completedAt\":null", "\"completedAt\":\"2026-09-22T04:00:00Z\"")}}")
+            request.requestUrl!!.encodedPath.endsWith("/uncomplete") -> response(todo)
             request.requestUrl!!.encodedPath == "/api/v1/todos" -> response("[$todo]")
             else -> response("[]")
         } }
@@ -1079,7 +1079,7 @@ class NativeFlowTest {
             request.requestUrl!!.encodedPath.endsWith("/comments") -> response("{\"items\":[],\"nextCursor\":null}")
             else -> response("""{"id":"post-1","author":{"id":"other","nickname":"함께 구름","handle":"cloud"},"caption":"좋은 습관을 나눠요","todos":[$source],"cheerCount":0,"commentCount":0}""")
         } }
-        compose.setContent { MungsilTheme { PostScreen(api, "post-1", true, me, ZoneId.of("Asia/Seoul"), 0, {}, {}, {}) } }
+        compose.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides me.text("id")) { PostScreen(api, "post-1", true, me, ZoneId.of("Asia/Seoul"), 0, {}, {}, {}) } } }
         waitText("점심 산책 10분 · 나도 할래요")
         screenshot("post-native")
         compose.onNodeWithText("점심 산책 10분 · 나도 할래요").performScrollTo().performClick()
