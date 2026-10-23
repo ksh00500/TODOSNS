@@ -233,6 +233,10 @@ import kotlinx.coroutines.awaitCancellation
     val selectedCategoryId = draft.categoryId.ifBlank { options.firstOrNull { it.text("name") == draft.category || it.text("baseCategory") == draft.category }?.text("id").orEmpty() }
     NativeSheet(if(clone) "내 TODO로 가져오기" else if(source == null) "TODO 추가" else "TODO 편집", close, !form.busy, dirty = form.dirty,
         discardDetail = if(form.uncertain) "저장 요청이 이미 반영됐을 수 있어요. 닫아도 서버의 저장은 취소되지 않아요. 나중에 목록을 확인해주세요." else "저장하지 않은 내용이 사라져요.") {
+        if(clone) {
+            Text("원본 실천 · ${source?.text("title").orEmpty()}",color = Muted)
+            Text("내 일정에 새 TODO로 저장해요. 원본 실천은 바뀌지 않아요.",color = Muted)
+        }
         Field("할 일", draft.title, { value -> form.update { it.copy(title = value) } }, 120, enabled = form.editable)
         Field("메모 (선택)", draft.notes, { value -> form.update { it.copy(notes = value) } }, 500, multiline = true, enabled = form.editable)
         DateControl(draft.date, { value -> form.update { it.copy(date = value) } }, enabled = form.editable)

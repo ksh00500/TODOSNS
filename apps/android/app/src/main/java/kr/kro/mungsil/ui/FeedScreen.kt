@@ -135,6 +135,10 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
 }
 
 @Composable fun FeedScreen(api: Api, authenticated: Boolean, revision: Int, navigate: (String) -> Unit, login: () -> Unit = {}, zone: ZoneId = ZoneId.of("Asia/Seoul")) {
+    val owner = LocalTodoDraftOwner.current
+    key(owner,authenticated,api.sessionVersion) { FeedScreenContent(api,authenticated,revision,navigate,login,zone) }
+}
+@Composable private fun FeedScreenContent(api: Api, authenticated: Boolean, revision: Int, navigate: (String) -> Unit, login: () -> Unit, zone: ZoneId) {
     var category by rememberSaveable { mutableStateOf("전체") }
     var mode by rememberSaveable { mutableStateOf("recent") }
     var filter by remember { mutableStateOf(false) }
@@ -166,21 +170,17 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
 }
 
 @Composable fun InteractiveFeedCard(api: Api, post: JsonObject, auth: Boolean, zone: ZoneId, navigate: (String) -> Unit, login: () -> Unit) {
-    var cheered by remember(post.toString()) { mutableStateOf(post.flag("cheered")) }
-    var count by remember(post.toString()) { mutableIntStateOf(post.number("cheerCount")) }
+    val owner = LocalTodoDraftOwner.current
+    key(owner,api.sessionVersion,post.text("id")) { InteractiveFeedCardContent(api,post,auth,zone,navigate,login) }
+}
+@Composable private fun InteractiveFeedCardContent(api: Api, post: JsonObject, auth: Boolean, zone: ZoneId, navigate: (String) -> Unit, login: () -> Unit) {
     var importing by remember { mutableStateOf(false) }
     val action = rememberAction()
-    var stableKey by rememberSaveable(post.text("id")) { mutableStateOf(newKey()) }
     FeedCard(post, navigate, detail = true) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton({ if(!auth) login() else action.run {
-                val before = cheered; val beforeCount = count
-                cheered = !before; count = (count + if(before) -1 else 1).coerceAtLeast(0)
-                try { val result = api.request("feed/posts/${post.text("id")}/cheer", "POST", key = stableKey).obj(); cheered = result.flag("cheered"); stableKey = newKey() }
-                catch(e: Exception) { cheered = before; count = beforeCount; throw e }
-            } }, modifier = Modifier.semantics { contentDescription = "${if(cheered) "응원 취소" else "응원"} $count" }, enabled = !action.busy) { Text("${if(cheered) "♥" else "♡"} $count") }
+            CheerControl(api,post,auth,login)
             TextButton({ navigate("post/${post.text("id")}") }) { Text("댓글 ${post.number("commentCount")}") }
-            Button({ if(auth) importing = true else login() }, Modifier.heightIn(min = 48.dp), enabled = !action.busy) { Text("나도 할래요") }
+            Button({ if(auth) importing = true else login() }, Modifier.heightIn(min = 48.dp)) { Text("나도 할래요") }
         }
         ActionFeedback(action)
     }
@@ -188,6 +188,32 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
         val list = post.child("todoList")
         if(list.text("id").isNotBlank()) RoutineImportSheet(api, zone, list, { importing = false }) { action.notice = "루틴을 내 TODO로 가져왔어요." }
         else post.list("todos").firstOrNull()?.let { TodoForm(api, zone, it, LocalDate.now(zone).toString(), true, { importing = false }) { action.notice = "내 TODO로 가져왔어요." } }
+    }
+}
+
+@Composable private fun CheerControl(api: Api, post: JsonObject, auth: Boolean, login: () -> Unit, changed: () -> Unit = {}) {
+    val owner = LocalTodoDraftOwner.current
+    val cheer = rememberCheerState(owner,post)
+    val scope = rememberCoroutineScope()
+    val session = remember(api,owner) { api.sessionVersion }
+    val pending = cheer.submission
+    Column {
+        val label = if(pending.busy) "응원 확인 중…" else if(pending.uncertain) "응원 결과 확인" else "${if(cheer.cheered) "♥ 응원 취소" else "♡ 응원"} ${cheer.count}"
+        TextButton({
+            if(!auth) login() else cheer.begin()?.let { write -> scope.launch {
+                try { val value = sendCheer(api,post.text("id"),write,session); if(cheer.succeeded(write,value)) changed() }
+                catch(e: CancellationException) { cheer.failed(write,e); throw e }
+                catch(e: Exception) { cheer.failed(write,e) }
+            } }
+        }, modifier = Modifier.heightIn(min = 44.dp).semantics { contentDescription = label },
+            enabled = !pending.busy && !cheer.inspecting && !pending.denied && (!auth || owner.isNotBlank())) { Text(label) }
+        ErrorNotice(pending.error)
+        if(pending.error != null) TextButton({ if(cheer.beginInspection()) scope.launch {
+            try { val (value,count) = inspectCheer(api,post.text("id"),session); cheer.inspected(value,count); changed() }
+            catch(e: CancellationException) { cheer.inspectionFailed(e); throw e }
+            catch(e: Exception) { cheer.inspectionFailed(e) }
+        } },enabled = !pending.busy && !cheer.inspecting) { Text(if(cheer.inspecting) "상태 조회 중…" else "현재 응원 상태 조회") }
+        ErrorNotice(cheer.inspectionError)
     }
 }
 
@@ -238,6 +264,12 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
 }
 
 @Composable fun PostScreen(api: Api, id: String, auth: Boolean, user: JsonObject, zone: ZoneId, revision: Int, changed: () -> Unit, navigate: (String) -> Unit, login: () -> Unit) {
+    val owner = if(auth) user.text("id") else ""
+    key(owner,api.sessionVersion,id) { CompositionLocalProvider(LocalTodoDraftOwner provides owner) {
+        PostScreenContent(api,id,auth,user,zone,revision,changed,navigate,login)
+    } }
+}
+@Composable private fun PostScreenContent(api: Api, id: String, auth: Boolean, user: JsonObject, zone: ZoneId, revision: Int, changed: () -> Unit, navigate: (String) -> Unit, login: () -> Unit) {
     val context = LocalContext.current
     val base = if(auth) "feed/posts/$id" else "public/posts/$id"
     val remote = rememberRemote(id, revision, auth) { api.request(base, authenticated = auth) }
@@ -251,10 +283,6 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
     var report by remember { mutableStateOf<Pair<String, String>?>(null) }
     var remove by remember { mutableStateOf<Pair<String, String>?>(null) }
     val commentKey = rememberSaveable(body, id) { newKey() }
-    var cheerOverride by remember(id, post?.toString()) { mutableStateOf<Boolean?>(null) }
-    val effectiveCheer = cheerOverride ?: post?.flag("cheered") ?: false
-    val cheerCount = (post?.number("cheerCount") ?: 0) + if(cheerOverride == null || cheerOverride == post?.flag("cheered")) 0 else if(effectiveCheer) 1 else -1
-    var cheerKey by rememberSaveable(id) { mutableStateOf(newKey()) }
     PageList {
         remoteStatus(remote)
         if(post != null) {
@@ -263,7 +291,7 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
             else items(post.list("todos"), key = { "copy/${it.text("id")}" }) { todo -> Primary("${todo.text("title")} · 나도 할래요") { if(auth) importing = todo else login() } }
             item {
                 Row {
-                    TextButton({ if(!auth) login() else action.run { val before = effectiveCheer; cheerOverride = !before; try { val result = api.request("feed/posts/$id/cheer", "POST", key = cheerKey).obj(); cheerOverride = result.flag("cheered"); cheerKey = newKey(); changed() } catch(e: Exception) { cheerOverride = before; throw e } } }, enabled = !action.busy) { Text("${if(effectiveCheer) "♥ 응원 취소" else "♡ 응원"} ${cheerCount.coerceAtLeast(0)}") }
+                    CheerControl(api,post,auth,login,changed)
                     TextButton({ context.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, "https://mungsil.kro.kr/posts/$id") }, "실천 공유")) }) { Text("공유") }
                     if(auth) TextButton({ report = "POST" to id }) { Text("신고") }
                     if(auth && post.child("author").text("id") == user.text("id")) TextButton({ remove = "feed/posts/$id" to "게시물" }) { Text("게시물 삭제") }
@@ -293,62 +321,54 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
 }
 
 @Composable fun RoutineImportSheet(api: Api, zone: ZoneId, list: JsonObject, close: () -> Unit, saved: () -> Unit) {
-    var title by rememberSaveable { mutableStateOf(list.text("title")) }
-    var date by rememberSaveable { mutableStateOf(LocalDate.now(zone).toString()) }
-    var time by rememberSaveable { mutableStateOf("07:00") }
-    var mode by rememberSaveable { mutableStateOf("KEEP") }
-    val rows = remember(list) { list.list("items").map { it.child("todo") } }
-    fun shiftedDates(): Map<String, java.time.ZonedDateTime> {
-        val base = rows.minOfOrNull { java.time.Instant.parse(it.text("dueDate")) } ?: return emptyMap()
-        val target = java.time.Instant.parse(dueInstant(date, time, zone))
-        return rows.associate { it.text("id") to target.plus(java.time.Duration.between(base, java.time.Instant.parse(it.text("dueDate")))).atZone(zone) }
-    }
-    val initialDates = remember(list.text("id")) { runCatching { shiftedDates() }.getOrDefault(emptyMap()) }
-    var rules by rememberImportMap(list.text("id")) { rows.associate { it.text("id") to it.text("repeatRule") } }
-    var titles by rememberImportMap(list.text("id")) { rows.associate { it.text("id") to it.text("title") } }
-    var dates by rememberImportMap(list.text("id")) { initialDates.mapValues { it.value.toLocalDate().toString() } }
-    var times by rememberImportMap(list.text("id")) { initialDates.mapValues { it.value.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")) } }
-    val original = rememberSaveable { listOf(title, date, time, mode, rules.toString(), titles.toString(), dates.toString(), times.toString()) }
-    val action = rememberAction()
-    val payload = runCatching { json("title" to title.trim(), "dueDate" to dueInstant(date, time, zone), "repeatMode" to mode).apply {
-        // KEEP/NONE rely on the server to preserve source item offsets. Only
-        // CUSTOM sends overrides; changing modes must not erase the edited draft.
-        if(mode == "CUSTOM") add("items", json("items" to rows.map { todo -> val itemId = todo.text("id"); mapOf("sourceTodoId" to itemId, "title" to titles[itemId]?.trim(), "category" to todo.text("category"), "dueDate" to dueInstant(dates.getValue(itemId), times.getValue(itemId), zone), "repeatRule" to rules[itemId]?.ifBlank { null }) }).get("items"))
-    } }.getOrNull()
-    val submission = rememberDraftSubmission(list.text("id"))
-    NativeSheet("루틴 가져오기", close, !action.busy, dirty = original != listOf(title, date, time, mode, rules.toString(), titles.toString(), dates.toString(), times.toString())) {
-        Field("루틴 이름", title, { title = it }, 100, enabled = !action.busy)
-        DateControl(date, { date = it }, "시작 날짜", enabled = !action.busy)
-        TimeControl(time, !action.busy) { time = it }
-        Choices("반복 정책", listOf("KEEP" to "원본 유지", "NONE" to "반복 없음", "CUSTOM" to "항목별 설정"), mode, !action.busy) { mode = it }
-        if(mode == "CUSTOM") {
-            Text("모드를 바꿔도 항목별로 편집한 내용은 유지돼요.", color = Muted)
-            TextButton({ runCatching {
-                val shifted = shiftedDates()
-                rules = rows.associate { it.text("id") to it.text("repeatRule") }; titles = rows.associate { it.text("id") to it.text("title") }
-                dates = shifted.mapValues { it.value.toLocalDate().toString() }; times = shifted.mapValues { it.value.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")) }
-            }.onFailure { action.notice = "원본 일정을 확인하지 못했어요. 다시 시도해주세요." } }, enabled = !action.busy) { Text("원본으로 초기화") }
+    val owner = LocalTodoDraftOwner.current
+    key(owner,list.text("id"),api.sessionVersion) { RoutineImportContent(api,zone,list,owner,close,saved) }
+}
+@Composable private fun RoutineImportContent(api: Api, zone: ZoneId, list: JsonObject, owner: String, close: () -> Unit, saved: () -> Unit) {
+    val form = rememberRoutineImportState(owner,list,zone)
+    val draft = form.draft
+    val writeState = form.submission
+    val scope = rememberCoroutineScope()
+    val session = remember(api,owner) { api.sessionVersion }
+    NativeSheet("루틴 가져오기",close,!writeState.busy,dirty = form.dirty,
+        discardDetail = if(writeState.uncertain) "이미 내 TODO로 저장됐을 수 있어요. 닫아도 저장은 취소되지 않아요. 그룹과 일정을 확인해주세요." else "가져오기 설정이 사라져요. 원본 루틴은 바뀌지 않아요.") {
+        Text("원본 루틴 · ${form.sourceTitle}",color = Muted)
+        Text("내 비공개 그룹과 TODO로 새로 저장해요. 원본 루틴은 바뀌지 않아요.",color = Muted)
+        Text("원본이 바뀌면 서버의 현재 내용을 기준으로 가져와요.",color = Muted)
+        Field("루틴 이름",draft.title,{ value -> form.update { it.copy(title = value) } },100,enabled = form.editable)
+        DateControl(draft.date,{ value -> form.update { it.copy(date = value) } },"시작 날짜",enabled = form.editable)
+        TimeControl(draft.time,form.editable) { value -> form.update { it.copy(time = value) } }
+        Text("시간대 · ${form.zoneId}",color = Muted)
+        Choices("반복 정책",listOf("KEEP" to "원본 유지","NONE" to "반복 없음","CUSTOM" to "항목별 설정"),draft.mode,form.editable) { value -> form.update { it.copy(mode = value) } }
+        if(draft.mode == "CUSTOM") {
+            Text("모드를 바꿔도 항목별로 편집한 내용은 유지돼요.",color = Muted)
+            TextButton(form::resetItems,enabled = form.editable) { Text("원본으로 초기화") }
         }
-        rows.forEach { todo -> Text(todo.text("title"), fontWeight = FontWeight.Bold); if(mode == "CUSTOM") {
-            val itemId = todo.text("id")
-            Field("할 일", titles[itemId].orEmpty(), { titles = titles + (itemId to it) }, 120, enabled = !action.busy)
-            DateControl(dates[itemId] ?: date, { dates = dates + (itemId to it) }, enabled = !action.busy)
-            TimeControl(times[itemId] ?: "09:00", !action.busy) { times = times + (itemId to it) }
-            val rule = rules[itemId].orEmpty()
-            Choices("반복", repeatChoices(rule), rule, !action.busy) { rules = rules + (todo.text("id") to it) }
-        } else Text(if(mode == "NONE") "반복 없음" else repeatLabel(todo.text("repeatRule")), color = Muted) }
-        if(payload == null) ErrorNotice("가져올 날짜와 시간을 확인하지 못했어요. 원본으로 초기화하거나 다시 열어주세요.")
-        if(rows.isEmpty()) EmptyState("가져올 TODO가 없어요", "원본 루틴의 항목을 다시 확인해주세요.")
-        ActionFeedback(action)
-        Primary("내 TODO로 가져오기", payload != null && rows.isNotEmpty() && title.isNotBlank() && (mode != "CUSTOM" || titles.values.all { it.isNotBlank() }) && !action.busy) { action.run { api.request("todo-lists/${list.text("id")}/clone", "POST", requireNotNull(payload), key = submission.keyFor(payload)); submission.succeeded(); saved(); close() } }
+        draft.items.forEach { item ->
+            Text(form.source.first { it.id == item.id }.title,fontWeight = FontWeight.Bold)
+            if(draft.mode == "CUSTOM") {
+                Field("할 일",item.title,{ value -> form.updateItem(item.id) { it.copy(title = value) } },120,enabled = form.editable)
+                DateControl(item.date,{ value -> form.updateItem(item.id) { it.copy(date = value) } },enabled = form.editable)
+                TimeControl(item.time,form.editable) { value -> form.updateItem(item.id) { it.copy(time = value) } }
+                Choices("반복",repeatChoices(item.repeatRule),item.repeatRule,form.editable) { value -> form.updateItem(item.id) { it.copy(repeatRule = value) } }
+            } else Text(if(draft.mode == "NONE") "반복 없음" else repeatLabel(item.repeatRule),color = Muted)
+        }
+        if(form.source.isEmpty()) EmptyState("가져올 TODO가 없어요","원본 루틴의 항목을 다시 확인해주세요.")
+        ErrorNotice(form.validation)
+        ErrorNotice(writeState.error)
+        if(owner.isBlank()) ErrorNotice("로그인 상태를 확인한 뒤 다시 열어주세요.")
+        if(writeState.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Primary(if(writeState.busy) "가져오는 중…" else if(writeState.uncertain) "가져오기 결과 확인" else "내 TODO로 가져오기",
+            !writeState.busy && !writeState.denied && owner.isNotBlank() && form.source.isNotEmpty()) {
+            form.begin()?.let { write -> scope.launch {
+                val completed = try { sendRoutineImport(api,form.id,form.owner,write,session); writeState.succeeded(write) }
+                    catch(e: CancellationException) { writeState.failed(write,e); throw e }
+                    catch(e: Exception) { writeState.failed(write,e); false }
+                if(completed) { saved(); close() }
+            } }
+        }
     }
 }
-
-@Composable private fun rememberImportMap(id: String, initial: () -> Map<String, String>): MutableState<Map<String, String>> = rememberSaveable(id,
-    stateSaver = androidx.compose.runtime.saveable.Saver<Map<String, String>, ArrayList<String>>(
-        save = { map -> ArrayList(map.flatMap { listOf(it.key, it.value) }) },
-        restore = { values -> values.chunked(2).associate { it[0] to it[1] } }
-    )) { mutableStateOf(initial()) }
 
 @Composable fun ReportSheet(api: Api, type: String, id: String, close: () -> Unit, reported: () -> Unit = close) {
     var reason by rememberSaveable(type, id) { mutableStateOf("") }

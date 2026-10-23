@@ -19,6 +19,7 @@ GitHub에서 PDF를 열어 확인하거나 파일 화면의 다운로드 버튼�
 
 | 문서 | 내용 |
 | --- | --- |
+| [Android 응원·가져오기 설계](android-v1/social-and-import-spec.md) · [M-08 결과](android-v1/implementation-m08.md) | 응원 원복/요청 공유·루틴 복원·소유권과 현재 검사/미검증 |
 | [Android 선택적 게시 설계·M-07](android-v1/publishing-spec.md) · [구현 결과](android-v1/implementation-m07.md) | 게시/사진 초안·세션 경계·불확실한 결과 확인, 현재 검사와 미검증 |
 | [Android M-06 연결·통합 검증 결과](android-v1/implementation-m06.md) | 실제 합성 API/DB/스토리지·Android 연결 UI, 재현 도구와 남은 검증 |
 | [Android M-05 완료 기록 구현 결과](android-v1/implementation-m05.md) | 마이 내부 기록·기간·페이지 조회와 현재 검증/미검증 범위 |

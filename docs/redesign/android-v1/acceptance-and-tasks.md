@@ -2,7 +2,7 @@
 
 문서 ID: AND-V1-QA-001 · v0.1 · 2026-10-23 (Asia/Seoul)
 
-이 문서는 상세 설계에서 정의한 시험과 작업이다. 원래 초안 작성 당시에는 실행하지 않았다. 후속 구현의 실제 실행 범위는 [M-01](implementation-m01.md)·[M-02](implementation-m02.md)·[M-03](implementation-m03.md)·[M-04](implementation-m04.md)·[M-05](implementation-m05.md)·[M-06](implementation-m06.md)·[M-07](implementation-m07.md) 보고서를 따르며, 전체 AT 시나리오의 통과를 의미하지 않는다. 이전 54개 Android unit 결과는 `887fdef`의 기준선이다.
+이 문서는 상세 설계에서 정의한 시험과 작업이다. 원래 초안 작성 당시에는 실행하지 않았다. 후속 구현의 실제 실행 범위는 [M-01](implementation-m01.md)·[M-02](implementation-m02.md)·[M-03](implementation-m03.md)·[M-04](implementation-m04.md)·[M-05](implementation-m05.md)·[M-06](implementation-m06.md)·[M-07](implementation-m07.md)·[M-08](implementation-m08.md) 보고서를 따르며, 전체 AT 시나리오의 통과를 의미하지 않는다. 이전 54개 Android unit 결과는 `887fdef`의 기준선이다.
 
 ## 1. 요구사항 추적
 
@@ -11,6 +11,7 @@
 | F-03 작성·편집 | S-02, 폼·제출 상태 | M-02, AT-04~08/17 |
 | F-04 날짜별 조회 | S-01, 계정 시간대 | M-03, AT-01~03/09/18 |
 | F-05 완료·취소 | S-03, canonical 응답·원복 | M-01, AT-10~13/19 |
+| F-10/12 응원·가져오기 | [소셜 설계](social-and-import-spec.md) | M-08, AT-29~35(별도 설계표), 현재 기기/실 DB 통합 미실행 |
 | F-08~09 선택적 게시 | [게시 설계](publishing-spec.md) | M-07, AT-22~28(별도 설계표), 현재 연결 미실행 |
 | F-13 기록 | S-04, 완료일 계약 | M-04~05, AT-14~16/20 |
 | N-01~03 사용성·접근성·신뢰성 | Android 공통 계약 | 각 기능과 M-06, AT-17~19/21 |
@@ -55,6 +56,7 @@
 | M-05 | `me` 내부 기록 진입·History Repository/Model·화면 | AT-14~16/18~21, 새 6번째 탭 없음 | 구현·검사 범위는 M-05 보고서. 연결 UI·실제 계정 전환·접근성은 미검증 |
 | M-06 | Compose·실제 합성 서비스 통합·웹 회귀 | 실제 실행 결과·환경 부족을 구분해 보고 | 격리 DB/Redis/MinIO·API/Web와 API29 연결 실행. 실제 범위·API35 실패·실기기/출시 미검증은 M-06 보고서 |
 | M-07 | 선택적 게시 초안·미디어·결과 확인·계정 경계 | [AT-22~28](publishing-spec.md), 기존 서버/공개 기본값/완료 제한 보존 | unit133·APK/lint 통과, Compose 컴파일만·기기 통합 미검증 |
+| M-08 | 응원 공유/원복·현재 상태 조회·루틴 가져오기 | [AT-29~35](social-and-import-spec.md), 기존 clone/가시성/소유권 계약 보존 | unit148·APK/lint 통과, Compose 컴파일만·실 DB/기기 통합 미검증 |
 
 M-01~05의 후속 구현은 위 보고서와 결정 로그를 따른다. M-04는 새 읽기 endpoint와 공용 DTO를 추가했으며 인덱스/migration을 생성하지 않았다. M-05는 이 endpoint에 Android 화면을 연결한다. 미정 제품 정책과 이번 개발 기본값을 구분한다.
 

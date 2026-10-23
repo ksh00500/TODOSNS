@@ -223,28 +223,33 @@ class NativeFlowTest {
     @Test fun routineModesPreserveOffsetsAndCustomDraftAcrossSavedState() {
         val attempts = AtomicInteger(0)
         dispatch { request -> if(request.method == "POST") {
-            if(attempts.incrementAndGet() == 3) response("{\"message\":\"잠시 응답하지 않아요\"}", 503) else response("{}")
+            when(attempts.incrementAndGet()) {
+                1,2 -> response("{\"message\":\"설정을 확인해주세요.\"}",400)
+                3 -> response("{}",503)
+                else -> response(json("id" to "copied-list","userId" to me.text("id"),"visibility" to "PRIVATE").toString())
+            }
         } else response("{}") }
         val source = com.google.gson.JsonParser.parseString("""{"id":"source-list","title":"작은 루틴","items":[{"todo":{"id":"r1","title":"첫 산책","category":"건강","dueDate":"2026-09-22T03:00:00Z","repeatRule":"FREQ=WEEKLY;BYDAY=TU,TH;INTERVAL=2"}},{"todo":{"id":"r2","title":"다음 독서","category":"독서","dueDate":"2026-09-23T05:00:00Z","repeatRule":null}}]}""").asJsonObject
         val restoration = StateRestorationTester(compose)
-        restoration.setContent { MungsilTheme { RoutineImportSheet(api, ZoneId.of("Asia/Seoul"), source, {}, {}) } }
+        restoration.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides me.text("id")) { RoutineImportSheet(api, ZoneId.of("Asia/Seoul"), source, {}, {}) } } }
         compose.onNodeWithText("항목별 설정").performScrollTo().performClick()
         compose.onAllNodesWithContentDescription("할 일").onFirst().performScrollTo().performTextClearance()
         compose.onAllNodesWithContentDescription("할 일").onFirst().performTextInput("편집한 산책")
         compose.onAllNodes(hasText("반복 없음") and hasClickAction()).onFirst().performScrollTo().performClick()
         compose.onNodeWithText("내 TODO로 가져오기").performScrollTo().performClick()
-        compose.waitUntil(10_000) { attempts.get() >= 1 }
+        compose.waitUntil(10_000) { attempts.get() >= 1 }; waitText("설정을 확인해주세요.")
         compose.onNodeWithText("원본 유지").performScrollTo().performClick()
         compose.onNodeWithText("내 TODO로 가져오기").performScrollTo().performClick()
-        compose.waitUntil(10_000) { attempts.get() >= 2 }
+        compose.waitUntil(10_000) { attempts.get() >= 2 }; waitText("설정을 확인해주세요.")
         compose.onNodeWithText("항목별 설정").performScrollTo().performClick()
         restoration.emulateSavedInstanceStateRestore()
         compose.onAllNodesWithContentDescription("할 일").onFirst().assertTextEquals("편집한 산책")
         compose.onNodeWithText("내 TODO로 가져오기").performScrollTo().performClick()
         compose.waitUntil(10_000) { attempts.get() >= 3 }
-        waitText("서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해주세요.")
+        waitText("가져오기 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해주세요.")
         restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithText("내 TODO로 가져오기").performScrollTo().performClick()
+        compose.onAllNodesWithContentDescription("할 일").onFirst().assertIsNotEnabled()
+        compose.onNodeWithText("가져오기 결과 확인").performScrollTo().performClick()
         compose.waitUntil(10_000) { attempts.get() >= 4 }
         val requests = received.filter { it.method == "POST" }
         val payloads = requests.map { com.google.gson.JsonParser.parseString(it.body.clone().readUtf8()).asJsonObject }
@@ -1056,8 +1061,8 @@ class NativeFlowTest {
         waitText("응원할 기록")
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("♡ 응원 2"))
         compose.onNodeWithText("♡ 응원 2").performClick()
-        waitText("서버가 잠시 응답하지 않아요. 잠시 후 다시 시도해주세요.")
-        compose.onNodeWithText("♡ 응원 2").performScrollTo().performClick()
+        waitText("응원 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해주세요.")
+        compose.onNodeWithText("응원 결과 확인").performScrollTo().performClick()
         waitText("♥ 응원 취소 3")
         compose.onNodeWithText("♥ 응원 취소 3").performScrollTo().performClick()
         waitText("♡ 응원 2")
@@ -1065,6 +1070,52 @@ class NativeFlowTest {
         assertEquals(3, requests.size)
         assertEquals(requests[0].getHeader("Idempotency-Key"), requests[1].getHeader("Idempotency-Key"))
         assertNotEquals(requests[1].getHeader("Idempotency-Key"), requests[2].getHeader("Idempotency-Key"))
+    }
+
+    @Test fun feedAndDetailConfirmTheSameUncertainCheerRequest() {
+        val writes = AtomicInteger(0)
+        val post = json("id" to "post-1","author" to json("id" to "other","nickname" to "함께 구름","handle" to "cloud"),
+            "caption" to "이어 확인할 응원","todos" to emptyList<String>(),"cheered" to false,"cheerCount" to 2,"commentCount" to 0)
+        dispatch { request -> when {
+            request.method == "POST" -> if(writes.incrementAndGet() == 1) response("{}",503) else response("{\"cheered\":true}")
+            request.requestUrl!!.encodedPath.endsWith("/comments") -> response("{\"items\":[],\"nextCursor\":null}")
+            else -> response(post.toString())
+        } }
+        compose.setContent {
+            var detail by remember { mutableStateOf(false) }
+            val store = rememberCheerStore(me.text("id"),api.sessionVersion)
+            MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides me.text("id"),LocalCheerStore provides store) {
+                if(detail) PostScreen(api,"post-1",true,me,ZoneId.of("Asia/Seoul"),0,{},{},{})
+                else PageList { item { InteractiveFeedCard(api,post,true,ZoneId.of("Asia/Seoul"),{ detail = true },{}) } }
+            } }
+        }
+        compose.onNodeWithText("♡ 응원 2").performScrollTo().performClick()
+        waitText("응원 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해주세요.")
+        compose.onNodeWithText("댓글 0").performScrollTo().performClick()
+        waitText("응원 결과 확인")
+        assertEquals(1,writes.get())
+        compose.onNodeWithText("응원 결과 확인").performScrollTo().performClick()
+        waitText("♥ 응원 취소 3")
+        val requests = received.filter { it.method == "POST" }
+        assertEquals(2,requests.size)
+        assertEquals(requests[0].getHeader("Idempotency-Key"),requests[1].getHeader("Idempotency-Key"))
+    }
+
+    @Test fun routineAccountChangeCannotRestorePreviousOwnersEdits() {
+        dispatch { response("{}") }
+        val source = json("id" to "public-routine","title" to "원본 루틴","items" to listOf(json("todo" to json(
+            "id" to "item","title" to "원본 산책","category" to "건강","dueDate" to "2026-10-23T01:00:00Z"))))
+        var owner by mutableStateOf("account-a")
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides owner) {
+            RoutineImportSheet(api,ZoneId.of("Asia/Seoul"),source,{},{})
+        } } }
+        compose.onNodeWithContentDescription("루틴 이름").performScrollTo().performTextReplacement("A 계정의 초안")
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithContentDescription("루틴 이름").assertTextEquals("A 계정의 초안")
+        compose.runOnIdle { owner = "account-b" }
+        compose.onNodeWithContentDescription("루틴 이름").assertTextEquals("원본 루틴")
+        assertTrue(received.isEmpty())
     }
 
     @Test fun challengeTextEditPreservesOriginalScheduleAndRewardFields() {
