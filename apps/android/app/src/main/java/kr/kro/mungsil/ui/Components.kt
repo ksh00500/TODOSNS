@@ -38,14 +38,21 @@ import kotlinx.coroutines.*
 import kr.kro.mungsil.data.*
 import java.time.*
 
-val Cream = Color(0xFFFAF8F5)
-val Ink = Color(0xFF202027)
-val Muted = Color(0xFF66616C)
-val Brand = Color(0xFF65558F)
-val Aqua = Color(0xFFC3ECE9)
-val Lavender = Color(0xFFE8DEFF)
-val Blush = Color(0xFFFFDCE4)
-val Canvas = Color(0xFFEEECEA)
+val Cream = Color(0xFFFCFAF5)
+val Ink = Color(0xFF25343B)
+val Muted = Color(0xFF56666D)
+val Brand = Color(0xFF315F73)
+val Sky = Color(0xFFDDEFF7)
+val Meadow = Color(0xFFDFEEDB)
+val Butter = Color(0xFFFFF1C7)
+val QuietSurface = Color(0xFFF0F3EF)
+val Edge = Color(0xFFD4DFDE)
+val ControlEdge = Color(0xFF6A818C)
+// Legacy role names stay source-compatible; user-defined category colors are separate.
+val Aqua = Meadow
+val Lavender = Sky
+val Blush = Butter
+val Canvas = Color(0xFFEAEDE8)
 
 val Jakarta = FontFamily(Font(R.font.jakarta_500, FontWeight(500)), Font(R.font.jakarta_650, FontWeight(650)), Font(R.font.jakarta_700, FontWeight(700)), Font(R.font.jakarta_720, FontWeight(720)), Font(R.font.jakarta_760, FontWeight(760)))
 
@@ -58,10 +65,12 @@ val CloudTypography = Typography(
 
 @Composable fun MungsilTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = lightColorScheme(primary = Brand, onPrimary = Color.White,
-        primaryContainer = Color(0xFFE8DEFF), onPrimaryContainer = Ink, secondaryContainer = Aqua,
+        primaryContainer = Sky, onPrimaryContainer = Ink, secondary = Color(0xFF375A44), onSecondary = Color.White,
+        secondaryContainer = Meadow, onSecondaryContainer = Ink, tertiary = Color(0xFF6B5A2E), onTertiary = Color.White,
+        tertiaryContainer = Butter, onTertiaryContainer = Ink, surfaceVariant = QuietSurface,
         background = Cream, surface = Color.White, surfaceContainer = Cream, onSurface = Ink,
-        onBackground = Ink, onSurfaceVariant = Muted, outlineVariant = Color(0xFFE5E0E6), error = Color(0xFFB3261E)),
-        typography = CloudTypography, shapes = Shapes(small = RoundedCornerShape(14.dp), medium = RoundedCornerShape(18.dp), large = RoundedCornerShape(24.dp)), content = content)
+        onBackground = Ink, onSurfaceVariant = Muted, outline = ControlEdge, outlineVariant = Edge, error = Color(0xFFB3261E)),
+        typography = CloudTypography, shapes = Shapes(small = RoundedCornerShape(14.dp), medium = RoundedCornerShape(20.dp), large = RoundedCornerShape(26.dp)), content = content)
 }
 
 @Composable fun CloudMark(modifier: Modifier = Modifier) {
@@ -86,8 +95,12 @@ val CloudTypography = Typography(
 @Composable fun Primary(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    Button({ focus.clearFocus(); keyboard?.hide(); onClick() }, Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled, shape = RoundedCornerShape(14.dp)) { Text(text) }
+    Button({ focus.clearFocus(); keyboard?.hide(); onClick() }, Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled,
+        shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, if(enabled) ControlEdge else Edge),
+        colors = pastelButtonColors()) { Text(text) }
 }
+@Composable fun pastelButtonColors() = ButtonDefaults.buttonColors(containerColor = Sky, contentColor = Ink,
+    disabledContainerColor = QuietSurface, disabledContentColor = Muted)
 @Composable fun ActionIcon(label: String, icon: ImageVector, enabled: Boolean = true, onClick: () -> Unit) {
     IconButton(onClick, enabled = enabled, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) { Icon(icon, label) }
 }

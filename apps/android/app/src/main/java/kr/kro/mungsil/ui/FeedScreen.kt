@@ -6,8 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -15,7 +15,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -179,9 +178,9 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
     FeedCard(post, navigate, detail = true) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CheerControl(api,post,auth,login)
-            TextButton({ navigate("post/${post.text("id")}") }) { Text("댓글 ${post.number("commentCount")}") }
-            Button({ if(auth) importing = true else login() }, Modifier.heightIn(min = 48.dp)) { Text("나도 할래요") }
+            TextButton({ navigate("post/${post.text("id")}") }, Modifier.heightIn(min = 48.dp)) { Text("댓글 ${post.number("commentCount")}") }
         }
+        Primary("나도 할래요") { if(auth) importing = true else login() }
         ActionFeedback(action)
     }
     if(importing) {
@@ -226,7 +225,7 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
 @Composable fun FeedCard(post: JsonObject, navigate: (String) -> Unit, detail: Boolean = false, actions: (@Composable () -> Unit)? = null) {
     val author = post.child("author")
     val title = post.child("todoList").text("title").ifBlank { post.list("todos").firstOrNull()?.text("title") ?: "오늘의 실천" }
-    Surface(shape = MaterialTheme.shapes.medium, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+    Surface(shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Surface(Modifier.size(44.dp).clickable(role = Role.Button, onClickLabel = "${author.text("nickname")}님의 프로필") { navigate("profile/${author.text("handle")}") }, shape = CircleShape, color = Blush) {
@@ -237,30 +236,29 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
                     Text(author.text("nickname", "사용자"), style = MaterialTheme.typography.labelLarge, color = Ink)
                     val created = runCatching { Instant.parse(post.text("createdAt")).atZone(ZoneId.of("Asia/Seoul")).format(java.time.format.DateTimeFormatter.ofPattern("M월 d일")) }.getOrDefault("")
                     Text("@${author.text("handle")} · $created", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    if(author.text("cloudRank").isNotBlank()) Text(author.text("cloudRank"), color = Brand, style = MaterialTheme.typography.bodySmall)
                 }
-                if(author.text("cloudRank").isNotBlank()) Surface(color = Lavender, shape = CircleShape) { Text(author.text("cloudRank"), Modifier.padding(horizontal = 8.dp, vertical = 5.dp), color = Brand, style = MaterialTheme.typography.bodySmall) }
             }
             val photo = post.text("mediaUrl", post.text("thumbnailUrl"))
-            Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().aspectRatio(4f / 3f).clickable(role = Role.Button, onClickLabel = "$title 기록 보기") { navigate("post/${post.text("id")}") }, contentAlignment = Alignment.Center) {
-                if(photo.isNotBlank()) Photo(photo, "실천 인증 사진", Modifier.fillMaxSize())
-                else Surface(shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Aqua, Color(0xFFF3F2C9), Blush)))) {
-                        androidx.compose.foundation.Canvas(Modifier.align(Alignment.Center).size(140.dp)) { drawCircle(Color.White.copy(alpha = .55f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 14.dp.toPx())) }
-                        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                            Surface(color = Color.White, shape = CircleShape) { Text("✓", Modifier.padding(10.dp), color = Brand) }
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(if(post.child("todoList").text("id").isNotBlank()) "${post.child("todoList").list("items").size}개로 만든 루틴" else "오늘 완료한 TODO", color = Muted); Text(title, style = MaterialTheme.typography.titleLarge) }
-                        }
-                    }
+            if(photo.isNotBlank()) Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).clickable(role = Role.Button, onClickLabel = "$title 기록 보기") { navigate("post/${post.text("id")}") }) {
+                Photo(photo, "실천 인증 사진", Modifier.fillMaxSize(), scale = ContentScale.Crop)
+            } else Surface(color = Butter, shape = RoundedCornerShape(18.dp), modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+                .clickable(role = Role.Button, onClickLabel = "$title 기록 보기") { navigate("post/${post.text("id")}") }) {
+                // Text-only records grow with content and font scale, rather than
+                // forcing a large title into a fixed photo-shaped placeholder.
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(if(post.child("todoList").text("id").isNotBlank()) "✓ ${post.child("todoList").list("items").size}개로 만든 루틴" else "✓ 오늘 완료한 TODO", color = Muted, style = MaterialTheme.typography.labelLarge)
+                    Text(title, style = MaterialTheme.typography.headlineMedium, color = Ink)
                 }
             }
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = Lavender, shape = MaterialTheme.shapes.small) { Text(post.list("todos").firstOrNull()?.text("category") ?: "루틴", Modifier.padding(horizontal = 6.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = Brand) }
-                    Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                if(photo.isNotBlank()) Text(title, style = MaterialTheme.typography.titleLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                    Surface(color = Sky, shape = MaterialTheme.shapes.small) { Text(post.list("todos").firstOrNull()?.text("category") ?: "루틴", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = Brand) }
                     Text(if(post.child("todoList").text("id").isBlank()) "단일 TODO" else "루틴", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 if(post.text("caption").isNotBlank()) Text(post.text("caption"))
-                if(post.strings("hashtags").isNotEmpty()) FlowRow { post.strings("hashtags").forEach { tag -> TextButton({ navigate("search?query=${Uri.encode("#$tag")}") }, colors = ButtonDefaults.textButtonColors(containerColor = Lavender)) { Text("#$tag") } } }
+                if(post.strings("hashtags").isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { post.strings("hashtags").forEach { tag -> TextButton({ navigate("search?query=${Uri.encode("#$tag")}") }, modifier = Modifier.heightIn(min = 48.dp), shape = MaterialTheme.shapes.small, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp), colors = ButtonDefaults.textButtonColors(containerColor = Sky)) { Text("#$tag") } } }
                 if(post.number("copyCount") > 0) Text("✓ ${post.number("copyCount")}명이 자신의 하루에 담았어요", color = Color(0xFF2F6B66), style = MaterialTheme.typography.bodySmall)
                 actions?.invoke()
                 if(!detail) OutlinedButton({ navigate("post/${post.text("id")}") }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("기록 보기") }

@@ -124,7 +124,8 @@ import kotlinx.coroutines.awaitCancellation
         if(state.pending.isNotEmpty()) item { Text("변경 결과를 확인하고 있어요.", Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = Brand) }
         if(today && state.hasLoaded) item {
             val progress = if(todos.isEmpty()) 0f else day.completed.toFloat() / todos.size
-            CloudCard {
+            Surface(color = if(day.allDone) Butter else androidx.compose.ui.graphics.Color.Transparent, shape = MaterialTheme.shapes.medium) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = if(day.allDone) 16.dp else 0.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(if(state.pending.isNotEmpty()) "변경 중인 진행 상황" else "오늘의 흐름", color = Muted, style = MaterialTheme.typography.labelLarge)
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("${day.completed} / ${todos.size} 완료", style = MaterialTheme.typography.titleMedium)
@@ -134,17 +135,18 @@ import kotlinx.coroutines.awaitCancellation
                     .semantics { stateDescription = if(state.pending.isNotEmpty()) "변경 확인 중" else "전체 ${todos.size}개 중 ${day.completed}개 완료" },
                     gapSize = 0.dp, drawStopIndicator = {})
             }
+            }
         }
         if(next != null) item {
-            Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large, border = BorderStroke(1.dp, Brand), modifier = Modifier.fillMaxWidth()) {
+            Surface(color = Sky.copy(alpha = .4f), shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("지금 할 일", color = Brand, style = MaterialTheme.typography.labelLarge, modifier = Modifier.semantics { heading() })
                     // Material's pill clips the outer glyphs of a tall, multiline
                     // title at 200% text. A small corner and inner inset keep the
                     // whole title readable without limiting its lines or height.
-                    TextButton({ edit = next }, enabled = canWrite, modifier = Modifier.heightIn(min = 48.dp), shape = MaterialTheme.shapes.small, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)) { Text(next.text("title"), style = MaterialTheme.typography.titleLarge, color = Ink) }
+                    TextButton({ edit = next }, enabled = canWrite, modifier = Modifier.heightIn(min = 48.dp), shape = MaterialTheme.shapes.small, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)) { Text(next.text("title"), style = MaterialTheme.typography.headlineMedium, color = Ink) }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                        Surface(color = Lavender, shape = CircleShape) { Text(next.child("categoryRef").text("name", next.text("category")), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = Brand, style = MaterialTheme.typography.bodySmall) }
+                        Surface(color = Meadow, shape = CircleShape) { Text(next.child("categoryRef").text("name", next.text("category")), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = Brand, style = MaterialTheme.typography.bodySmall) }
                         Text("예정 · ${localTime(next.text("dueDate"), zone)}", color = Muted, style = MaterialTheme.typography.bodySmall)
                     }
                     day.featuredGroup?.let { Text("그룹 · ${it.group!!.text("title")} · ${it.completed}/${it.total} 완료", color = Muted) }
@@ -186,7 +188,7 @@ import kotlinx.coroutines.awaitCancellation
             if(!today || clusterId !in collapsedSnapshot) items(entries, key = { it.id }) { record ->
             val todo = record.source
             val completed = todo.text("completedAt").isNotBlank()
-            Surface(color = if(completed) Aqua.copy(alpha = .35f) else MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium, border = if(completed) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+            Surface(color = if(completed) Meadow.copy(alpha = .55f) else androidx.compose.ui.graphics.Color.Transparent, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Surface(color = MaterialTheme.colorScheme.surface, shape = CircleShape, border = BorderStroke(2.dp, if(completed) androidx.compose.ui.graphics.Color.Transparent else Brand), modifier = Modifier.size(48.dp).toggleable(completed, enabled = canWrite, role = Role.Checkbox, onValueChange = { model.toggle(todo.text("id")) { changed(); if(it.completedAt != null) publish = it.source } }).semantics { contentDescription = "${todo.text("title")} ${if(completed) "완료 취소" else "완료하기"}"; stateDescription = if(record.id in state.pending) "변경 확인 중" else if(completed) "완료" else "미완료" }) {
                         Box(contentAlignment = Alignment.Center) { if(completed) Icon(Icons.Rounded.Check, null, tint = Brand) }
@@ -367,7 +369,7 @@ import kotlinx.coroutines.awaitCancellation
     }
 }
 
-private fun categoryTone(value: String) = when(value) { "aqua" -> Aqua; "blush" -> Blush; "butter" -> androidx.compose.ui.graphics.Color(0xFFF3F2C9); else -> Lavender }
+private fun categoryTone(value: String) = when(value) { "aqua" -> androidx.compose.ui.graphics.Color(0xFFC3ECE9); "blush" -> androidx.compose.ui.graphics.Color(0xFFFFDCE4); "butter" -> androidx.compose.ui.graphics.Color(0xFFF3F2C9); else -> androidx.compose.ui.graphics.Color(0xFFE8DEFF) }
 private fun categoryIcon(value: String) = when(value) {
     "home" -> Icons.Rounded.Home; "heart" -> Icons.Rounded.FavoriteBorder; "activity" -> Icons.Rounded.FitnessCenter
     "graduation" -> Icons.Rounded.School; "book" -> Icons.Rounded.MenuBook; "brain" -> Icons.Rounded.Psychology

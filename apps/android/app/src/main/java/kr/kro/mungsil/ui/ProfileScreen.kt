@@ -55,27 +55,29 @@ import androidx.lifecycle.viewmodel.compose.viewModel
         if(state.profile.error != null) item { ErrorNotice(state.profile.error, model::load) }
         if(profile == null) item { HistoryEntry(navigate) }
         if(profile != null) {
-            item { Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.padding(top = 8.dp, bottom = 8.dp).size(96.dp), contentAlignment = Alignment.Center) {
-                    Surface(color = Color.White, shape = CircleShape, border = BorderStroke(4.dp, Aqua), shadowElevation = 4.dp) {
-                        Box(Modifier.size(96.dp).padding(8.dp).clip(CircleShape).background(Color(0xFFFFDCE4)), contentAlignment = Alignment.Center) {
+            item { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+                    Surface(color = Meadow, shape = CircleShape) {
+                        Box(Modifier.size(64.dp).padding(6.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
                             if(profile.avatar.isNotBlank()) Photo(profile.avatar, "내 프로필 사진", Modifier.fillMaxSize(), scale = androidx.compose.ui.layout.ContentScale.Crop)
-                            else Text(profile.nickname.take(1), Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.headlineMedium)
+                            else Icon(Icons.Rounded.PersonOutline, null, Modifier.size(32.dp), tint = Brand)
                         }
                     }
-                    CloudMark(Modifier.align(Alignment.BottomEnd).size(35.dp, 24.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(profile.nickname, style = MaterialTheme.typography.headlineMedium)
+                        Text("@${profile.handle}", color = Muted)
+                    }
                 }
-                Text(profile.nickname, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-                Text("@${profile.handle}", color = Muted)
-                Text(profile.bio.ifBlank { "작은 실천을 오래 이어가는 중이에요." }, textAlign = TextAlign.Center, color = Muted)
-                Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(profile.bio.ifBlank { "작은 실천을 오래 이어가는 중이에요." }, color = Muted)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ProfileNumber("게시물", profile.posts, Modifier.weight(1f)) { navigate("profile/${profile.handle}") }
                     ProfileNumber("팔로워", profile.followers, Modifier.weight(1f)) { navigate("connections/${profile.id}/followers") }
                     ProfileNumber("팔로잉", profile.following, Modifier.weight(1f)) { navigate("connections/${profile.id}/following") }
                 }
             } }
+            item { HistoryEntry(navigate) }
             item { val growth = profileGrowth(profile.power)
-                Surface(color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, Color(0xFFDDD3FF)), shape = RoundedCornerShape(20.dp), shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "등급 상세 보기") { navigate("rank") }) {
+                Surface(color = Butter, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "등급 상세 보기") { navigate("rank") }) {
                     Row(Modifier.padding(20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         if(columns > 1) CloudMark(Modifier.size(48.dp, 32.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -98,14 +100,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { stats.chunked(if(columns == 1) 1 else 3).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { row.forEach { (label, count) ->
                         Box(Modifier.weight(1f)) { CloudCard(inset = 10.dp) {
-                            val tone = when(label) { "받은 응원" -> Color(0xFFFFDCE4); else -> Aqua }
-                            Surface(color = tone, shape = RoundedCornerShape(13.dp)) { Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Icon(when(label) { "완료한 실천" -> Icons.Rounded.LocalFireDepartment; "받은 응원" -> Icons.Rounded.FavoriteBorder; else -> Icons.Rounded.ContentCopy }, null, Modifier.size(22.dp), tint = Ink) } }
-                            Text(label, color = Muted, style = MaterialTheme.typography.bodySmall); Text(count.toString(), style = MaterialTheme.typography.titleMedium)
+                            Text(count.toString(), style = MaterialTheme.typography.titleLarge)
+                            Text(label, color = Muted, style = MaterialTheme.typography.bodySmall)
                         } }
                     } }
                 } }
             }
-            item { HistoryEntry(navigate) }
             item { ProfileSectionHeading("나의 TODO 그룹", state.groups.data?.let { "${it.size}개의 그룹" }) { TextButton({ navigate("groups") }) { Text("그룹 관리") } } }
             if(state.groups.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if(state.groups.error != null) item { ErrorNotice(state.groups.error, model::retryGroups) }
@@ -185,15 +185,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 }
 
 @Composable private fun HistoryEntry(navigate: (String) -> Unit) {
-    CloudCard {
+    Surface(color = Sky.copy(alpha = .4f), shape = MaterialTheme.shapes.large) {
+    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("실천 기록", style = MaterialTheme.typography.titleMedium)
         Text("완료한 날짜별로 나의 실천을 확인해요.", color = Muted)
         Primary("완료 기록 보기") { navigate("history") }
     }
+    }
 }
 
 @Composable private fun ProfileNumber(label: String, count: Int, modifier: Modifier, open: () -> Unit) {
-    Surface(color = Color.White, shape = RoundedCornerShape(14.dp), shadowElevation = 2.dp, modifier = modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = open)) {
+    Surface(color = Color.Transparent, shape = RoundedCornerShape(14.dp), modifier = modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = open)) {
     Column(Modifier.padding(horizontal = 8.dp, vertical = 15.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(count.toString(), style = MaterialTheme.typography.titleMedium); Text(label, textAlign = TextAlign.Center, color = Muted)
     } }

@@ -167,6 +167,46 @@
       "width": 360,
       "height": 780,
       "fontScale": 2.0
+    },
+    {
+      "label": "pastel360",
+      "classes": "kr.kro.mungsil.NativeFlowTest#parityScreensUseSharedSyntheticFixture,kr.kro.mungsil.NativeFlowTest#todayHierarchyKeepsActionsReachableAcrossContentStates,kr.kro.mungsil.NativeFlowTest#profileGroupFailureDoesNotPretendToBeEmptyOrLocked,kr.kro.mungsil.CompactSheetTest",
+      "expected": 4,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "pastel390",
+      "classes": "kr.kro.mungsil.NativeFlowTest#parityScreensUseSharedSyntheticFixture",
+      "expected": 1,
+      "width": 390,
+      "height": 844,
+      "fontScale": 1.0
+    },
+    {
+      "label": "pastel430",
+      "classes": "kr.kro.mungsil.NativeFlowTest#parityScreensUseSharedSyntheticFixture",
+      "expected": 1,
+      "width": 430,
+      "height": 932,
+      "fontScale": 1.0
+    },
+    {
+      "label": "pastel200",
+      "classes": "kr.kro.mungsil.NativeFlowTest#todayHierarchyKeepsActionsReachableAcrossContentStates,kr.kro.mungsil.NativeFlowTest#profileLongContentAndEmptyRecordsRemainUsable,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest",
+      "expected": 3,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
+    },
+    {
+      "label": "pastel-cheer200",
+      "classes": "kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey",
+      "expected": 1,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
     }
   ]
 }
