@@ -899,6 +899,8 @@ class NativeFlowTest {
             }
         }
         compose.setContent { MungsilTheme { NativeApp(api, 2, me, null, {}, {}, {}) } }
+        waitText("0 / 0 완료")
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("오늘은 아직 담긴 실천이 없어요"))
         waitText("오늘은 아직 담긴 실천이 없어요")
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("TODO 추가"))
         compose.onNodeWithText("TODO 추가").performScrollTo().performClick()

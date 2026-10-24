@@ -128,12 +128,19 @@ val CloudTypography = Typography(
     val requestClose = { if(dismissible) { if(dirty) discard = true else close() }; Unit }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { if(it == SheetValue.Hidden && dirty && dismissible) discard = true; it != SheetValue.Hidden || (dismissible && !dirty) })
     ModalBottomSheet(onDismissRequest = requestClose, sheetState = sheetState, containerColor = Cream, dragHandle = null) {
-        Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).imePadding()) {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, top = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                ActionIcon("닫기", Icons.Rounded.Close, dismissible, requestClose)
+        BoxWithConstraints(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).imePadding()) {
+            // A 400dp window with the keyboard can leave only ~64dp. Keep the
+            // body at the same composition location while reclaiming header room.
+            val compact = maxHeight < 180.dp
+            Column(Modifier.fillMaxWidth().semantics { if(compact) paneTitle = title }) {
+                if(!compact) Row(Modifier.fillMaxWidth().padding(start = 20.dp, top = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    ActionIcon("닫기", Icons.Rounded.Close, dismissible, requestClose)
+                }
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = if(compact) 4.dp else 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
             }
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
         }
     }
     if(discard) ConfirmSheet("작성을 그만둘까요?", discardDetail, "작성 내용 버리기", { discard = false }) { discard = false; close() }
