@@ -66,6 +66,8 @@ ANDROID_AVD_HOME=<작업 경로>/avds ANDROID_EMULATOR_HOME=<작업 경로>/emul
 
 이번 호스트는33GiB였다. 초기6GiB 컨테이너에서는 장시간 폰트/화면 실행 후 OOM으로 qemu가 종료돼10GiB로 늘렸다. 시작 전 실제 호스트 여유 메모리를 확인한다. 같은 자원이 없는 환경에서 이 한도를 그대로 요구하거나 연결 미실행을 통과로 표시하지 않는다.
 
+새 AVD는 논리 크기6GiB userdata를 만들기 위해 별도의 여유 디스크도 검사한다. 시작 전 `df -h /workspace`와 emulator 로그를 확인하고, `FATAL / Not enough space to create userdata partition`이면 ADB 부팅을 계속 기다리지 않는다. UI-02에서는 available7172.37MB/need7372.80MB로 시작하지 못했고 종료한 소유 검증 AVD의 재생성 가능한 데이터/설치 zip 캐시만 정리한 뒤 복구했다. 운영 자료·다른 작업의 파일·설치된 SDK·검증 로그/캡처를 지우지 않는다. boot 완료/메모리 자동 조정과 최초 실패/복구 후 실행을 구분한다.
+
 ```text
 adb -s emulator-5554 shell cmd package compile -m speed -f kr.kro.mungsil
 adb -s emulator-5554 shell cmd package compile -m speed -f kr.kro.mungsil.test
@@ -133,7 +135,9 @@ from pathlib import Path
 base = Path('infra/verification/android-v1')
 case = next(x for x in json.loads((base/'device-matrix.json').read_text())['cases']
             if x['label'] == os.environ['TODOSNS_DEVICE_CASE'])
-subprocess.run(['python', str(base/'connected.py'), os.environ['TODOSNS_DEVICE_WORK'],
+runner = case.get('runner', 'connected.py')
+assert runner in ('connected.py', 'ime.py')
+subprocess.run(['python', str(base/runner), os.environ['TODOSNS_DEVICE_WORK'],
                 case['label'], case['classes'], str(case['expected']), str(case['width']),
                 str(case['height']), str(case['fontScale'])], check=True)
 PY
@@ -148,6 +152,8 @@ python infra/verification/android-v1/connected.py /workspace/mungsil-setup/final
 
 boot 완료와 실행 전후 OS ANR을 검사하고 instrumentation 성공 수·JUnit OK·최종 코드를 함께 판정한다. 결과 JSON과 windows/events/log/PNG는 WORK/LABEL에 저장한다. OS ANR이 관측되면 qualifiedPass가 될 수 없다. qualifiedPass도 이미지 직접 검토·실제 손가락/TalkBack/OS 프로세스 복원을 대신하지 않는다. 실패 시 반복 루프를 돌리지 말고 근거와 환경 제한을 남긴다. 크기/글꼴 변경 대상은 폐기할 에뮬레이터뿐이다.
 
+UI-02의 ui02-ime/ui02-ime-final/ui02-ime-qualified는 `ime.py`로 실행한다. 동일 인자와 소유 guard를 사용하고 `show_ime_with_hard_keyboard` 원래 값을 읽은 뒤1로 설정한다. `connected.py` 실행 동안 실제 input_method의 표시 상태를 관측하고 끝나면 원래 설정을 복원/대조한다. JUnit/OS 검수 통과·실제 IME 관측·설정 복원이 모두 성공해야 wrapper가 통과한다. 결과/관측 PNG는 WORK/ime-observation/LABEL에 보관한다. 새 label을 사용해 기존 로그를 덮어쓰지 않는다. 설정만 바꾸거나 키보드 없는 semantics 입력 성공을 실제 IME 증거로 취급하지 않는다.
+
 ## M-12 · 실제 LOGIN 권한과 백업 복원
 
 ```bash
@@ -157,3 +163,6 @@ python infra/verification/android-v1/operations.py /workspace/mungsil-setup/m06 
 `services.py start` 후 실행한다. 소유 PG17의 새 `todosns_m12`/`todosns_m12_restore`만 생성하며 동명 DB가 있으면 중단한다. migration·기존 capability/runtime SQL·SCRAM TCP LOGIN/잘못된 암호 거부·runtime HTTP 시험·backup pg_dump·migrator 복원·복원 불변식을 검사한다. stdin/0600 파일로만 임시 자격 증명을 전달하고 컨테이너 비밀 파일은 finally에서 삭제한다. 로그/dump는 checkout 밖에 보관하고 최종 `services.py stop`으로 tmpfs DB·전체 fixture를 제거한다. 운영 SQL 자동 적용·운영 백업 검증 도구가 아니다.
 
 PostgreSQL initdb는 loopback에 trust를 둘 수 있다. operations.py는 소유 PG 컨테이너 IP와 private pgpass를 사용하고 runtime/migrator/backup 각각의 잘못된 암호가 인증 실패하는지 먼저 검사한다. 다른 session_user로 연결했다는 사실만으로 암호 인증을 통과했다고 판단하지 않는다. 운영 hba/계정은 변경하지 않는다.
+
+
+UI-02 최종 시험은 `requireIme=true`일 때 입력 후와 저장 좌표 클릭 직전에 실제 IME 표시를 검사한다. `ime.py`는 이 인자를 전달하며 `connected.py` 결과에 imeAssertionRequested를 기록한다. 시험 내부 캡처는 OS `screencap -p` 원본으로 저장한다. 이전 takeScreenshot 캡처의 검은 키보드 영역은 시각 증거로 채택하지 않았다. Dialog Back 대상 지정 전의 ui02-os360 실패, 단독 실행과 최종 ui02-dialog360/200·ime-qualified의 실제 결과는 [UI-02 보고서](../../../docs/redesign/android-v1/implementation-ui02.md)를 따른다. matrix의 과거 label을 현재 시험으로 재현해도 과거 시험 APK와 동일한 실행이라는 뜻은 아니다.

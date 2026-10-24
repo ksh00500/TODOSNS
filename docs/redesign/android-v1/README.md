@@ -6,6 +6,7 @@
 
 | 자료 | 내용 |
 | --- | --- |
+| [UI-02 탐색·사진·가져오기](implementation-ui02.md) | 실제 진입점의 폼 복원·일정 미리보기·사진 상태/재시도·원본 누락 처리 |
 | [파스텔 시각 고도화](implementation-pastel.md) · [Android 시각 기준](../../design-system/android-pastel-editorial.md) | 연하늘·연초록·연노랑 팔레트와 오늘·탐색·마이의 기록 중심 배치 |
 | [화면 완성도 작업 계획](ui-polish-plan.md) · [UI-01 오늘·일정](implementation-ui01.md) | 사용자 설정이 필요한 연동을 보류하고 진행하는 화면·사용 흐름 개선 |
 | [M-13 최종 검수표·인수인계](implementation-m13.md) | M-01~13의 실제 검증 범위·남은 외부 조건·다음 세션 시작점 |
