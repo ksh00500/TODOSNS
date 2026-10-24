@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser, JwtAuthGuard, OptionalJwtAuthGuard } from "./auth";
 import { AdminContentQueryDto, AdminUserQueryDto, CheckInDto, CloneTodoDto, CloneTodoListDto, CommentDto, CompleteMediaDto, CompleteTodoDto, CreateChallengeChatMessageDto, CreateChallengeDto, CreateInviteCodeDto, CreatePostDto, CreateReportDto, CreateTodoCategoryDto, CreateTodoDto, CreateTodoListDto, FeedQueryDto, MessageRequestDto, ModerateChatMessageDto, MuteChatMemberDto, PageDto, PresignDto, ReadChallengeChatDto, ReorderTodoCategoriesDto, ResolveReportDto, SearchDto, TodoCategoryTodosQueryDto, TodoSearchDto, ToggleChatReactionDto, UpdateChallengeChatMessageDto, UpdateChallengeDto, UpdateChallengeRewardDto, UpdateChatSettingsDto, UpdateContentVisibilityDto, UpdateInviteCodeDto, UpdateProfileDto, UpdateTodoCategoryDto, UpdateTodoDto, UpdateTodoListDto, UpdateUserSuspensionDto, UserTargetDto, VerificationQueueDto, VerificationVoteDto } from "./dtos";
 import { MediaService } from "./media.service";
@@ -10,6 +10,7 @@ import { Throttle } from "@nestjs/throttler";
 import { TodoCategoryService } from "./todo-category.service";
 import { TodoHistoryQueryDto } from "./dtos";
 import { TodoHistoryService } from "./todo-history.service";
+import { ResolveCheerDto } from "./dtos";
 
 type JwtUser = { sub: string; role: string; email: string };
 
@@ -49,7 +50,8 @@ export class FeedController {
   @Get("posts/:id") detail(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.postDetail(id, u.sub); }
   @Get("posts/:id/comments") comments(@CurrentUser() u: JwtUser, @Param("id") id: string, @Query() page: PageDto) { return this.service.postComments(id, u.sub, page); }
   @Post("posts") post(@CurrentUser() u: JwtUser, @Body() dto: CreatePostDto) { return this.service.createPost(u.sub, dto); }
-  @Post("posts/:id/cheer") cheer(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.toggleCheer(u.sub, id); }
+  @Post("posts/:id/cheer") cheer(@CurrentUser() u: JwtUser, @Param("id") id: string, @Headers("idempotency-key") key?: string) { return this.service.toggleCheer(u.sub, id, key?.trim()); }
+  @Post("posts/:id/cheer/result") cheerResult(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: ResolveCheerDto) { return this.service.resolveCheer(u.sub, id, dto.requestKey); }
   @Post("posts/:id/comments") comment(@CurrentUser() u: JwtUser, @Param("id") id: string, @Body() dto: CommentDto) { return this.service.comment(u.sub, id, dto.body); }
   @Delete("posts/:id") removePost(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.removePost(u.sub, id); }
   @Delete("comments/:id") removeComment(@CurrentUser() u: JwtUser, @Param("id") id: string) { return this.service.removeComment(u.sub, id); }

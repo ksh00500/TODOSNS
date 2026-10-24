@@ -101,6 +101,10 @@ export class CreatePostDto {
   @IsOptional() @IsEnum(Visibility) visibility: Visibility = Visibility.PUBLIC;
 }
 
+export class ResolveCheerDto {
+  @IsString() @Matches(/^[A-Za-z0-9_.:-]{1,100}$/) requestKey!: string;
+}
+
 export class CreateTodoListDto {
   @IsString() @Length(1, 100) title!: string;
   @IsOptional() @IsString() @Length(0, 300) description?: string;

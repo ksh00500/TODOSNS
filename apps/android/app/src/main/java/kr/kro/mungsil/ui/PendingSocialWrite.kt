@@ -20,6 +20,11 @@ class PendingSocialWrite(val owner: String, val scope: String, private val label
     val editable get() = owner.isNotBlank() && !busy && !uncertain && !denied
     val pending get() = busy || uncertain
     val hasReceipt get() = body != null
+    val receiptKey get() = key.takeIf { body != null }
+    fun acceptReconciliation(receipt: String): Boolean {
+        if(busy || receiptKey != receipt) return false
+        return acceptInspectedState()
+    }
     fun acceptInspectedState(): Boolean {
         if(busy) return false
         uncertain = false; denied = false; body = null; key = newKey(); error = null

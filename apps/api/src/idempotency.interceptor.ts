@@ -23,8 +23,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const unique = { userId_key_route: { userId, key, route } };
     let existing = await this.prisma.idempotencyKey.findUnique({ where: unique });
     if (existing && existing.expiresAt <= new Date()) {
-      await this.prisma.idempotencyKey.delete({ where: unique });
-      existing = null;
+      // A result reconciliation may have renewed/completed this receipt since
+      // the read. Never delete that newer fence using an old expiry observation.
+      await this.prisma.idempotencyKey.deleteMany({ where: { userId, key, route, expiresAt: { lte: new Date() } } });
+      existing = await this.prisma.idempotencyKey.findUnique({ where: unique });
     }
     if (existing && existing.requestHash !== requestHash) throw new ConflictException("같은 요청 식별자에 다른 내용을 사용할 수 없어요.");
     if (existing?.completedAt) return of(existing.response);

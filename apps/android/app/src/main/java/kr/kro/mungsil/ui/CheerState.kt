@@ -42,6 +42,17 @@ class CheerState(val owner: String, val postId: String, cheered: Boolean, count:
         inspecting = true; inspectionError = null
         return true
     }
+    fun beginResolution(): String? {
+        val receipt = submission.receiptKey ?: return null
+        if(!submission.uncertain || !beginInspection()) return null
+        return receipt
+    }
+    fun resolved(receipt: String, value: Boolean, count: Int): Boolean {
+        if(!inspecting || !submission.acceptReconciliation(receipt)) return false
+        cheered = value; this.count = count; before = value; beforeCount = count
+        inspecting = false; inspectionError = null
+        return true
+    }
     fun inspected(value: Boolean, count: Int) {
         if(!inspecting) return
         // A GET is a current observation, not proof that an earlier toggle finished.
@@ -111,5 +122,17 @@ internal suspend fun inspectCheer(api: Api, id: String, session: Long): Pair<Boo
     val count = if(total?.isJsonPrimitive == true && total.asJsonPrimitive.isNumber) total.asString.toIntOrNull() else null
     if(post.text("id") != id || value?.isJsonPrimitive != true || !value.asJsonPrimitive.isBoolean || count == null || count < 0)
         throw ApiException(502,"응원 상태를 확인하지 못했어요.")
+    return value.asBoolean to count
+}
+
+internal suspend fun resolveCheer(api: Api, id: String, receipt: String, session: Long): Pair<Boolean,Int> {
+    currentCoroutineContext().ensureActive()
+    val result = api.request("feed/posts/$id/cheer/result","POST",json("requestKey" to receipt),expectedSessionVersion = session)
+    currentCoroutineContext().ensureActive()
+    val response = if(result.isJsonObject) result.asJsonObject else throw ApiException(502,"응원 결과를 확인하지 못했어요.")
+    val value = response.get("cheered"); val total = response.get("cheerCount")
+    val count = if(total?.isJsonPrimitive == true && total.asJsonPrimitive.isNumber) total.asString.toIntOrNull() else null
+    if(response.text("status") != "RECONCILED" || response.text("postId") != id || value?.isJsonPrimitive != true || !value.asJsonPrimitive.isBoolean || count == null || count < 0)
+        throw ApiException(502,"응원 결과를 확인하지 못했어요.")
     return value.asBoolean to count
 }

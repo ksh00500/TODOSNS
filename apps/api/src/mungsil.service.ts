@@ -647,22 +647,62 @@ export class MungsilService {
     return rows.map((challenge) => ({ ...challenge, joined: false, todayCheckedIn: false, myCheckInCount: 0, successRate: 0 }));
   }
 
-  async toggleCheer(userId: string, postId: string) {
+  async toggleCheer(userId: string, postId: string, requestKey?: string) {
     const result = await this.prisma.$transaction(async (tx) => {
       const post = await this.readablePost(postId, userId, tx);
+      if (requestKey) {
+        const route = `POST:/api/v1/feed/posts/${postId}/cheer`;
+        const receipt = await tx.idempotencyKey.findUnique({ where: { userId_key_route: { userId, key: requestKey, route } } });
+        if (receipt?.completedAt) {
+          const response = receipt.response as { cheered?: unknown } | null;
+          if (typeof response?.cheered !== "boolean") throw new ConflictException("응원 상태를 다시 확인해주세요.");
+          return { cheered: response.cheered, authorId: post.authorId, applied: false };
+        }
+        if (!receipt || receipt.expiresAt <= new Date()) throw new ConflictException("이전 응원 결과를 확인해주세요.");
+        // This row write serializes a delayed toggle against result reconciliation.
+        // If the reconciliation committed after our snapshot, PostgreSQL aborts
+        // this transaction rather than letting the old toggle run after the fence.
+        const claimed = await tx.idempotencyKey.updateMany({
+          where: { userId, key: requestKey, route, completedAt: null, expiresAt: { gt: new Date() } },
+          data: { expiresAt: receipt.expiresAt },
+        });
+        if (claimed.count !== 1) throw new ConflictException("응원 결과를 다시 확인해주세요.");
+      }
       const existing = await tx.cheer.findUnique({ where: { userId_postId: { userId, postId } } });
       if (existing) {
         await tx.cheer.delete({ where: { userId_postId: { userId, postId } } });
-        return { cheered: false, authorId: post.authorId };
+        return { cheered: false, authorId: post.authorId, applied: true };
       }
       await tx.cheer.create({ data: { userId, postId } });
-      return { cheered: true, authorId: post.authorId };
+      return { cheered: true, authorId: post.authorId, applied: true };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    if (result.cheered && result.authorId !== userId) {
+    if (result.applied && result.cheered && result.authorId !== userId) {
       await this.reward(userId, 1, "SOCIAL", postId, 5);
       await this.notify(result.authorId, NotificationType.CHEER, "응원을 받았어요", "누군가 회원님의 완료를 응원했어요.", postId, "POST", postId);
     }
     return { cheered: result.cheered };
+  }
+
+  async resolveCheer(userId: string, postId: string, requestKey: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.readablePost(postId, userId, tx);
+      const route = `POST:/api/v1/feed/posts/${postId}/cheer`;
+      const existing = await tx.cheer.findUnique({ where: { userId_postId: { userId, postId } } });
+      const cheered = Boolean(existing);
+      const count = await tx.cheer.count({ where: { postId } });
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 24 * 3600_000);
+      const response = { cheered };
+      // Finish or fence the old operation without creating/deleting a Cheer.
+      // A missing/expired key becomes a tombstone, so an already delayed handler
+      // cannot turn into a fresh toggle after this response.
+      await tx.idempotencyKey.upsert({
+        where: { userId_key_route: { userId, key: requestKey, route } },
+        create: { userId, key: requestKey, route, requestHash: createHash("sha256").update("resolved-cheer-receipt").digest("hex"), response, completedAt: now, expiresAt },
+        update: { response, completedAt: now, expiresAt },
+      });
+      return { status: "RECONCILED" as const, postId, cheered, cheerCount: count };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async comment(userId: string, postId: string, body: string) {

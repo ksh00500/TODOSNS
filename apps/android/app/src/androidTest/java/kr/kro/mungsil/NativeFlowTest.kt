@@ -1053,7 +1053,7 @@ class NativeFlowTest {
     @Test fun cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey() {
         val writes = AtomicInteger(0)
         dispatch { request -> when {
-            request.method == "POST" -> when(writes.incrementAndGet()) { 1 -> response("{}", 503); 2 -> response("""{"cheered":true}"""); else -> response("""{"cheered":false}""") }
+            request.method == "POST" -> when(writes.incrementAndGet()) { 1 -> response("{}", 503); 2 -> response("""{"status":"RECONCILED","postId":"post-1","cheered":true,"cheerCount":3}"""); else -> response("""{"cheered":false}""") }
             request.requestUrl!!.encodedPath.endsWith("/comments") -> response("""{"items":[],"nextCursor":null}""")
             else -> response("""{"id":"post-1","author":{"id":"other","handle":"cloud","nickname":"함께 구름"},"caption":"응원할 기록","todos":[],"cheerCount":2,"cheered":false}""")
         } }
@@ -1068,7 +1068,7 @@ class NativeFlowTest {
         waitText("♡ 응원 2")
         val requests = received.filter { it.method == "POST" }
         assertEquals(3, requests.size)
-        assertEquals(requests[0].getHeader("Idempotency-Key"), requests[1].getHeader("Idempotency-Key"))
+        assertEquals(requests[0].getHeader("Idempotency-Key"), com.google.gson.JsonParser.parseString(requests[1].body.clone().readUtf8()).asJsonObject.text("requestKey"))
         assertNotEquals(requests[1].getHeader("Idempotency-Key"), requests[2].getHeader("Idempotency-Key"))
     }
 
@@ -1077,7 +1077,7 @@ class NativeFlowTest {
         val post = json("id" to "post-1","author" to json("id" to "other","nickname" to "함께 구름","handle" to "cloud"),
             "caption" to "이어 확인할 응원","todos" to emptyList<String>(),"cheered" to false,"cheerCount" to 2,"commentCount" to 0)
         dispatch { request -> when {
-            request.method == "POST" -> if(writes.incrementAndGet() == 1) response("{}",503) else response("{\"cheered\":true}")
+            request.method == "POST" -> if(writes.incrementAndGet() == 1) response("{}",503) else response("{\"status\":\"RECONCILED\",\"postId\":\"post-1\",\"cheered\":true,\"cheerCount\":3}")
             request.requestUrl!!.encodedPath.endsWith("/comments") -> response("{\"items\":[],\"nextCursor\":null}")
             else -> response(post.toString())
         } }
@@ -1098,7 +1098,7 @@ class NativeFlowTest {
         waitText("♥ 응원 취소 3")
         val requests = received.filter { it.method == "POST" }
         assertEquals(2,requests.size)
-        assertEquals(requests[0].getHeader("Idempotency-Key"),requests[1].getHeader("Idempotency-Key"))
+        assertEquals(requests[0].getHeader("Idempotency-Key"),com.google.gson.JsonParser.parseString(requests[1].body.clone().readUtf8()).asJsonObject.text("requestKey"))
     }
 
     @Test fun routineAccountChangeCannotRestorePreviousOwnersEdits() {

@@ -198,9 +198,15 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
     val session = remember(api,owner) { api.sessionVersion }
     val pending = cheer.submission
     Column {
-        val label = if(pending.busy) "응원 확인 중…" else if(pending.uncertain) "응원 결과 확인" else "${if(cheer.cheered) "♥ 응원 취소" else "♡ 응원"} ${cheer.count}"
+        val label = if(pending.busy || cheer.inspecting) "응원 확인 중…" else if(pending.uncertain) "응원 결과 확인" else "${if(cheer.cheered) "♥ 응원 취소" else "♡ 응원"} ${cheer.count}"
         TextButton({
-            if(!auth) login() else cheer.begin()?.let { write -> scope.launch {
+            if(!auth) login()
+            else if(pending.uncertain) cheer.beginResolution()?.let { receipt -> scope.launch {
+                try { val (value,count) = resolveCheer(api,post.text("id"),receipt,session); if(cheer.resolved(receipt,value,count)) changed() }
+                catch(e: CancellationException) { cheer.inspectionFailed(e); throw e }
+                catch(e: Exception) { cheer.inspectionFailed(e) }
+            } }
+            else cheer.begin()?.let { write -> scope.launch {
                 try { val value = sendCheer(api,post.text("id"),write,session); if(cheer.succeeded(write,value)) changed() }
                 catch(e: CancellationException) { cheer.failed(write,e); throw e }
                 catch(e: Exception) { cheer.failed(write,e) }
