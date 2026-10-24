@@ -296,11 +296,11 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
             if(post.child("todoList").text("id").isNotBlank()) item { Primary("루틴 가져오기") { if(auth) importList = true else login() } }
             else items(post.list("todos"), key = { "copy/${it.text("id")}" }) { todo -> Primary("${todo.text("title")} · 나도 할래요") { if(auth) importing = todo else login() } }
             item {
-                Row {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     CheerControl(api,post,auth,login,changed)
-                    TextButton({ context.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, "https://mungsil.kro.kr/posts/$id") }, "실천 공유")) }) { Text("공유") }
-                    if(auth) TextButton({ report = "POST" to id }) { Text("신고") }
-                    if(auth && post.child("author").text("id") == user.text("id")) TextButton({ remove = "feed/posts/$id" to "게시물" }) { Text("게시물 삭제") }
+                    TextButton({ context.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, "https://mungsil.kro.kr/posts/$id") }, "실천 공유")) }, Modifier.heightIn(min = 48.dp)) { Text("공유") }
+                    if(auth) TextButton({ report = "POST" to id }, Modifier.heightIn(min = 48.dp)) { Text("신고") }
+                    if(auth && post.child("author").text("id") == user.text("id")) TextButton({ remove = "feed/posts/$id" to "게시물" }, Modifier.heightIn(min = 48.dp)) { Text("게시물 삭제") }
                 }
                 ActionFeedback(action)
             }

@@ -41,10 +41,19 @@ class CompactSheetTest {
             assertTrue("Focused input must retain a 44px visible touch region", compose.onNodeWithContentDescription("실천 제목").fetchSemanticsNode().boundsInRoot.height >= 44f)
             compose.onNodeWithText("입력 저장").performScrollTo().assertIsDisplayed()
             assertTrue("Save must retain a 44px visible touch region", compose.onNodeWithText("입력 저장").fetchSemanticsNode().boundsInRoot.height >= 44f)
+            // Insets can arrive before the separate OS keyboard window draws.
+            Thread.sleep(1000)
+            compose.waitForIdle()
+            assertTrue("The keyboard must remain open for the coordinate tap", ime > 0)
             val instrumentation = InstrumentationRegistry.getInstrumentation()
             val folder = File(instrumentation.targetContext.getExternalFilesDir(null),"native-verification/compact-ime").apply { mkdirs() }
-            val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-            File(folder,"save-above-keyboard.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }; bitmap.recycle()
+            // Capture SurfaceFlinger's composited frame, including the separate IME.
+            val image = instrumentation.uiAutomation.executeShellCommand("screencap -p")
+            File(folder,"save-above-keyboard.png").outputStream().use { output ->
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(image).use { it.copyTo(output) }
+            }
+            val bitmap = checkNotNull(android.graphics.BitmapFactory.decodeFile(File(folder,"save-above-keyboard.png").path))
+            check(bitmap.width >= 320 && bitmap.height >= 360); bitmap.recycle()
             // Coordinate injection, not a semantics OnClick bypass behind the IME.
             compose.onNodeWithText("입력 저장").performClick()
             compose.waitUntil(10_000) { saved }

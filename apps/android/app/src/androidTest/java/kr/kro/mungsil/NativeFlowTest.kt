@@ -1067,8 +1067,15 @@ class NativeFlowTest {
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("♡ 응원 2"))
         compose.onNodeWithText("♡ 응원 2").performClick()
         waitText("응원 결과를 확인하지 못했어요. 같은 요청으로 결과를 확인해주세요.")
+        listOf("공유", "신고").forEach { label ->
+            compose.onNodeWithText(label).performScrollTo().assertIsDisplayed().assertWidthIsAtLeast(44.dp).assertHeightIsAtLeast(44.dp)
+        }
         compose.onNodeWithText("응원 결과 확인").performScrollTo().performClick()
         waitText("♥ 응원 취소 3")
+        listOf("공유", "신고").forEach { label ->
+            compose.onNodeWithText(label).performScrollTo().assertIsDisplayed().assertWidthIsAtLeast(44.dp).assertHeightIsAtLeast(44.dp)
+        }
+        screenshot("cheer-actions", composeFrame = true)
         compose.onNodeWithText("♥ 응원 취소 3").performScrollTo().performClick()
         waitText("♡ 응원 2")
         val requests = received.filter { it.method == "POST" }
