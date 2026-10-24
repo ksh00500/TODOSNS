@@ -117,3 +117,7 @@ Submitting → OutcomeUnknown → 동일 요청/조회로 결과 확인
 - 삭제·탈퇴·공개 철회·미디어 파기는 기존 governance 흐름을 유지한다. 새 기록 화면이 삭제된 메모·사진을 되살리지 않는다.
 - 반복 발생 단위와 시리즈 전체 변경을 구분한다. 이번만/이후 의미와 그룹 한 곳 소속을 보존한다.
 - API 추가 시 runtime·migrator·backup 역할과 기존 웹 계약을 유지한다. 필요한 DB 변경은 별도 검토·migration으로 수행한다.
+
+## M-10 후속 응원 복구 계약 · 2026-10-24 (Asia/Seoul)
+
+인증된 `POST /api/v1/feed/posts/:id/cheer/result`는 `{requestKey}`를 받아 `{status:"RECONCILED",postId,cheered,cheerCount}`를 반환한다. 현재 접근 확인·상태 조회·이전 toggle 키의 완료/차단 기록을 같은 Serializable transaction에서 처리한다. Cheer·보상·알림을 변경하지 않으며 기존 toggle도 같은 멱등 행을 갱신해 지연 경합을 rollback한다. Android는 정확한 키/대상/세션·응답 검증 뒤 잠금을 풀고 다음 사용자 행동에 새 키를 쓴다. GET만으로 정리하지 않는다. 구버전 API의404/실패에서는 잠금을 유지하며 API를 먼저 배포한다. [M-10 상세·실제 검사](implementation-m10.md).

@@ -107,3 +107,53 @@ adb -s emulator-5554 shell am instrument -w -r --no-window-animation -e disableA
 3. `python infra/verification/android-v1/services.py stop /workspace/mungsil-setup/m06`으로 소유 ID/label이 일치하는 임시 서비스만 정리한다. tmpfs 데이터와 로컬 credential config가 제거된다. SDK/이미지·검증 로그는 보존한다.
 
 이는 Android 연결 합성 검사다. 실제 Google/FCM·Play 서명/배포·실기기·실제 프로세스 종료/복원·TalkBack·운영 DB 역할 분리/규모 검증을 대신하지 않는다.
+
+## M-11 · 엄격한 instrumentation 판정
+
+이번 재현은 기존 M-06 AVD를 재사용하지 않았다. SDK의 `system-images;android-29;default;x86_64`와 avdmanager를 사용해 새 AVD 이름/폴더를 만들고 기존 경로가 있으면 중단한다. 사용자/AVD 경로는 checkout 밖 WORK/android-user, WORK/avds, WORK/avd29로 지정한다. 기본 pixel_2 해상도로 부팅한 뒤 축소하지 말고 **첫 부팅 전** config.ini를 다음과 같이 설정한다.
+
+| 설정 | 이번 값 |
+| --- | --- |
+| hw.lcd.width / height / density | 360 / 780 / 160 |
+| hw.ramSize / hw.cpu.ncore | 1536 / 2 |
+| hw.gpu.enabled / mode | yes / swiftshader |
+| showDeviceFrame / fastboot.forceColdBoot | no / yes |
+| disk.dataPartition.size | 3G |
+
+Dockerfile.android 이미지에서 repo/SDK는 같은 절대 경로로 readonly, WORK만 writable로 mount한다. `--rm --label todosns.verification=final-m11 --memory=10g --memory-swap=10g --cpus=4 --shm-size=1g --sysctl net.ipv6.conf.all.disable_ipv6=0`을 사용하고, ADB5037은 host127.0.0.1에만 공개한다. 반환된 정확한 container ID를 WORK/android-container-id에 저장한다. 컨테이너 내부 ADB를 `-a -P 5037 server nodaemon`으로 실행하고, ANDROID_AVD_HOME/ANDROID_EMULATOR_HOME을 WORK 아래로 지정해 emulator를 `-no-window -no-audio -no-boot-anim -no-snapshot -accel off -gpu swiftshader -feature -Vulkan -cores 2 -memory 1536`으로 실행했다. sdk/emulator 업데이트의 경고와 실제 부팅/ANR을 구분한다.
+
+boot 완료와 초기 OS 화면을 확인한 뒤 matching 앱/시험 APK를 설치하고 `cmd package compile -m speed -f PACKAGE`로 두 패키지를 준비한다. 애니메이션3종을0으로 설정하고 인터넷 Wi-Fi/data는 끈다. loopback 합성 HTTP만 허용한다. 큰 메모리/낮은 해상도를 다른 OS·실기기의 성능 검증으로 확대하지 않는다. 종료할 때도 ID와 label을 확인한 해당 disposable 컨테이너만 stop한다.
+
+선택할 class/method·기대 건수·폭/높이/글꼴은 [device-matrix.json](device-matrix.json)에 보존한다. 이 파일의 expected는 실행 결과가 아니다. 실제 결과는 M-11을 따른다. `real-api360`은 위의 private fixture 준비가 필요하며 `todo-low-ime`은 disposable emulator의 `show_ime_with_hard_keyboard=1` 조건과 종료 뒤 원래 설정 복원을 별도로 준비한다. 예를 들어 필요한 한 묶음만 재현한다.
+
+```bash
+TODOSNS_DEVICE_WORK=/workspace/mungsil-setup/final-m11 TODOSNS_DEVICE_CASE=core390 python - <<'PY'
+import json, os, subprocess
+from pathlib import Path
+base = Path('infra/verification/android-v1')
+case = next(x for x in json.loads((base/'device-matrix.json').read_text())['cases']
+            if x['label'] == os.environ['TODOSNS_DEVICE_CASE'])
+subprocess.run(['python', str(base/'connected.py'), os.environ['TODOSNS_DEVICE_WORK'],
+                case['label'], case['classes'], str(case['expected']), str(case['width']),
+                str(case['height']), str(case['fontScale'])], check=True)
+PY
+```
+
+`connected.py WORK LABEL CLASS EXPECTED WIDTH HEIGHT SCALE`은 WORK의 `android-container-id`와 `todosns.verification=final-m11` 소유 label이 일치하는 disposable Docker emulator-5554만 사용한다. 앱/시험 APK를 같은 소스로 먼저 빌드·설치한다. 예:
+
+```bash
+python infra/verification/android-v1/connected.py /workspace/mungsil-setup/final-m11 cheer360 \
+  'kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest' 2 360 780 1.0
+```
+
+boot 완료와 실행 전후 OS ANR을 검사하고 instrumentation 성공 수·JUnit OK·최종 코드를 함께 판정한다. 결과 JSON과 windows/events/log/PNG는 WORK/LABEL에 저장한다. OS ANR이 관측되면 qualifiedPass가 될 수 없다. qualifiedPass도 이미지 직접 검토·실제 손가락/TalkBack/OS 프로세스 복원을 대신하지 않는다. 실패 시 반복 루프를 돌리지 말고 근거와 환경 제한을 남긴다. 크기/글꼴 변경 대상은 폐기할 에뮬레이터뿐이다.
+
+## M-12 · 실제 LOGIN 권한과 백업 복원
+
+```bash
+python infra/verification/android-v1/operations.py /workspace/mungsil-setup/m06 /workspace/mungsil-setup/m12
+```
+
+`services.py start` 후 실행한다. 소유 PG17의 새 `todosns_m12`/`todosns_m12_restore`만 생성하며 동명 DB가 있으면 중단한다. migration·기존 capability/runtime SQL·SCRAM TCP LOGIN/잘못된 암호 거부·runtime HTTP 시험·backup pg_dump·migrator 복원·복원 불변식을 검사한다. stdin/0600 파일로만 임시 자격 증명을 전달하고 컨테이너 비밀 파일은 finally에서 삭제한다. 로그/dump는 checkout 밖에 보관하고 최종 `services.py stop`으로 tmpfs DB·전체 fixture를 제거한다. 운영 SQL 자동 적용·운영 백업 검증 도구가 아니다.
+
+PostgreSQL initdb는 loopback에 trust를 둘 수 있다. operations.py는 소유 PG 컨테이너 IP와 private pgpass를 사용하고 runtime/migrator/backup 각각의 잘못된 암호가 인증 실패하는지 먼저 검사한다. 다른 session_user로 연결했다는 사실만으로 암호 인증을 통과했다고 판단하지 않는다. 운영 hba/계정은 변경하지 않는다.

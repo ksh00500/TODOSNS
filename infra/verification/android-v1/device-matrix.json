@@ -1,0 +1,139 @@
+{
+  "device": "emulator-5554",
+  "ownedContainerLabel": "todosns.verification=final-m11",
+  "notes": [
+    "real-api360 requires the private loopback fixture and reverse-forwarding described in README.md",
+    "todo-low-ime requires show_ime_with_hard_keyboard=1; restore the disposable emulator setting afterwards",
+    "Expected counts are qualification inputs, not recorded pass claims; see implementation-m11.md for actual results"
+  ],
+  "cases": [
+    {
+      "label": "suite360",
+      "classes": "kr.kro.mungsil.NativeFlowTest,kr.kro.mungsil.PublishSearchFlowTest,kr.kro.mungsil.ChallengeFlowTest,kr.kro.mungsil.HistoryFlowTest",
+      "expected": 59,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "real-api360",
+      "classes": "kr.kro.mungsil.HistoryRealApiTest",
+      "expected": 1,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "core390",
+      "classes": "kr.kro.mungsil.NativeFlowTest#loginStaysNativeAndAllFiveTabsRenderAtDeviceWidth,kr.kro.mungsil.NativeFlowTest#parityScreensUseSharedSyntheticFixture,kr.kro.mungsil.NativeFlowTest#routineModesPreserveOffsetsAndCustomDraftAcrossSavedState,kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest,kr.kro.mungsil.PublishSearchFlowTest,kr.kro.mungsil.HistoryFlowTest",
+      "expected": 15,
+      "width": 390,
+      "height": 844,
+      "fontScale": 1.0
+    },
+    {
+      "label": "core430",
+      "classes": "kr.kro.mungsil.NativeFlowTest#loginStaysNativeAndAllFiveTabsRenderAtDeviceWidth,kr.kro.mungsil.NativeFlowTest#parityScreensUseSharedSyntheticFixture,kr.kro.mungsil.NativeFlowTest#routineModesPreserveOffsetsAndCustomDraftAcrossSavedState,kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest,kr.kro.mungsil.PublishSearchFlowTest,kr.kro.mungsil.HistoryFlowTest",
+      "expected": 15,
+      "width": 430,
+      "height": 932,
+      "fontScale": 1.0
+    },
+    {
+      "label": "font200",
+      "classes": "kr.kro.mungsil.NativeFlowTest#loginStaysNativeAndAllFiveTabsRenderAtDeviceWidth,kr.kro.mungsil.NativeFlowTest#routineModesPreserveOffsetsAndCustomDraftAcrossSavedState,kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest,kr.kro.mungsil.PublishSearchFlowTest#publicationKeepsFailedPhotoDraftAndRequestIdentityAcrossRestore,kr.kro.mungsil.PublishSearchFlowTest#searchTypesRecentQueriesAndRestoredDraftMatchWebFlows,kr.kro.mungsil.HistoryFlowTest",
+      "expected": 9,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
+    },
+    {
+      "label": "todo-low-ime",
+      "classes": "kr.kro.mungsil.NativeFlowTest#todoFailurePreservesDraftAndRetryIdentityThenCompletesAndPublishes",
+      "expected": 1,
+      "width": 360,
+      "height": 400,
+      "fontScale": 1.0
+    },
+    {
+      "label": "compact-ime",
+      "classes": "kr.kro.mungsil.CompactSheetTest",
+      "expected": 1,
+      "width": 360,
+      "height": 400,
+      "fontScale": 1.0
+    },
+    {
+      "label": "final360",
+      "classes": "kr.kro.mungsil.NativeFlowTest#todoFailurePreservesDraftAndRetryIdentityThenCompletesAndPublishes,kr.kro.mungsil.NativeFlowTest#groupCreationPublishingAndDeletionUseExistingContractsAndKeepTodos,kr.kro.mungsil.NativeFlowTest#routineModesPreserveOffsetsAndCustomDraftAcrossSavedState,kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest,kr.kro.mungsil.PublishSearchFlowTest,kr.kro.mungsil.HistoryFlowTest,kr.kro.mungsil.ChallengeFlowTest",
+      "expected": 21,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "final390",
+      "classes": "kr.kro.mungsil.NativeFlowTest#parityScreensUseSharedSyntheticFixture",
+      "expected": 1,
+      "width": 390,
+      "height": 844,
+      "fontScale": 1.0
+    },
+    {
+      "label": "final430",
+      "classes": "kr.kro.mungsil.NativeFlowTest#parityScreensUseSharedSyntheticFixture",
+      "expected": 1,
+      "width": 430,
+      "height": 932,
+      "fontScale": 1.0
+    },
+    {
+      "label": "final-font200",
+      "classes": "kr.kro.mungsil.NativeFlowTest#loginStaysNativeAndAllFiveTabsRenderAtDeviceWidth,kr.kro.mungsil.NativeFlowTest#routineModesPreserveOffsetsAndCustomDraftAcrossSavedState,kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest,kr.kro.mungsil.PublishSearchFlowTest#publicationKeepsFailedPhotoDraftAndRequestIdentityAcrossRestore,kr.kro.mungsil.PublishSearchFlowTest#searchTypesRecentQueriesAndRestoredDraftMatchWebFlows,kr.kro.mungsil.HistoryFlowTest",
+      "expected": 9,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
+    },
+    {
+      "label": "final-todo-low-ime",
+      "classes": "kr.kro.mungsil.NativeFlowTest#todoFailurePreservesDraftAndRetryIdentityThenCompletesAndPublishes",
+      "expected": 1,
+      "width": 360,
+      "height": 400,
+      "fontScale": 1.0
+    },
+    {
+      "label": "actions360",
+      "classes": "kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest",
+      "expected": 2,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "actions-font200",
+      "classes": "kr.kro.mungsil.NativeFlowTest#loginStaysNativeAndAllFiveTabsRenderAtDeviceWidth,kr.kro.mungsil.NativeFlowTest#routineModesPreserveOffsetsAndCustomDraftAcrossSavedState,kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest,kr.kro.mungsil.PublishSearchFlowTest#publicationKeepsFailedPhotoDraftAndRequestIdentityAcrossRestore,kr.kro.mungsil.PublishSearchFlowTest#searchTypesRecentQueriesAndRestoredDraftMatchWebFlows,kr.kro.mungsil.HistoryFlowTest",
+      "expected": 9,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
+    },
+    {
+      "label": "compact-ime-stable",
+      "classes": "kr.kro.mungsil.CompactSheetTest",
+      "expected": 1,
+      "width": 360,
+      "height": 400,
+      "fontScale": 1.0
+    },
+    {
+      "label": "font200-composited",
+      "classes": "kr.kro.mungsil.NativeFlowTest#loginStaysNativeAndAllFiveTabsRenderAtDeviceWidth,kr.kro.mungsil.NativeFlowTest#routineModesPreserveOffsetsAndCustomDraftAcrossSavedState,kr.kro.mungsil.NativeFlowTest#cheerRetryKeepsKeyAndNextSuccessfulActionUsesNewKey,kr.kro.mungsil.NativeFlowTest#feedAndDetailConfirmTheSameUncertainCheerRequest,kr.kro.mungsil.PublishSearchFlowTest#publicationKeepsFailedPhotoDraftAndRequestIdentityAcrossRestore,kr.kro.mungsil.PublishSearchFlowTest#searchTypesRecentQueriesAndRestoredDraftMatchWebFlows,kr.kro.mungsil.HistoryFlowTest",
+      "expected": 9,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
+    }
+  ]
+}

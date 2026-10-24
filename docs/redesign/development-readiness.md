@@ -88,3 +88,7 @@ Gradle 작업은 최대 worker 2개, 저장소의 JVM 메모리 설정으로 실
 3. 별도 합성 DB·Redis·스토리지를 구성하고 DB/스토리지 조건부 시험을 실제 실행한다. 기존 로컬 볼륨·운영 DB를 초기화하지 않는다.
 4. 두 계정 핵심 순환, 차단·권한 변경, 실패·재시도·소켓 단절을 실제 서비스로 확인한다.
 5. 실제 Google 로그인·FCM 전달·서명/배포는 필요한 환경과 승인 범위에서 별도로 확인한다.
+
+## 2026-10-24 후속 M-10~13
+
+최신 [인수인계/검수표](android-v1/implementation-m13.md)와 [기기 결과](android-v1/implementation-m11.md)·[운영/릴리스](android-v1/implementation-m12.md)를 따른다. 만료 응원의 서버 정리/지연 키 차단을 구현했고 API160/Web53/Android unit152·lint/build가 통과했다. 격리 DB의 실제 runtime/migrator/backup LOGIN과 백업·복원을 검증했다. 새 API29 연결 결과와 실제 OS/실기기 검증을 구분한다. 기존 서명 키·Google 설정이 없어 release AAB·실제 Google/FCM·운영 배포는 미검증이다. 과거 실행 결과·운영 반영 이력을 이번 환경의 검증으로 대체하지 않는다.

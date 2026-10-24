@@ -3,14 +3,16 @@
 `apps/android`는 Kotlin + Jetpack Compose로 화면을 그리는 Android 클라이언트다. 버전 1의 TWA/Chrome 실행 방식은 제거했다. 웹 서비스와 API는 계속 별도로 존재하며 Android는 HTTPS REST와 Socket.IO로 같은 서버에 연결한다. 앱의 주 화면에 WebView를 사용하지 않는다.
 
 - 패키지: `kr.kro.mungsil` (유지)
-- 현재 내부 테스트 후보: `1.1.1`, versionCode `4` (Play 자동 보호의 최소 SDK 요구 반영)
-- 제공 AAB: `outputs/android/mungsil-native-1.1.1-4.aab`
+- 현재 소스 버전: `1.2.0`, versionCode `5`. 현재 Play 최고 코드는 별도 확인 필요.
+- 과거 제공 AAB: `outputs/android/mungsil-native-1.1.1-4.aab` 및 아래 2026-09-28 기록. 이번 소스에서 새로 생성한 파일로 간주하지 않는다.
 - versionCode `3` 번들은 최소 SDK 23으로 Play 자동 보호가 켜진 콘솔에서 업로드 거부됐다.
 - 이전에 제공한 AAB: `1.1.0`, versionCode `2` (Google·푸시 미포함)
 - Android: minSdk 24(Android 7.0 이상), targetSdk/compileSdk 36
 - 기본 언어: 한국어
 - API: `https://mungsil.kro.kr/api/v1/`
 - 기존 업로드 키 유지. Play App Signing 인증서와 업로드 인증서는 서로 다를 수 있다.
+
+2026-10-24 Cloud 검증: Debug·unit152·lint 통과. 현재 `keystore.properties`와 `app/google-services.json`이 없으며 Release 빌드는 기존 서명 guard에서 차단됐다. 새 서명 AAB·실제 Google/FCM·Play 업로드는 미검증이다. 과거 운영 반영 기록은 당시 이력이며 이번 환경에서 재검증한 결과와 구분한다. [M-12 운영/릴리스 결과](redesign/android-v1/implementation-m12.md)를 따른다.
 
 ## 빌드와 로컬 검증
 

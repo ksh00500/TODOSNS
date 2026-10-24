@@ -6,14 +6,16 @@
 
 ## 1. 요구사항 추적
 
+2026-10-24 최신 결과는 [M-10](implementation-m10.md)·[M-11](implementation-m11.md)·[M-12](implementation-m12.md)·[M-13 통합 검수표](implementation-m13.md)를 따른다. 아래 M-01~09의 미실행/건수는 각 보고서 작성 시점의 이력이다. 현재 API160/Web53/Android unit152 통과와 연결/릴리스·외부 미검증을 구분한다.
+
 | 요구 | 설계 | 구현·검증 |
 | --- | --- | --- |
 | F-03 작성·편집 | S-02, 폼·제출 상태 | M-02, AT-04~08/17 |
 | F-04 날짜별 조회 | S-01, 계정 시간대 | M-03, AT-01~03/09/18 |
 | F-05 완료·취소 | S-03, canonical 응답·원복 | M-01, AT-10~13/19 |
 | 공개 안전·권한/삭제 | [M-09 경계/검수](implementation-m09.md) | 실제 HTTP/DB·원본 철회/차단/탈퇴·S3 파기, Android 기기 검수 별도 |
-| F-10/12 응원·가져오기 | [소셜 설계](social-and-import-spec.md) | M-08, AT-29~35(별도 설계표), 현재 기기/실 DB 통합 미실행 |
-| F-08~09 선택적 게시 | [게시 설계](publishing-spec.md) | M-07, AT-22~28(별도 설계표), 현재 연결 미실행 |
+| F-10/12 응원·가져오기 | [소셜 설계](social-and-import-spec.md) | M-08~10, AT-29~35. 실제 DB 권한/경합 M-09~10, 연결·미검증은 M-11 |
+| F-08~09 선택적 게시 | [게시 설계](publishing-spec.md) | M-07, AT-22~28. 현재 연결·시각·외부 미검증은 M-11 |
 | F-13 기록 | S-04, 완료일 계약 | M-04~05, AT-14~16/20 |
 | N-01~03 사용성·접근성·신뢰성 | Android 공통 계약 | 각 기능과 M-06, AT-17~19/21 |
 | N-05~06 권한·개인정보 | 계정 범위·본인 조회·파기 경계 | 각 기능의 권한 시험, AT-13/16/19~20 |
@@ -59,6 +61,10 @@
 | M-07 | 선택적 게시 초안·미디어·결과 확인·계정 경계 | [AT-22~28](publishing-spec.md), 기존 서버/공개 기본값/완료 제한 보존 | unit133·APK/lint 통과, Compose 컴파일만·기기 통합 미검증 |
 | M-08 | 응원 공유/원복·현재 상태 조회·루틴 가져오기 | [AT-29~35](social-and-import-spec.md), 기존 clone/가시성/소유권 계약 보존 | unit148·APK/lint 통과, Compose 컴파일만·실 DB/기기 통합 미검증 |
 | M-09 | 공개 서버 인가·쓰기 경계, 신고/차단/원본 삭제·탈퇴 | [실제 검수표](implementation-m09.md), 거부 시 부작용0·snapshot/객체 파기 | API153/Web53 skip 없이 통과·lint/build, Android/소켓/운영은 별도 |
+| M-10 | 만료 미확인 응원의 현재 상태 정리·지연 toggle 차단 | [복구 계약/검사](implementation-m10.md), 과거 키 재반전 없음 | 구현·실제 DB/API160/Web53·Android152·빌드/lint 통과 |
+| M-11 | 새 AVD의 연결·화면 폭/큰 글자·가림/복원 경계 | [기기 결과](implementation-m11.md), 정확한 JUnit 건수·OS ANR·이미지 구분 | 실제 실행과 실기기/OS 수명주기 미검증을 보고서에서 구분 |
+| M-12 | 실제 DB LOGIN 권한·백업 복원·서명/외부 조건 | [운영/릴리스 결과](implementation-m12.md) | 격리 권한/복원 통과. 기존 서명 키/Google 설정 없어 release·외부 검증 보류 |
+| M-13 | 최종 검수표·정리·Git/기억 인수인계 | [현재 통합 표](implementation-m13.md), SHA·실행 결과·미검증·다음 시작점 | 문서화·handoff. 전체 출시 승인을 뜻하지 않음 |
 
 M-01~05의 후속 구현은 위 보고서와 결정 로그를 따른다. M-04는 새 읽기 endpoint와 공용 DTO를 추가했으며 인덱스/migration을 생성하지 않았다. M-05는 이 endpoint에 Android 화면을 연결한다. 미정 제품 정책과 이번 개발 기본값을 구분한다.
 

@@ -97,3 +97,7 @@
 ## 구현 선택 E-005 · 응원 결과 정리 · 2026-10-24 (Asia/Seoul)
 
 후속 전체 M 진행 지시에 따른 호환 API 추가다. [M-10](android-v1/implementation-m10.md). 기존 toggle·GET을 보존하고 `POST /feed/posts/:id/cheer/result`로 현재 상태 확인과 이전 키의 차단 기록을 같은 Serializable transaction에서 처리한다. 지연 toggle도 같은 멱등 행을 갱신하므로 정리와 경합한 오래된 쓰기는 rollback된다. 단순 GET만으로 잠금을 풀지 않는 E-003의 원칙을 유지한다. Android는 새 응원 전송 없이 이 경로로 미확인 상태를 정리하고 다음 사용자 행동에 새 키를 쓴다. API 우선 배포가 필요하며 운영 배포·출시 승인은 포함하지 않는다.
+
+## 구현 선택 E-006 · 작은 창의 NativeSheet · 2026-10-24 (Asia/Seoul)
+
+실제360×400dp/IME에서 고정 헤더가 본문의 입력/저장 공간을 차지하는 것을 확인했다. 안전 영역/IME를 뺀 높이180dp 미만에서만 헤더·세로 여백을 줄이고 paneTitle·Back/dismiss·dirty 확인을 유지한다. 일반 높이는 기존 고정 헤더를 유지한다. 본문은 같은 composition 위치와 단일 스크롤로 초안/사진 상태를 보존한다. 실제 IME·44px 가시 영역(density160)·coordinate 저장과 기존 흐름을 재검수한다. [M-11 실행 근거](android-v1/implementation-m11.md). 전체 지원 OS/실기기의 접근성 승인을 의미하지 않는다.
