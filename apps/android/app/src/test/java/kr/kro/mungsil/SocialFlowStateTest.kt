@@ -135,6 +135,31 @@ class SocialFlowStateTest {
         assertEquals(26,Duration.between(Instant.parse(items[0].text("dueDate")),Instant.parse(items[1].text("dueDate"))).toHours().toInt())
         assertEquals(zone.id,restored.zoneId)
     }
+    @Test fun routinePreviewTracksStartAndDstWithoutDiscardingCustomEdits() {
+        val form = routine()
+        val initial = form.previewItems()!!
+        assertEquals("2026-10-31", initial[0].date); assertEquals("07:00", initial[0].time)
+        assertEquals("2026-11-01", initial[1].date); assertEquals("08:00", initial[1].time)
+        form.update { it.copy(mode = "CUSTOM") }
+        form.updateItem("one") { it.copy(title = "내가 편집한 산책", date = "2026-11-10", time = "18:20", repeatRule = "") }
+        val edited = form.draft.items
+        form.update { it.copy(mode = "KEEP", date = "2026-11-03", time = "09:00") }
+        val kept = form.previewItems()!!
+        assertEquals("산책", kept[0].title); assertEquals("2026-11-03", kept[0].date); assertEquals("09:00", kept[0].time)
+        assertEquals("2026-11-04", kept[1].date); assertEquals("11:00", kept[1].time)
+        assertEquals("FREQ=WEEKLY;BYDAY=TU,TH;INTERVAL=2", kept[0].repeatRule)
+        assertEquals(edited, form.draft.items); assertFalse(form.payload().has("items"))
+        form.update { it.copy(mode = "NONE") }
+        assertTrue(form.previewItems()!!.all { it.repeatRule.isEmpty() }); assertEquals(edited, form.draft.items)
+        form.update { it.copy(mode = "CUSTOM") }
+        assertEquals(edited, form.previewItems()); assertEquals("내가 편집한 산책", form.payload().list("items")[0].text("title"))
+    }
+    @Test fun invalidRoutinePreviewIsNotAnInventedScheduleAndDoesNotChangeSubmission() {
+        val form = routine(); form.update { it.copy(date = "invalid") }
+        val before = form.save()
+        assertNull(form.previewItems()); assertNull(form.validation)
+        assertEquals(before, form.save()); assertFalse(form.submission.pending)
+    }
     @Test fun routinePendingRestoreKeepsExactPayloadAndBlocksEdits() {
         val form = routine(); form.update { it.copy(mode = "CUSTOM",title = "내 루틴") }
         val first = form.begin(1000)!!

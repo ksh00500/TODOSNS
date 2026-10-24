@@ -127,6 +127,16 @@ val CloudTypography = Typography(
 @Composable fun EmptyState(title: String, body: String) {
     CloudCard { Icon(Icons.Rounded.CloudQueue, null, Modifier.size(40.dp), tint = Brand); Text(title, fontWeight = FontWeight.Bold); Text(body, color = Muted) }
 }
+@Composable internal fun ImportSourceSummary(title: String, routine: Boolean, count: Int = 1) {
+    Surface(color = Sky, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(if(routine) "${count}개의 실천으로 만든 루틴" else "내 일정에 담을 실천", color = Brand, style = MaterialTheme.typography.labelLarge)
+            Text("원본 ${if(routine) "루틴" else "실천"} · $title", style = MaterialTheme.typography.titleMedium)
+            Text(if(routine) "내 비공개 그룹과 TODO로 새로 저장해요. 원본 루틴은 바뀌지 않아요."
+                else "내 일정에 새 TODO로 저장해요. 원본 실천은 바뀌지 않아요.", color = Muted)
+        }
+    }
+}
 @Composable fun PageList(state: LazyListState = rememberLazyListState(), content: LazyListScope.() -> Unit) {
     val inset = if(LocalConfiguration.current.screenWidthDp <= 360) 18.dp else 20.dp
     LazyColumn(Modifier.fillMaxSize(), state = state, contentPadding = PaddingValues(horizontal = inset, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)

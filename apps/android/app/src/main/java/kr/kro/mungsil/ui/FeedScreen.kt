@@ -173,14 +173,19 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
     key(owner,api.sessionVersion,post.text("id")) { InteractiveFeedCardContent(api,post,auth,zone,navigate,login) }
 }
 @Composable private fun InteractiveFeedCardContent(api: Api, post: JsonObject, auth: Boolean, zone: ZoneId, navigate: (String) -> Unit, login: () -> Unit) {
-    var importing by remember { mutableStateOf(false) }
+    var importing by rememberSaveable { mutableStateOf(false) }
     val action = rememberAction()
     FeedCard(post, navigate, detail = true) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CheerControl(api,post,auth,login)
             TextButton({ navigate("post/${post.text("id")}") }, Modifier.heightIn(min = 48.dp)) { Text("댓글 ${post.number("commentCount")}") }
         }
-        Primary("나도 할래요") { if(auth) importing = true else login() }
+        if(post.child("todoList").text("id").isNotBlank() || post.list("todos").firstOrNull()?.text("id")?.isNotBlank() == true) {
+            Primary("나도 할래요") { if(auth) importing = true else login() }
+        } else {
+            Text("가져올 실천 정보를 확인하지 못했어요.", color = Muted)
+            OutlinedButton({ navigate("post/${post.text("id")}") }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("원본 정보 확인") }
+        }
         ActionFeedback(action)
     }
     if(importing) {
@@ -240,9 +245,8 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
                 }
             }
             val photo = post.text("mediaUrl", post.text("thumbnailUrl"))
-            if(photo.isNotBlank()) Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).clickable(role = Role.Button, onClickLabel = "$title 기록 보기") { navigate("post/${post.text("id")}") }) {
-                Photo(photo, "실천 인증 사진", Modifier.fillMaxSize(), scale = ContentScale.Crop)
-            } else Surface(color = Butter, shape = RoundedCornerShape(18.dp), modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
+            if(photo.isNotBlank()) FeedPhoto(photo, title) { navigate("post/${post.text("id")}") }
+            else Surface(color = Butter, shape = RoundedCornerShape(18.dp), modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()
                 .clickable(role = Role.Button, onClickLabel = "$title 기록 보기") { navigate("post/${post.text("id")}") }) {
                 // Text-only records grow with content and font scale, rather than
                 // forcing a large title into a fixed photo-shaped placeholder.
@@ -254,8 +258,10 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if(photo.isNotBlank()) Text(title, style = MaterialTheme.typography.titleLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                    Surface(color = Sky, shape = MaterialTheme.shapes.small) { Text(post.list("todos").firstOrNull()?.text("category") ?: "루틴", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = Brand) }
-                    Text(if(post.child("todoList").text("id").isBlank()) "단일 TODO" else "루틴", style = MaterialTheme.typography.bodySmall, color = Muted)
+                    post.list("todos").firstOrNull()?.text("category")?.takeIf(String::isNotBlank)?.let { category ->
+                        Surface(color = Sky, shape = MaterialTheme.shapes.small) { Text(category, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = Brand) }
+                    }
+                    Text(if(post.child("todoList").text("id").isNotBlank()) "루틴" else if(post.list("todos").isNotEmpty()) "단일 TODO" else "실천 기록", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 if(post.text("caption").isNotBlank()) Text(post.text("caption"))
                 if(post.strings("hashtags").isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { post.strings("hashtags").forEach { tag -> TextButton({ navigate("search?query=${Uri.encode("#$tag")}") }, modifier = Modifier.heightIn(min = 48.dp), shape = MaterialTheme.shapes.small, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp), colors = ButtonDefaults.textButtonColors(containerColor = Sky)) { Text("#$tag") } } }
@@ -283,7 +289,7 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
     val commentAction = rememberAction()
     var body by rememberSaveable(id) { mutableStateOf("") }
     var importing by rememberJsonState()
-    var importList by remember { mutableStateOf(false) }
+    var importList by rememberSaveable { mutableStateOf(false) }
     var report by remember { mutableStateOf<Pair<String, String>?>(null) }
     var remove by remember { mutableStateOf<Pair<String, String>?>(null) }
     val commentKey = rememberSaveable(body, id) { newKey() }
@@ -334,11 +340,10 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
     val writeState = form.submission
     val scope = rememberCoroutineScope()
     val session = remember(api,owner) { api.sessionVersion }
+    val preview = form.previewItems()
     NativeSheet("루틴 가져오기",close,!writeState.busy,dirty = form.dirty,
         discardDetail = if(writeState.uncertain) "이미 내 TODO로 저장됐을 수 있어요. 닫아도 저장은 취소되지 않아요. 그룹과 일정을 확인해주세요." else "가져오기 설정이 사라져요. 원본 루틴은 바뀌지 않아요.") {
-        Text("원본 루틴 · ${form.sourceTitle}",color = Muted)
-        Text("내 비공개 그룹과 TODO로 새로 저장해요. 원본 루틴은 바뀌지 않아요.",color = Muted)
-        Text("원본이 바뀌면 서버의 현재 내용을 기준으로 가져와요.",color = Muted)
+        ImportSourceSummary(form.sourceTitle, routine = true, count = form.source.size)
         Field("루틴 이름",draft.title,{ value -> form.update { it.copy(title = value) } },100,enabled = form.editable)
         DateControl(draft.date,{ value -> form.update { it.copy(date = value) } },"시작 날짜",enabled = form.editable)
         TimeControl(draft.time,form.editable) { value -> form.update { it.copy(time = value) } }
@@ -348,14 +353,21 @@ data class PageSnapshot(val rows: List<JsonObject>, val cursor: String?, val err
             Text("모드를 바꿔도 항목별로 편집한 내용은 유지돼요.",color = Muted)
             TextButton(form::resetItems,enabled = form.editable) { Text("원본으로 초기화") }
         }
-        draft.items.forEach { item ->
-            Text(form.source.first { it.id == item.id }.title,fontWeight = FontWeight.Bold)
+        Text("가져올 일정 미리보기", style = MaterialTheme.typography.titleMedium)
+        Text("원본이 바뀌면 서버의 현재 내용을 기준으로 가져와요.", color = Muted, style = MaterialTheme.typography.bodySmall)
+        if(preview == null) ErrorNotice("일정 미리보기를 확인하지 못했어요. 시작 날짜와 원본 일정을 확인해주세요.")
+        (preview ?: draft.items).forEachIndexed { index, item ->
+            HorizontalDivider()
+            Text("${index + 1}. ${form.source.first { it.id == item.id }.title}",fontWeight = FontWeight.Bold)
             if(draft.mode == "CUSTOM") {
                 Field("할 일",item.title,{ value -> form.updateItem(item.id) { it.copy(title = value) } },120,enabled = form.editable)
                 DateControl(item.date,{ value -> form.updateItem(item.id) { it.copy(date = value) } },enabled = form.editable)
                 TimeControl(item.time,form.editable) { value -> form.updateItem(item.id) { it.copy(time = value) } }
                 Choices("반복",repeatChoices(item.repeatRule),item.repeatRule,form.editable) { value -> form.updateItem(item.id) { it.copy(repeatRule = value) } }
-            } else Text(if(draft.mode == "NONE") "반복 없음" else repeatLabel(item.repeatRule),color = Muted)
+            } else if(preview != null) {
+                Text("${item.date} · ${item.time}", color = Ink)
+                Text("${item.category} · ${repeatLabel(item.repeatRule)}", color = Muted)
+            }
         }
         if(form.source.isEmpty()) EmptyState("가져올 TODO가 없어요","원본 루틴의 항목을 다시 확인해주세요.")
         ErrorNotice(form.validation)

@@ -58,6 +58,9 @@ try:
         adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
         adb('shell', 'wm', 'dismiss-keyguard')
         extra = ['-e', 'm06RealApi', '1'] if classes == 'kr.kro.mungsil.HistoryRealApiTest' else []
+        if ENV.get('TODOSNS_VERIFY_IME') == '1':
+            extra += ['-e', 'requireIme', 'true']
+            result['imeAssertionRequested'] = True
         with (OUT / 'instrumentation.log').open('wb') as log:
             subprocess.run(ADB + ['shell', 'am', 'instrument', '-w', '-r', '-e', 'class', classes,
                            '-e', 'screenshotLabel', label, *extra,

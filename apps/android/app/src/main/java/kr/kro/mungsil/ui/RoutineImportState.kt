@@ -24,6 +24,12 @@ class RoutineImportState private constructor(val owner: String, val id: String, 
     val editable get() = submission.editable
     val dirty get() = submission.pending || draft != initial
     val sourceTitle get() = initial.title
+    /** Match the selected base schedule without overwriting preserved CUSTOM edits. */
+    fun previewItems(): List<RoutineItemDraft>? = if(draft.mode == "CUSTOM") draft.items else runCatching {
+        shifted(source, draft.date, draft.time, ZoneId.of(zoneId)).map {
+            if(draft.mode == "NONE") it.copy(repeatRule = "") else it
+        }
+    }.getOrNull()
     fun update(change: (RoutineDraft) -> RoutineDraft) { if(editable) { draft = change(draft); validation = null } }
     fun updateItem(id: String, change: (RoutineItemDraft) -> RoutineItemDraft) = update { it.copy(items = it.items.map { item -> if(item.id == id) change(item) else item }) }
     fun resetItems() {

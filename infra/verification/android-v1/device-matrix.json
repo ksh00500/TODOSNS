@@ -5,7 +5,8 @@
     "real-api360 requires the private loopback fixture and reverse-forwarding described in README.md",
     "todo-low-ime requires show_ime_with_hard_keyboard=1; restore the disposable emulator setting afterwards",
     "Expected counts are qualification inputs, not recorded pass claims; see implementation-m11.md for actual results",
-    "UI-01 adds one NativeFlowTest: suite360 now expects 60; the historical M-11 execution remains 59 (56 passed/3 failed), not a claim that 60 ran"
+    "UI-01 adds one NativeFlowTest: suite360 now expects 60; the historical M-11 execution remains 59 (56 passed/3 failed), not a claim that 60 ran",
+    "UI-02 IME cases require ime.py (runner), which also qualifies actual IME observation and restores the disposable emulator setting; direct connected.py is not IME proof"
   ],
   "cases": [
     {
@@ -207,6 +208,129 @@
       "width": 360,
       "height": 780,
       "fontScale": 2.0
+    },
+    {
+      "label": "ui02-360",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest,kr.kro.mungsil.NativeFlowTest#routineModesPreserveOffsetsAndCustomDraftAcrossSavedState,kr.kro.mungsil.NativeFlowTest#routineAccountChangeCannotRestorePreviousOwnersEdits,kr.kro.mungsil.NativeFlowTest#importingPreservesComplexRepeatUntilUserExplicitlyChangesIt",
+      "expected": 7,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-390",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest",
+      "expected": 4,
+      "width": 390,
+      "height": 844,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-430",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest",
+      "expected": 4,
+      "width": 430,
+      "height": 932,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-200",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest",
+      "expected": 4,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
+    },
+    {
+      "label": "ui02-ime",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest#singleImportFromFeedRestoresOpenSheetAndConfirmsTheSameUncertainWrite",
+      "expected": 1,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0,
+      "runner": "ime.py"
+    },
+    {
+      "label": "ui02-touch360",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest#singleImportFromFeedRestoresOpenSheetAndConfirmsTheSameUncertainWrite",
+      "expected": 1,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-touch390",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest#singleImportFromFeedRestoresOpenSheetAndConfirmsTheSameUncertainWrite",
+      "expected": 1,
+      "width": 390,
+      "height": 844,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-touch430",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest#singleImportFromFeedRestoresOpenSheetAndConfirmsTheSameUncertainWrite",
+      "expected": 1,
+      "width": 430,
+      "height": 932,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-touch200",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest#singleImportFromFeedRestoresOpenSheetAndConfirmsTheSameUncertainWrite",
+      "expected": 1,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
+    },
+    {
+      "label": "ui02-ime-final",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest#singleImportFromFeedRestoresOpenSheetAndConfirmsTheSameUncertainWrite",
+      "expected": 1,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0,
+      "runner": "ime.py"
+    },
+    {
+      "label": "ui02-os360",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest",
+      "expected": 4,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-os-routine",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest#routineImportFromDetailKeepsBackDraftPreviewAndUncertainReceipt",
+      "expected": 1,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-dialog360",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest",
+      "expected": 4,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0
+    },
+    {
+      "label": "ui02-dialog200",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest",
+      "expected": 4,
+      "width": 360,
+      "height": 780,
+      "fontScale": 2.0
+    },
+    {
+      "label": "ui02-ime-qualified",
+      "classes": "kr.kro.mungsil.ExploreImportFlowTest#singleImportFromFeedRestoresOpenSheetAndConfirmsTheSameUncertainWrite",
+      "expected": 1,
+      "width": 360,
+      "height": 780,
+      "fontScale": 1.0,
+      "runner": "ime.py"
     }
   ]
 }
