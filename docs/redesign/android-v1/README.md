@@ -6,6 +6,7 @@
 
 | 자료 | 내용 |
 | --- | --- |
+| [화면 완성도 작업 계획](ui-polish-plan.md) · [UI-01 오늘·일정](implementation-ui01.md) | 사용자 설정이 필요한 연동을 보류하고 진행하는 화면·사용 흐름 개선 |
 | [M-13 최종 검수표·인수인계](implementation-m13.md) | M-01~13의 실제 검증 범위·남은 외부 조건·다음 세션 시작점 |
 | [M-12 운영·릴리스 준비](implementation-m12.md) | 실제 DB LOGIN 경계·백업 복원, 서명/Google 설정·배포 차단 조건 |
 | [M-11 기기·화면 검수](implementation-m11.md) | 새 API29 환경의 연결 실행·폭/글자·OS 가림·수명주기 검증 경계 |
