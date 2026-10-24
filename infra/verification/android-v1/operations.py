@@ -28,6 +28,8 @@ info = json.loads(subprocess.check_output(DOCKER + ['inspect', container], env=E
 assert info['Id'] == container
 assert info['Config']['Labels'].get('todosns.verification.run') == state['run']
 assert info['Config']['Image'] == 'postgres:17-alpine'
+LOGIN_HOST = next(iter(info['NetworkSettings']['Networks'].values()))['IPAddress']
+assert LOGIN_HOST and LOGIN_HOST not in ('127.0.0.1', '::1')
 DB, RESTORE = 'todosns_m12', 'todosns_m12_restore'
 results = []
 
@@ -57,7 +59,7 @@ def pg(label, sql, db=DB, user='postgres'):
     command = DOCKER + ['exec', '-i', '-e', 'PGPASSFILE=/tmp/todosns-m12.pgpass', container,
                         'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', db, '-U', user]
     if user != 'postgres':
-        command += ['-h', '127.0.0.1']  # actual authenticated TCP LOGIN, not local trust
+        command += ['-h', LOGIN_HOST]  # avoid initdb's loopback trust entries
     return run(label, command, sql)
 
 
@@ -80,9 +82,19 @@ try:
     pg('runtime-grants', "\\set legacy_owner postgres\n" + (ROOT / 'infra/database/apply-runtime-grants.sql').read_text())
     pg('capability-boundaries', (ROOT / 'infra/database/verify-role-boundaries.sql').read_text())
     pg('role-inventory', (ROOT / 'infra/database/inspect-role-boundaries.sql').read_text())
-    pgpass = ''.join(f'127.0.0.1:5432:*:mungsil_{role}:{password}\n' for role, password in passwords.items())
+    pgpass = ''.join(f'{LOGIN_HOST}:5432:*:mungsil_{role}:{password}\n' for role, password in passwords.items())
     run('private-pgpass', DOCKER + ['exec', '-i', container, 'sh', '-c',
         'umask 077; cat > /tmp/todosns-m12.pgpass'], pgpass)
+    wrong = ''.join(f'{LOGIN_HOST}:5432:*:mungsil_{role}:{secrets.token_hex(32)}\n' for role in passwords)
+    run('private-wrong-pgpass', DOCKER + ['exec', '-i', container, 'sh', '-c',
+        'umask 077; cat > /tmp/todosns-m12-wrong.pgpass'], wrong)
+    for role in passwords:
+        p = subprocess.run(DOCKER + ['exec', '-e', 'PGPASSFILE=/tmp/todosns-m12-wrong.pgpass', container,
+            'psql', '-X', '-h', LOGIN_HOST, '-U', 'mungsil_' + role, '-d', DB, '-c', 'SELECT 1;'],
+            env=ENV, capture_output=True)
+        assert p.returncode != 0 and b'password authentication failed' in p.stderr, 'Wrong password was not rejected by authentication'
+        results.append(role + '-wrong-password-rejected')
+        print(role + ' wrong password rejected', flush=True)
     pg('runtime-login-boundaries', '''
 SELECT session_user, current_user, count(*) FROM public."Todo" GROUP BY session_user, current_user;
 BEGIN;
@@ -129,9 +141,9 @@ COMMIT;
         env={**ENV, **config, 'DATABASE_URL': runtime_url})
     pg('prepare-restore-owner', f'ALTER DATABASE {RESTORE} OWNER TO mungsil_owner; GRANT CONNECT ON DATABASE {RESTORE} TO mungsil_migrator,mungsil_runtime,mungsil_backup;', db='postgres')
     dump = run('backup', DOCKER + ['exec', '-e', 'PGPASSFILE=/tmp/todosns-m12.pgpass', container,
-        'pg_dump', '-h', '127.0.0.1', '-U', 'mungsil_backup', '-d', DB, '-Fc'], binary=True)
+        'pg_dump', '-h', LOGIN_HOST, '-U', 'mungsil_backup', '-d', DB, '-Fc'], binary=True)
     run('restore', DOCKER + ['exec', '-i', '-e', 'PGPASSFILE=/tmp/todosns-m12.pgpass', container,
-        'pg_restore', '-h', '127.0.0.1', '-U', 'mungsil_migrator', '--role=mungsil_owner',
+        'pg_restore', '-h', LOGIN_HOST, '-U', 'mungsil_migrator', '--role=mungsil_owner',
         '--exit-on-error', '-d', RESTORE], dump.read_bytes())
     invariant = '''
 DO $$ BEGIN
@@ -150,4 +162,4 @@ END $$;
     pg('restored-runtime-login', 'SELECT count(*) FROM public."User";', db=RESTORE, user='mungsil_runtime')
     (WORK / 'result.json').write_text(json.dumps({'status':'passed','checks':results,'production':False}, indent=2) + '\n')
 finally:
-    subprocess.run(DOCKER + ['exec', container, 'rm', '-f', '/tmp/todosns-m12.env', '/tmp/todosns-m12.pgpass'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(DOCKER + ['exec', container, 'rm', '-f', '/tmp/todosns-m12.env', '/tmp/todosns-m12.pgpass', '/tmp/todosns-m12-wrong.pgpass'], env=ENV, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
