@@ -141,7 +141,9 @@ class PublishSearchFlowTest {
         compose.onNodeWithContentDescription("오늘의 한마디").performScrollTo().performTextInput("A 계정의 비공개 초안")
         click("팔로워")
         compose.runOnIdle { owner = "account-b" }
-        compose.onNodeWithContentDescription("오늘의 한마디").performScrollTo().assertTextEquals("")
+        compose.onNodeWithContentDescription("오늘의 한마디").performScrollTo().assert(SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+        compose.onNodeWithText("A 계정의 비공개 초안", useUnmergedTree = true).assertDoesNotExist()
         click("전체 공개")
         compose.onNode(hasText("전체 공개") and hasClickAction()).assertIsSelected()
         assertTrue(received.isEmpty())
@@ -228,6 +230,7 @@ class PublishSearchFlowTest {
         compose.onNodeWithContentDescription("통합 검색").performTextReplacement("아직 제출하지 않은 검색어")
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithContentDescription("통합 검색").assertTextContains("아직 제출하지 않은 검색어")
+        waitText("10개의 공개 결과를 찾았어요")
         compose.onNode(hasText("실천 4") and hasClickAction()).assertIsSelected()
         click("사용자 1")
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("산책 구름"))

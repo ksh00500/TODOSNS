@@ -569,12 +569,15 @@ class NativeFlowTest {
         val exists = java.util.concurrent.atomic.AtomicBoolean(false)
         dispatch { request -> when {
             request.method == "POST" && request.requestUrl!!.encodedPath.endsWith("/todo-lists") -> { exists.set(true); response(group.toString()) }
+            request.method == "POST" && request.requestUrl!!.encodedPath.endsWith("/feed/posts") -> response("{\"id\":\"group-post\"}")
             request.method == "POST" -> response("{}")
             request.method == "DELETE" -> { exists.set(false); response("{}") }
             request.requestUrl!!.encodedPath.endsWith("/search") -> response(json("items" to listOf(candidate), "nextCursor" to null).toString())
             else -> response(if(exists.get()) "[$group]" else "[]")
         } }
-        compose.setContent { MungsilTheme { var revision by remember { mutableIntStateOf(0) }; GroupsScreen(api, ZoneId.of("Asia/Seoul"), revision, { revision++ }) } }
+        compose.setContent { MungsilTheme { CompositionLocalProvider(LocalTodoDraftOwner provides me.text("id")) {
+            var revision by remember { mutableIntStateOf(0) }; GroupsScreen(api, ZoneId.of("Asia/Seoul"), revision, { revision++ })
+        } } }
         waitText("아직 만든 그룹이 없어요")
         compose.onNodeWithContentDescription("새 TODO 그룹 만들기").performClick()
         compose.onNodeWithContentDescription("그룹 이름").performTextInput("작은 실천 루틴")
