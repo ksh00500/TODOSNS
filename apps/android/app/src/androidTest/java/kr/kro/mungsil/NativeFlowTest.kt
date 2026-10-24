@@ -927,6 +927,62 @@ class NativeFlowTest {
         screenshot("today-native")
     }
 
+    @Test fun todayHierarchyKeepsActionsReachableAcrossContentStates() {
+        val open = com.google.gson.JsonParser.parseString(todo).asJsonObject
+        val done = open.deepCopy().apply { addProperty("id", "done"); addProperty("title", "아침 물 한 잔"); addProperty("completedAt", "2026-09-22T01:00:00Z") }
+        val rows = java.util.concurrent.atomic.AtomicReference("[$open,$done]")
+        dispatch { request -> when(request.requestUrl!!.encodedPath) {
+            "/api/v1/todos" -> response(rows.get())
+            "/api/v1/todo-lists" -> response("[]")
+            else -> response("{\"count\":0}")
+        } }
+        compose.setContent { MungsilTheme { NativeApp(api, 2, me, null, {}, {}, {}) } }
+        waitText("1 / 2 완료")
+        val fontScale = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.fontScale
+        if(fontScale <= 1f) {
+            // The ordinary first viewport must reveal both the primary action
+            // and the entry to the list, inside the actual header/five-tab shell.
+            compose.onNodeWithText("이 실천 완료하기").assertIsDisplayed()
+            compose.onNodeWithText("오늘의 목록").assertIsDisplayed()
+        }
+        compose.onNodeWithText("이 실천 완료하기").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(44.dp).assertWidthIsAtLeast(44.dp)
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("TODO 추가"))
+        screenshot("today-add-target")
+        compose.onNodeWithText("TODO 추가").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(44.dp).assertWidthIsAtLeast(44.dp)
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
+        screenshot("today-overview")
+
+        fun refresh(body: String) {
+            rows.set(body)
+            compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("새로고침"))
+            compose.onNodeWithText("새로고침").performClick()
+            compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
+        }
+        val longTitle = "퇴근 후 동네 공원을 천천히 걸으며 오늘 고마웠던 순간을 떠올리기"
+        val longTodo = open.deepCopy().apply { addProperty("title", longTitle); addProperty("notes", "속도를 정하지 않아도 괜찮아요. 편안한 신발을 신고 내 호흡에 맞춰 가볍게 걸어요.") }
+        refresh("[$longTodo,$done]")
+        waitText(longTitle)
+        compose.onNodeWithText(longTitle).performScrollTo().assertIsDisplayed()
+        screenshot("today-long-title")
+        compose.onNodeWithText("이 실천 완료하기").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(44.dp)
+        screenshot("today-long-action")
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("TODO 추가"))
+        compose.onNodeWithText("TODO 추가").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(44.dp)
+
+        val completed = open.deepCopy().apply { addProperty("completedAt", "2026-09-22T03:00:00Z") }
+        refresh("[$completed,$done]")
+        waitText("2 / 2 완료")
+        compose.onNodeWithText("지금 할 일").assertDoesNotExist()
+        screenshot("today-completed")
+        refresh("[]")
+        waitText("0 / 0 완료")
+        compose.onNodeWithText("오늘 담은 실천을 모두 마쳤어요.").assertDoesNotExist()
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("TODO 추가"))
+        compose.onNodeWithText("TODO 추가").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(44.dp)
+        screenshot("today-empty")
+        assertFalse(received.any { it.method != "GET" })
+    }
+
     @Test fun todayDistinguishesFirstFailureFromEmptyAndKeepsSummaryAfterRefreshFailure() {
         val gate = java.util.concurrent.CountDownLatch(1)
         val reads = AtomicInteger(0)

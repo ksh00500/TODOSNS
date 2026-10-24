@@ -126,28 +126,40 @@ import kotlinx.coroutines.awaitCancellation
             val progress = if(todos.isEmpty()) 0f else day.completed.toFloat() / todos.size
             CloudCard {
                 Text(if(state.pending.isNotEmpty()) "변경 중인 진행 상황" else "오늘의 흐름", color = Muted, style = MaterialTheme.typography.labelLarge)
-                Text("${day.completed} / ${todos.size} 완료", style = MaterialTheme.typography.titleMedium)
-                Text("${day.remaining}개 남았어요", color = Muted)
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("${day.completed} / ${todos.size} 완료", style = MaterialTheme.typography.titleMedium)
+                    Text("${day.remaining}개 남았어요", color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()
+                    .semantics { stateDescription = if(state.pending.isNotEmpty()) "변경 확인 중" else "전체 ${todos.size}개 중 ${day.completed}개 완료" },
+                    gapSize = 0.dp, drawStopIndicator = {})
             }
         }
         if(next != null) item {
-            Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large, border = androidx.compose.foundation.BorderStroke(2.dp, Brand)) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { Text("지금 할 일", color = Brand); Text("예정 · ${localTime(next.text("dueDate"), zone)}", color = Muted, style = MaterialTheme.typography.bodySmall) }
-                    Surface(color = Aqua, shape = CircleShape) { Text(next.child("categoryRef").text("name", next.text("category")), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = Brand, style = MaterialTheme.typography.bodySmall) }
+            Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large, border = BorderStroke(1.dp, Brand), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("지금 할 일", color = Brand, style = MaterialTheme.typography.labelLarge, modifier = Modifier.semantics { heading() })
+                    // Material's pill clips the outer glyphs of a tall, multiline
+                    // title at 200% text. A small corner and inner inset keep the
+                    // whole title readable without limiting its lines or height.
+                    TextButton({ edit = next }, enabled = canWrite, modifier = Modifier.heightIn(min = 48.dp), shape = MaterialTheme.shapes.small, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)) { Text(next.text("title"), style = MaterialTheme.typography.titleLarge, color = Ink) }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = Lavender, shape = CircleShape) { Text(next.child("categoryRef").text("name", next.text("category")), Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = Brand, style = MaterialTheme.typography.bodySmall) }
+                        Text("예정 · ${localTime(next.text("dueDate"), zone)}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                    }
                     day.featuredGroup?.let { Text("그룹 · ${it.group!!.text("title")} · ${it.completed}/${it.total} 완료", color = Muted) }
-                    TextButton({ edit = next }, enabled = canWrite, contentPadding = PaddingValues(0.dp)) { Text(next.text("title"), style = MaterialTheme.typography.titleLarge, color = Ink) }
-                    if(next.text("notes").isNotBlank()) Text(next.text("notes"))
+                    if(next.text("notes").isNotBlank()) Text(next.text("notes"), color = Muted, style = MaterialTheme.typography.bodyMedium)
                     Primary(if(state.pending.isNotEmpty()) "변경 확인 중…" else "이 실천 완료하기", canWrite) { model.toggle(next.text("id")) { changed(); publish = it.source } }
                 }
             }
         }
         if(today) item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("오늘의 목록", style = MaterialTheme.typography.titleLarge)
-                if(day.empty) Primary("TODO 추가", !action.busy && state.pending.isEmpty()) { creating = true }
-                else OutlinedButton({ creating = true }, enabled = !action.busy && state.pending.isEmpty()) { Text("+ TODO 추가") }
+            if(day.empty) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("오늘의 목록", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                Primary("TODO 추가", !action.busy && state.pending.isEmpty()) { creating = true }
+            } else FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                Text("오늘의 목록", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                OutlinedButton({ creating = true }, modifier = Modifier.heightIn(min = 48.dp), enabled = !action.busy && state.pending.isEmpty()) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("TODO 추가") }
             }
         }
         item { ActionFeedback(action); removed?.let { todo ->
@@ -174,7 +186,7 @@ import kotlinx.coroutines.awaitCancellation
             if(!today || clusterId !in collapsedSnapshot) items(entries, key = { it.id }) { record ->
             val todo = record.source
             val completed = todo.text("completedAt").isNotBlank()
-            Surface(color = if(completed) Aqua else MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium, border = if(completed) null else BorderStroke(1.dp, Brand), modifier = Modifier.fillMaxWidth()) {
+            Surface(color = if(completed) Aqua.copy(alpha = .35f) else MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium, border = if(completed) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Surface(color = MaterialTheme.colorScheme.surface, shape = CircleShape, border = BorderStroke(2.dp, if(completed) androidx.compose.ui.graphics.Color.Transparent else Brand), modifier = Modifier.size(48.dp).toggleable(completed, enabled = canWrite, role = Role.Checkbox, onValueChange = { model.toggle(todo.text("id")) { changed(); if(it.completedAt != null) publish = it.source } }).semantics { contentDescription = "${todo.text("title")} ${if(completed) "완료 취소" else "완료하기"}"; stateDescription = if(record.id in state.pending) "변경 확인 중" else if(completed) "완료" else "미완료" }) {
                         Box(contentAlignment = Alignment.Center) { if(completed) Icon(Icons.Rounded.Check, null, tint = Brand) }
