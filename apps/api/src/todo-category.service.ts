@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PageDto, CreateTodoCategoryDto, UpdateTodoCategoryDto } from "./dtos";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "./prisma.service";
 
 export const TODO_CATEGORY_DEFAULTS = [
@@ -114,9 +115,9 @@ export class TodoCategoryService {
     ]));
   }
 
-  async resolve(userId: string, categoryId?: string | null, fallback = "생활", allowArchived = false) {
+  async resolve(userId: string, categoryId?: string | null, fallback = "생활", allowArchived = false, client: Prisma.TransactionClient = this.prisma) {
     if (categoryId) {
-      const category = await this.prisma.todoCategory.findFirst({ where: { id: categoryId, userId, archivedAt: allowArchived ? undefined : null } });
+      const category = await client.todoCategory.findFirst({ where: { id: categoryId, userId, archivedAt: allowArchived ? undefined : null } });
       if (!category) throw new BadRequestException("사용할 수 있는 카테고리를 선택해주세요.");
       return { category: category.baseCategory, categoryId: category.id };
     }

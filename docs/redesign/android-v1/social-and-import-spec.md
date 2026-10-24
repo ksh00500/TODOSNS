@@ -54,7 +54,7 @@
 | AT-31 | 현재 상태 조회는 GET만 사용하고 불확실 요청 유지 | 상태·MockWebServer 실제 HTTP |
 | AT-32 | 루틴 KEEP/NONE 간격·CUSTOM raw 반복/편집·명시 초기화·시간대 | 상태/Saver·HTTP payload 검사, Compose 시나리오 |
 | AT-33 | 루틴 실패/복원·동일 본문/키·다른 계정/원본·권한/삭제·성공 소유권 | 상태/Saver·HTTP·Compose 계정 전환 시나리오 |
-| AT-34 | 현재 원본 수정·권한 철회·삭제·경합·실제 가져오기→재완료 | 현재 실 DB/기기 통합 미검증. A-08 후속 |
+| AT-34 | 현재 원본 수정·권한 철회·삭제·경합·실제 가져오기→재완료 | [M-09](implementation-m09.md)의 실제 서버 HTTP/DB/S3·탈퇴 검사 완료. Android 기기 전체 흐름은 미검증 |
 | AT-35 | 360/390/430dp·200%·IME·TalkBack·실제 OS 복원 | 안정적인 연결 기기에서 후속 실행 |
 
 실제 실행과 정의/컴파일만 한 시나리오는 [M-08 보고서](implementation-m08.md)에서 구분한다.

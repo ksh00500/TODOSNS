@@ -41,7 +41,7 @@
 | A-05 | 개인 실천 구현 묶음 | F-03~05/13의 정상·실패·권한 검증 | A-03~04 | M-01~05 구현·검사. M-06 실제 DB/S3·API/Web·API29 연결 실행, 상세 범위/미검증은 보고서 |
 | A-06 | 선택적 게시 설계·구현 | [F-08~09 설계](android-v1/publishing-spec.md)·[M-07 결과](android-v1/implementation-m07.md) | A-05, P-03~04는 E-002로 현행 보존 | 상태/화면 보강·unit133/빌드/lint, 현재 연결·기기 통합 미검증 |
 | A-07 | 응원·가져오기 설계·구현 | [F-10/12 설계](android-v1/social-and-import-spec.md)·[M-08 결과](android-v1/implementation-m08.md) | A-06, P-05는 E-003으로 현행 보존 | 상태/화면 보강·unit148/빌드/lint, 연결/실 DB 권한 경합·통합 미검증 |
-| A-08 | 공개 안전·통합 | 신고·차단·탈퇴와 합성 DB/S3/소켓 통합, 웹 계약 회귀 | A-05~07 | 공개 전 필수 |
+| A-08 | 공개 안전·통합 | [M-09](android-v1/implementation-m09.md): 원본 권한·신고/차단/탈퇴·DB/S3, 웹 회귀 | A-05~07 | 서버 경계 보강·실제 HTTP/DB/S3/탈퇴 파기 검증. 소켓/기기·운영은 별도 |
 | A-09 | 기기·출시 검증 계획 | 연결 시험·실기기·실제 Google/FCM·release 서명 별도 결과 | 해당 환경·키·승인 | API29 일부 연결 검사. API35/실기기·Google/FCM·release 미검증 |
 
 ## 4. 기능별 검증 기준

@@ -6,6 +6,8 @@
 
 최신 [M-06 연결·통합 검증](android-v1/implementation-m06.md)에서는 격리 PostgreSQL/Redis/MinIO와 API138·Web53을 skip 없이 실행하고 컨테이너 ADB·AOSP API29 연결 UI를 준비했다. 아래 ADB/에뮬레이터 미준비 기록은 **최초 시점 이력**이다. API35의 System UI ANR과 최종 API29의 실행 결과를 구분한다. 재현은 [M-06 도구](../../infra/verification/android-v1/README.md)를 따른다.
 
+[M-09](android-v1/implementation-m09.md)에서는 실제 서버 권한 경합을 재현·수정하고 API153/Web53을 skip 없이 확인했습니다. 탈퇴 API의 세션 차단·실제 DB/저장소 worker 파기도 포함하며, Android 기기/화면·운영 역할/배포 검수와 구분합니다.
+
 ## 1. 최초 준비 시 Codex 실행 결과
 
 | 항목 | 현재 결과 | 근거·범위 |

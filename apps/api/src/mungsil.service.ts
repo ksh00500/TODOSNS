@@ -232,14 +232,11 @@ export class MungsilService {
   }
 
   async cloneTodoList(userId: string, id: string, dto: CloneTodoListDto) {
-    const source = await this.readableTodoList(userId, id);
     const baseDate = dto.dueDate ? new Date(dto.dueDate) : new Date();
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
-    const cloned = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.todoList.findUniqueOrThrow({
-        where: { id: source.id },
-        include: { items: { where: { todo: { deletedAt: null } }, include: { todo: true }, orderBy: { order: "asc" } } },
-      });
+    const result = await this.prisma.$transaction(async (tx) => {
+      const source = await this.readableTodoList(userId, id, tx);
+      const current = source;
+      const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
       const sourceBase = current.items.reduce((minimum, item) => Math.min(minimum, item.todo.dueDate.getTime()), current.items[0]?.todo.dueDate.getTime() ?? baseDate.getTime());
       const sourceIds = new Set(current.items.map((item) => item.todo.id));
       const overrides = new Map((dto.items ?? []).map((item) => [item.sourceTodoId, item]));
@@ -262,10 +259,10 @@ export class MungsilService {
       if (source.userId !== userId) {
         await tx.notification.create({ data: { userId: source.userId, type: NotificationType.COPY, title: "루틴을 가져갔어요", body: "누군가 회원님의 루틴을 자신의 하루에 담았어요.", referenceId: source.id, targetType: "TODO_LIST", targetId: source.id } });
       }
-      return cloned;
+      return { cloned, sourceOwner: source.userId };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    if (source.userId !== userId) await this.reward(source.userId, 5, "UNIQUE_LIST_COPY", cloned.id, 3);
-    return cloned;
+    if (result.sourceOwner !== userId) await this.reward(result.sourceOwner, 5, "UNIQUE_LIST_COPY", result.cloned.id, 3);
+    return result.cloned;
   }
 
   async updateTodo(userId: string, todoId: string, dto: UpdateTodoDto) {
@@ -386,23 +383,27 @@ export class MungsilService {
   }
 
   async cloneTodo(userId: string, sourceId: string, dto: CloneTodoDto) {
-    const source = await this.readableTodo(userId, sourceId);
-    if (dto.todoListId) await this.ownTodoList(userId, dto.todoListId);
-    const selectedCategory = dto.categoryId ? await this.todoCategories.resolve(userId, dto.categoryId, dto.category ?? source.category) : { category: dto.category ?? source.category, categoryId: null };
-    const repeatRule = dto.keepRepeat ? (dto.repeatRule ?? source.repeatRule) : null;
-    const dueDate = dto.dueDate ?? new Date().toISOString();
-    const todo = repeatRule
-      ? await this.prisma.$transaction(async (tx) => {
-          const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
-          return this.recurrence.createSeriesInTransaction(tx, userId, user.timezone, { title: dto.title ?? source.title, notes: dto.notes ?? source.notes ?? undefined, category: selectedCategory.category, categoryId: selectedCategory.categoryId, dueDate, repeatRule, visibility: dto.visibility ?? Visibility.PRIVATE }, source.id);
-        })
-      : await this.prisma.todo.create({ data: { userId, sourceTodoId: source.id, title: dto.title ?? source.title, notes: dto.notes ?? source.notes, category: selectedCategory.category, categoryId: selectedCategory.categoryId, dueDate: new Date(dueDate), kind: "SINGLE", visibility: dto.visibility ?? Visibility.PRIVATE } });
-    if (dto.todoListId) await this.setTodoListMembership(userId, todo, dto.todoListId);
-    if (source.userId !== userId) {
-      await this.reward(source.userId, 5, "UNIQUE_COPY", todo.id, 3);
-      await this.notify(source.userId, NotificationType.COPY, "실천을 가져갔어요", "누군가 회원님의 TODO를 자신의 하루에 담았어요.", source.id, "TODO", source.id);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const source = await this.readableTodo(userId, sourceId, tx);
+      if (dto.todoListId) await this.ownTodoList(userId, dto.todoListId, tx);
+      const selectedCategory = dto.categoryId ? await this.todoCategories.resolve(userId, dto.categoryId, dto.category ?? source.category, false, tx) : { category: dto.category ?? source.category, categoryId: null };
+      const repeatRule = dto.keepRepeat ? (dto.repeatRule ?? source.repeatRule) : null;
+      const dueDate = dto.dueDate ?? new Date().toISOString();
+      let todo;
+      if (repeatRule) {
+        const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
+        todo = await this.recurrence.createSeriesInTransaction(tx, userId, user.timezone, { title: dto.title ?? source.title, notes: dto.notes ?? source.notes ?? undefined, category: selectedCategory.category, categoryId: selectedCategory.categoryId, dueDate, repeatRule, visibility: dto.visibility ?? Visibility.PRIVATE }, source.id);
+      } else {
+        todo = await tx.todo.create({ data: { userId, sourceTodoId: source.id, title: dto.title ?? source.title, notes: dto.notes ?? source.notes, category: selectedCategory.category, categoryId: selectedCategory.categoryId, dueDate: new Date(dueDate), kind: "SINGLE", visibility: dto.visibility ?? Visibility.PRIVATE } });
+      }
+      if (dto.todoListId) await this.setTodoListMembership(userId, todo, dto.todoListId, undefined, tx);
+      return { todo, sourceOwner: source.userId, sourceId: source.id };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (result.sourceOwner !== userId) {
+      await this.reward(result.sourceOwner, 5, "UNIQUE_COPY", result.todo.id, 3);
+      await this.notify(result.sourceOwner, NotificationType.COPY, "실천을 가져갔어요", "누군가 회원님의 TODO를 자신의 하루에 담았어요.", result.sourceId, "TODO", result.sourceId);
     }
-    return todo;
+    return result.todo;
   }
 
   async createPost(userId: string, dto: CreatePostDto) {
@@ -647,20 +648,34 @@ export class MungsilService {
   }
 
   async toggleCheer(userId: string, postId: string) {
-    await this.readablePost(postId, userId);
-    const existing = await this.prisma.cheer.findUnique({ where: { userId_postId: { userId, postId } } });
-    if (existing) { await this.prisma.cheer.delete({ where: { userId_postId: { userId, postId } } }); return { cheered: false }; }
-    const post = await this.prisma.post.findUniqueOrThrow({ where: { id: postId } });
-    await this.prisma.cheer.create({ data: { userId, postId } });
-    if (post.authorId !== userId) { await this.reward(userId, 1, "SOCIAL", postId, 5); await this.notify(post.authorId, NotificationType.CHEER, "응원을 받았어요", "누군가 회원님의 완료를 응원했어요.", postId, "POST", postId); }
-    return { cheered: true };
+    const result = await this.prisma.$transaction(async (tx) => {
+      const post = await this.readablePost(postId, userId, tx);
+      const existing = await tx.cheer.findUnique({ where: { userId_postId: { userId, postId } } });
+      if (existing) {
+        await tx.cheer.delete({ where: { userId_postId: { userId, postId } } });
+        return { cheered: false, authorId: post.authorId };
+      }
+      await tx.cheer.create({ data: { userId, postId } });
+      return { cheered: true, authorId: post.authorId };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (result.cheered && result.authorId !== userId) {
+      await this.reward(userId, 1, "SOCIAL", postId, 5);
+      await this.notify(result.authorId, NotificationType.CHEER, "응원을 받았어요", "누군가 회원님의 완료를 응원했어요.", postId, "POST", postId);
+    }
+    return { cheered: result.cheered };
   }
 
   async comment(userId: string, postId: string, body: string) {
-    const post = await this.readablePost(postId, userId);
-    const comment = await this.prisma.comment.create({ data: { authorId: userId, postId, body }, include: { author: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } } });
-    if (post.authorId !== userId) { await this.reward(userId, 1, "SOCIAL", comment.id, 5); await this.notify(post.authorId, NotificationType.COMMENT, "댓글이 달렸어요", body.slice(0, 60), postId, "POST", postId); }
-    return { ...comment, author: await this.serializeUserSummary(comment.author) };
+    const result = await this.prisma.$transaction(async (tx) => {
+      const post = await this.readablePost(postId, userId, tx);
+      const comment = await tx.comment.create({ data: { authorId: userId, postId, body }, include: { author: { select: { id: true, nickname: true, handle: true, avatarUrl: true, avatarMedia: true, lifetimePower: true } } } });
+      return { comment, authorId: post.authorId };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (result.authorId !== userId) {
+      await this.reward(userId, 1, "SOCIAL", result.comment.id, 5);
+      await this.notify(result.authorId, NotificationType.COMMENT, "댓글이 달렸어요", body.slice(0, 60), postId, "POST", postId);
+    }
+    return { ...result.comment, author: await this.serializeUserSummary(result.comment.author) };
   }
 
   async removePost(userId: string, postId: string) {
@@ -1503,22 +1518,20 @@ export class MungsilService {
     todo: { id: string; seriesId: string | null },
     todoListId: string | null,
     previousTodoId?: string,
+    client?: Prisma.TransactionClient,
   ) {
-    if (todoListId) await this.ownTodoList(userId, todoListId);
     const todoIds = [...new Set([todo.id, previousTodoId].filter((id): id is string => Boolean(id)))];
     const related: Prisma.TodoListItemWhereInput[] = [{ todoId: { in: todoIds } }];
     if (todo.seriesId) related.push({ todo: { seriesId: todo.seriesId } });
-    await this.prisma.$transaction(async (tx) => {
+    const change = async (tx: Prisma.TransactionClient) => {
+      if (todoListId) await this.ownTodoList(userId, todoListId, tx);
       await tx.todoListItem.deleteMany({ where: { list: { userId }, OR: related } });
       if (!todoListId) return;
-      const currentLast = await tx.todoListItem.aggregate({
-        where: { listId: todoListId },
-        _max: { order: true },
-      });
-      await tx.todoListItem.create({
-        data: { listId: todoListId, todoId: todo.id, order: (currentLast._max.order ?? -1) + 1 },
-      });
-    });
+      const currentLast = await tx.todoListItem.aggregate({ where: { listId: todoListId }, _max: { order: true } });
+      await tx.todoListItem.create({ data: { listId: todoListId, todoId: todo.id, order: (currentLast._max.order ?? -1) + 1 } });
+    };
+    if (client) await change(client);
+    else await this.prisma.$transaction(change);
   }
 
   private async erasePostSnapshots(where: Prisma.PostWhereInput) {
@@ -1544,15 +1557,15 @@ export class MungsilService {
   }
 
   private async ownTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, userId, deletedAt: null } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); return todo; }
-  private async readableTodo(userId: string, todoId: string) { const todo = await this.prisma.todo.findFirst({ where: { id: todoId, deletedAt: null, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { postLinks: { some: { post: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } } }] } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); await this.assertNotBlocked(userId, todo.userId); return todo; }
-  private async ownTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, userId } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); return list; }
-  private async readableTodoList(userId: string, id: string) { const list = await this.prisma.todoList.findFirst({ where: { id, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, user: { followers: { some: { followerId: userId } } } }, { posts: { some: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } }] }, include: { items: { where: { todo: { deletedAt: null } }, include: { todo: true }, orderBy: { order: "asc" } } } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); await this.assertNotBlocked(userId, list.userId); return list; }
-  private async readablePost(postId: string, userId: string | null) {
+  private async readableTodo(userId: string, todoId: string, client: Prisma.TransactionClient = this.prisma) { const todo = await client.todo.findFirst({ where: { id: todoId, deletedAt: null, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { postLinks: { some: { post: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } } }] } }); if (!todo) throw new NotFoundException("TODO를 찾을 수 없어요."); await this.assertNotBlocked(userId, todo.userId, client); return todo; }
+  private async ownTodoList(userId: string, id: string, client: Prisma.TransactionClient = this.prisma) { const list = await client.todoList.findFirst({ where: { id, userId } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); return list; }
+  private async readableTodoList(userId: string, id: string, client: Prisma.TransactionClient = this.prisma) { const list = await client.todoList.findFirst({ where: { id, user: { suspendedAt: null, deletionRequestedAt: null }, OR: [{ userId }, { visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, user: { followers: { some: { followerId: userId } } } }, { posts: { some: { ...ACTIVE_POST_SNAPSHOT, hiddenAt: null, OR: [{ visibility: Visibility.PUBLIC }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } }] } } }] }, include: { items: { where: { todo: { deletedAt: null } }, include: { todo: true }, orderBy: { order: "asc" } } } }); if (!list) throw new NotFoundException("TODO 리스트를 찾을 수 없어요."); await this.assertNotBlocked(userId, list.userId, client); return list; }
+  private async readablePost(postId: string, userId: string | null, client: Prisma.TransactionClient = this.prisma) {
     const visibility: Prisma.PostWhereInput[] = [{ visibility: Visibility.PUBLIC }];
     if (userId) visibility.push({ authorId: userId }, { visibility: Visibility.FOLLOWERS, author: { followers: { some: { followerId: userId } } } });
-    const post = await this.prisma.post.findFirst({ where: { ...ACTIVE_POST_SNAPSHOT, id: postId, hiddenAt: null, author: { suspendedAt: null, deletionRequestedAt: null }, OR: visibility }, include: postRelations(userId) });
+    const post = await client.post.findFirst({ where: { ...ACTIVE_POST_SNAPSHOT, id: postId, hiddenAt: null, author: { suspendedAt: null, deletionRequestedAt: null }, OR: visibility }, include: postRelations(userId) });
     if (!post) throw new NotFoundException("게시물을 찾을 수 없어요.");
-    if (userId) await this.assertNotBlocked(userId, post.authorId);
+    if (userId) await this.assertNotBlocked(userId, post.authorId, client);
     return post;
   }
   private async blockedUserIds(viewerId: string | null) {
@@ -1560,10 +1573,10 @@ export class MungsilService {
     const rows = await this.prisma.block.findMany({ where: { OR: [{ blockerId: viewerId }, { blockedId: viewerId }] }, select: { blockerId: true, blockedId: true } });
     return rows.map((row) => row.blockerId === viewerId ? row.blockedId : row.blockerId);
   }
-  private async assertNotBlocked(viewerId: string, targetId: string | null) {
+  private async assertNotBlocked(viewerId: string, targetId: string | null, client: Prisma.TransactionClient = this.prisma) {
     if (!targetId) return;
     if (viewerId === targetId) return;
-    const blocked = await this.prisma.block.count({ where: { OR: [{ blockerId: viewerId, blockedId: targetId }, { blockerId: targetId, blockedId: viewerId }] } });
+    const blocked = await client.block.count({ where: { OR: [{ blockerId: viewerId, blockedId: targetId }, { blockerId: targetId, blockedId: viewerId }] } });
     if (blocked) throw new NotFoundException("내용을 찾을 수 없어요.");
   }
   private async serializePost(post: PostRow) {
